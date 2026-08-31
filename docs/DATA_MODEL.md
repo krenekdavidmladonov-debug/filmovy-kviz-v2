@@ -17,19 +17,25 @@ Current required fields:
 - `title`, `description`, `status`;
 - `createdAt`, `updatedAt` as Firestore timestamps;
 - `createdBy`, `updatedBy` as trusted actor identifiers;
-- `roundCount`, `questionCount` as denormalized list counters maintained by trusted server/editor workflows.
+- `slideCount`, `roundCount`, `questionCount` as denormalized list counters maintained by trusted server/editor workflows.
 
 V1-migrated drafts may additionally contain private `legacy: { source, metadata }`. This field preserves V1 quiz metadata that does not yet have a native V2 field and is never copied into a public projection.
 
+### `quizzes/{quizId}/slides/{slideId}`
+
+Private, globally ordered presentation source. It preserves every V1 slide, including non-question intro, agenda, recap, round content, and end slides. Fields include `position`, `kind`, `isQuestion`, title/text, options, classified media, presentation controls, optional `roundId`, moderator-only fields, and private `legacy.raw`. A private `correctAnswer` may be present for question slides. Public and projector clients never read this collection directly.
+
+The separate slide stream is intentionally lossless and presentation-oriented. The nested questions below remain the operational question model used by the current admin library and future scoring logic.
+
 ### `quizzes/{quizId}/rounds/{roundId}`
 
-Round metadata: `title`, `position`, `type` (`classic`, `picture`, `audio`), `questionCount`, and future optional presentation settings.
+Round metadata: `title`, `position`, `type` (`classic`, `picture`, `audio`), `slideCount`, `questionCount`, source slide range, and future optional presentation settings.
 
 V1-migrated rounds may contain private `legacy` source metadata. A generated implicit round is explicitly marked when V1 slides precede the first round header.
 
 ### `quizzes/{quizId}/rounds/{roundId}/questions/{questionId}`
 
-Private question source: `prompt`, `type` (`text`, `image`, `audio`, or migration-only `legacy`), `position`, and the private `correctAnswer`. V1-migrated drafts may also carry `sourceSlidePosition`, `options`, `moderatorNote`, classified external `media`, video ranges, an audio trigger, and private `legacy.raw`. The legacy representation is the minimum lossless extension for V1 slide types not yet expressible by a native V2 feature. This collection is never readable by public/projector clients. The current admin view model selects only supported type, prompt, and position and does not expose the answer or migration metadata to list/detail components.
+Private question source: `prompt`, `type` (`text`, `image`, `audio`, `video`, or migration-only `legacy`), `position`, and the private `correctAnswer`. V1-migrated drafts may also carry `sourceSlidePosition`, `options`, `moderatorNote`, classified external `media`, video ranges, an audio trigger, overlays, and private `legacy.raw`. The legacy representation is the minimum lossless extension for V1 slide types such as the observed but semantically unresolved `pl`. This collection is never readable by public/projector clients. The current admin view model selects only supported type, prompt, and position and does not expose the answer or migration metadata to list/detail components.
 
 The local seed uses stable quiz, round, and question IDs. It is development data only and is never copied from production.
 

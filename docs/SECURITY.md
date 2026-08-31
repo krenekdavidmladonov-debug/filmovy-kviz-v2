@@ -31,7 +31,7 @@ The web `AuthProvider` reads `role` from the verified Firebase ID token and uses
 Current Firestore access is intentionally narrow:
 
 - anonymous and ordinary authenticated users cannot read or write private collections;
-- moderators and admins can read private `quizzes` and their round/question subcollections;
+- moderators and admins can read private `quizzes` and their slide/round/question subcollections;
 - quiz writes are denied to both roles while the library is read-only;
 - existing event/media policy remains staff-read and admin-write until those flows are revisited;
 - staff profiles are self-readable, while all user management is admin-only;
@@ -39,7 +39,7 @@ Current Firestore access is intentionally narrow:
 
 Moderator writes are not enabled yet. Each future operational write must be introduced as a narrowly scoped rule and accompanied by emulator tests.
 
-The quiz library queries private documents directly only after staff authentication. Correct answers remain in private question documents, but the React repository mapper omits them from the detail view model. No `publicEvents`, `publicSessions`, projector copy, or public quiz API is created in this phase.
+The quiz library queries private documents directly only after staff authentication. Correct answers remain in private slide/question documents and may also be present inside private `legacy.raw`, but the React repository mapper omits them from the detail view model. No `publicEvents`, `publicSessions`, projector copy, or public quiz API is created in this phase.
 
 ## Public registration
 
@@ -53,11 +53,11 @@ The local auth seed uses Admin SDK only after two fail-closed checks: the Authen
 
 The quiz seed applies the same fail-closed design to Firestore: it requires local port `8080` and a `demo-*` project. Stable IDs make it safely repeatable. Its Admin SDK access is strictly an emulator-only development tool and does not justify client writes in Rules.
 
-The V1 migration tool follows the same fail-closed principle. Its input is restricted to the Git-ignored `.local-data/` tree. Its WRITE phase requires `FIRESTORE_EMULATOR_HOST` to be an explicit localhost port and the project ID to begin with `demo-`; no production override exists. Reports contain counts, ids, field names, media domains, and validation status but omit question text, answers, and contact values.
+The V1 migration tool follows the same fail-closed principle. Managed export bytes and extracted data stay under the Git-ignored `.local-data/` tree. Extraction and WRITE require an exact local emulator host (`localhost`, `127.0.0.1`, or `[::1]` plus a valid port) and a `demo-*` project ID; no production override exists. WRITE additionally requires a fresh emulator target with no quiz migration documents. Local inventories may contain document IDs and titles for operator reconciliation, while the committed report contains structural counts only. Neither form contains question text, answer values, notes, options, contacts, or raw documents.
 
 ## Rules and tests
 
-Firestore Rules tests run through `firebase emulators:exec` and `@firebase/rules-unit-testing`, not mocked SDK calls. The current suite covers anonymous denial, unprivileged authenticated denial, moderator read/admin-write separation, admin read/write, and default denial for unknown paths.
+Firestore Rules tests run through `firebase emulators:exec` and `@firebase/rules-unit-testing`, not mocked SDK calls. The current suite covers anonymous denial, unprivileged authenticated denial, private slide/round/question reads for staff, moderator/admin write denial in the read-only phase, and default denial for unknown paths.
 
 Storage remains fully deny-all. Before additional Firestore or Storage access is granted, emulator tests must also cover cross-event access, private answers, contact isolation, reveal timing, and media paths/types/sizes as those features are implemented.
 
