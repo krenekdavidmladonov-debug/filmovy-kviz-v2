@@ -10,6 +10,7 @@ This repository contains Filmový Kvíz V2, a replacement for an existing produc
 - Never connect to the production Firebase project or copy production credentials/data without explicit approval.
 - Never commit secrets, service-account keys, `.env` files, access tokens, or production Firebase configuration.
 - Use Firebase Emulator Suite and a `demo-*` project ID for local development.
+- Seed scripts must fail closed unless both a local emulator host and a `demo-*` project ID are present.
 - A correct answer must never be sent to a public or projector client before it is explicitly revealed.
 - Public clients must not read private quiz documents or team contact data.
 - Authentication alone is not authorization. Administrative access requires an explicit `admin` or `moderator` role enforced by Security Rules and server code.
@@ -22,7 +23,7 @@ This repository contains Filmový Kvíz V2, a replacement for an existing produc
 - Create a dedicated branch before a substantial change.
 - Keep commits small, logical, and reversible. Preserve unrelated user changes.
 - Prefer simple, readable modules over speculative abstractions.
-- Run `pnpm check` before committing. Add tests when behavior or security rules are introduced.
+- Run `pnpm check` and `pnpm test:rules` before committing changes to authentication, authorization, collections, or Security Rules.
 - Update documentation when architecture, data ownership, or security assumptions change.
 
 ## Project layout

@@ -15,6 +15,8 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 82% 12%, #30210c 0, transparent 30%), #0e1116; }
 a { color: inherit; }
+button, input { font: inherit; }
+button { color: inherit; }
 .app-shell { min-height: 100vh; }
 .site-header { min-height: 76px; padding: 0 5vw; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-bottom: 1px solid var(--line); background: rgba(14, 17, 22, 0.88); backdrop-filter: blur(16px); }
 .brand { display: inline-flex; align-items: center; gap: 12px; font-size: 1.05rem; text-decoration: none; letter-spacing: 0.01em; }
@@ -35,9 +37,50 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
 .empty-state p:not(.eyebrow) { color: var(--muted); }
 .button-link { margin-top: 18px; padding: 12px 18px; border-radius: 10px; color: #171008; background: var(--accent); font-weight: 800; text-decoration: none; }
 
+.admin-auth-layout { min-height: 62vh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 440px); align-items: center; gap: clamp(48px, 9vw, 130px); }
+.admin-auth-intro h1 { font-size: clamp(3rem, 6vw, 5.5rem); }
+.login-card { padding: clamp(26px, 4vw, 38px); display: grid; gap: 22px; border: 1px solid var(--line); border-radius: 22px; background: linear-gradient(145deg, rgba(30, 36, 46, 0.98), rgba(19, 24, 31, 0.98)); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35); }
+.login-card-heading { display: flex; align-items: center; gap: 16px; }
+.login-card h2 { margin: 0 0 5px; font-size: 1.35rem; }
+.login-card p { margin: 0; color: var(--muted); line-height: 1.5; }
+.secure-badge { width: 46px; height: 46px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 14px; color: #171008; background: var(--accent); font-weight: 900; transform: rotate(-3deg); }
+.form-field { display: grid; gap: 8px; color: #dce1e7; font-size: 0.9rem; font-weight: 700; }
+.form-field input { width: 100%; padding: 13px 14px; color: var(--ink); border: 1px solid #3a4451; border-radius: 10px; outline: none; background: #11161d; transition: border-color 150ms ease, box-shadow 150ms ease; }
+.form-field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(243, 179, 61, 0.15); }
+.form-field input:disabled { opacity: 0.58; cursor: not-allowed; }
+.primary-button, .secondary-button { border: 0; border-radius: 10px; cursor: pointer; font-weight: 800; transition: transform 150ms ease, opacity 150ms ease; }
+.primary-button { padding: 14px 18px; color: #171008; background: var(--accent); }
+.secondary-button { padding: 11px 15px; border: 1px solid #3a4451; background: #222a34; }
+.primary-button:hover:not(:disabled), .secondary-button:hover:not(:disabled) { transform: translateY(-1px); }
+.primary-button:disabled, .secondary-button:disabled { cursor: wait; opacity: 0.65; }
+.form-error { padding: 12px 14px; border: 1px solid #9c3f49; border-radius: 10px; color: #ffd7dc !important; background: rgba(110, 29, 40, 0.32); }
+.form-note { text-align: center; font-size: 0.76rem; }
+.admin-centered { min-height: 58vh; display: grid; place-content: center; justify-items: center; gap: 16px; text-align: center; }
+.admin-centered h1 { font-size: clamp(2.6rem, 6vw, 4.5rem); }
+.admin-centered p { max-width: 620px; margin: 0; color: var(--muted); line-height: 1.65; }
+.admin-centered .eyebrow { color: var(--accent); }
+.permission-card strong { color: var(--ink); }
+.loading-spinner { width: 34px; height: 34px; border: 3px solid #3b4552; border-top-color: var(--accent); border-radius: 50%; animation: spin 850ms linear infinite; }
+.admin-dashboard { display: grid; gap: 46px; }
+.admin-dashboard-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(330px, 440px); align-items: end; gap: clamp(42px, 8vw, 110px); }
+.account-card { padding: 20px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(145deg, #1c222b, #151a21); }
+.account-card .secondary-button { grid-column: 1 / -1; width: 100%; }
+.avatar { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; color: #171008; background: var(--accent); font-weight: 900; font-size: 1.1rem; }
+.account-details { min-width: 0; display: grid; gap: 3px; }
+.account-details > span:first-child { color: var(--muted); font-size: 0.75rem; }
+.account-details strong { overflow: hidden; text-overflow: ellipsis; }
+.role-pill { width: fit-content; margin-top: 6px; padding: 4px 8px; border-radius: 999px; color: #f7c96f; background: rgba(243, 179, 61, 0.12); font-size: 0.72rem; font-weight: 800; }
+.admin-ready-card { max-width: 760px; padding: 20px 22px; display: flex; align-items: flex-start; gap: 15px; border: 1px solid var(--line); border-radius: 16px; background: rgba(23, 28, 36, 0.72); }
+.admin-ready-card .status-dot { margin-top: 5px; }
+.admin-ready-card p { margin: 5px 0 0; color: var(--muted); line-height: 1.55; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
 @media (max-width: 720px) {
   .site-header { padding: 16px 5vw; align-items: flex-start; flex-direction: column; }
   nav { width: 100%; overflow-x: auto; }
   .surface { grid-template-columns: 1fr; align-items: start; min-height: auto; }
+  .admin-auth-layout, .admin-dashboard-heading { grid-template-columns: 1fr; }
+  .admin-auth-intro h1 { font-size: clamp(2.7rem, 14vw, 4.4rem); }
   h1, .projector-surface h1 { font-size: clamp(2.7rem, 14vw, 4.4rem); }
 }

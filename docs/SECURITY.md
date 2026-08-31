@@ -24,6 +24,20 @@ Private answer media must use protected paths or server-controlled delivery; pro
 
 Custom claims are the staff authorization source. Functions independently verify claims and resource scope; they do not trust client-supplied roles.
 
+### Current administrative policy
+
+The web `AuthProvider` reads `role` from the verified Firebase ID token and uses it only to select routes and UI. Firestore Rules independently read `request.auth.token.role` and remain the data authorization boundary.
+
+Current Firestore access is intentionally narrow:
+
+- anonymous and ordinary authenticated users cannot read or write private collections;
+- moderators can read explicit private `quizzes`, `events`, and `media` paths;
+- admins can read and write those explicit administrative paths;
+- staff profiles are self-readable, while all user management is admin-only;
+- every other path, including future public collections, falls through to deny.
+
+Moderator writes are not enabled yet. Each future operational write must be introduced as a narrowly scoped rule and accompanied by emulator tests.
+
 ## Public registration
 
 Registration is a callable/HTTP Function rather than a direct Firestore write. It validates fields/types, normalization/limits, contact format, team-size bounds, event state and capacity transactionally, duplicate/idempotency behavior, and abuse controls before launch. Responses reveal no other teams, contacts, or internal capacity details.
@@ -32,9 +46,13 @@ Registration is a callable/HTTP Function rather than a direct Firestore write. I
 
 Firebase web configuration is not a secret, but project selection is safety-critical. Local defaults use a `demo-*` project and emulators. The client requires explicit opt-in for a non-demo project ID. Service-account keys and secrets are forbidden in Git.
 
+The local auth seed uses Admin SDK only after two fail-closed checks: the Authentication Emulator must be on local port `9099`, and the project ID must start with `demo-`. It creates three documented development accounts and never loads credentials.
+
 ## Rules and tests
 
-Current Firestore and Storage rules deny every operation. Before granting access, emulator tests must cover unauthenticated users, users without roles, moderator/admin boundaries, cross-event access, private answers, contact isolation, reveal timing, and media paths/types/sizes.
+Firestore Rules tests run through `firebase emulators:exec` and `@firebase/rules-unit-testing`, not mocked SDK calls. The current suite covers anonymous denial, unprivileged authenticated denial, moderator read/admin-write separation, admin read/write, and default denial for unknown paths.
+
+Storage remains fully deny-all. Before additional Firestore or Storage access is granted, emulator tests must also cover cross-event access, private answers, contact isolation, reveal timing, and media paths/types/sizes as those features are implemented.
 
 ## Operational safeguards
 

@@ -7,6 +7,10 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
+    files: ['**/*.{js,mjs,cjs}'],
+    ...tseslint.configs.disableTypeChecked,
+  },
+  {
     files: ['apps/web/**/*.{ts,tsx}'],
     languageOptions: {
       globals: globals.browser,
@@ -22,6 +26,16 @@ export default tseslint.config(
       globals: globals.node,
       parserOptions: {
         projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ['tests/**/*.ts', 'vitest.rules.config.ts'],
+    languageOptions: {
+      globals: globals.node,
+      parserOptions: {
+        project: './tsconfig.tests.json',
         tsconfigRootDir: import.meta.dirname,
       },
     },

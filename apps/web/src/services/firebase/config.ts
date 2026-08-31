@@ -23,6 +23,7 @@ export function readFirebaseConfig(): FirebaseRuntimeConfig {
 
   const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
   const allowNonDemoProject = import.meta.env.VITE_FIREBASE_ALLOW_NON_DEMO_PROJECT === 'true';
+  const useEmulators = import.meta.env.VITE_FIREBASE_USE_EMULATORS === 'true';
 
   if (!projectId) {
     throw new Error('Firebase project ID is missing.');
@@ -34,6 +35,14 @@ export function readFirebaseConfig(): FirebaseRuntimeConfig {
     );
   }
 
+  if (import.meta.env.DEV && !useEmulators) {
+    throw new Error('Local development requires VITE_FIREBASE_USE_EMULATORS=true.');
+  }
+
+  if (useEmulators && !projectId.startsWith('demo-')) {
+    throw new Error('Firebase emulators require a demo-* project ID.');
+  }
+
   return {
     options: {
       apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -43,6 +52,6 @@ export function readFirebaseConfig(): FirebaseRuntimeConfig {
       messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
       appId: import.meta.env.VITE_FIREBASE_APP_ID,
     },
-    useEmulators: import.meta.env.VITE_FIREBASE_USE_EMULATORS === 'true',
+    useEmulators,
   };
 }

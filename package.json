@@ -6,16 +6,26 @@
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "dev": "pnpm --filter @filmovy-kviz/web dev",
+    "emulators": "firebase emulators:start --project demo-filmovy-kviz-v2",
+    "seed:auth": "pnpm --filter @filmovy-kviz/functions build && cross-env FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 GCLOUD_PROJECT=demo-filmovy-kviz-v2 node functions/lib/dev/seed-auth.js",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-filmovy-kviz-v2 \"pnpm test:rules:run\"",
+    "test:rules:run": "vitest run --config vitest.rules.config.ts",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint",
+    "typecheck": "tsc -p tsconfig.tests.json --noEmit --pretty false && pnpm -r typecheck",
+    "lint": "eslint . --max-warnings 0",
     "check": "pnpm typecheck && pnpm lint && pnpm build"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@eslint/js": "^10.0.1",
+    "@types/node": "^24.10.2",
+    "cross-env": "^10.1.0",
     "eslint": "^10.9.1",
+    "firebase": "^12.2.1",
+    "firebase-tools": "^15.28.2",
     "globals": "^17.11.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.68.0"
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^4.1.11"
   }
 }

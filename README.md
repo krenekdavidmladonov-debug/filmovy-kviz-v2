@@ -1,34 +1,55 @@
 # Filmový Kvíz V2
 
-Clean replacement for the Filmový Kvíz application. This repository currently contains only the maintainable foundation: a React web client, Firebase Functions, secure baseline rules, routing, and architecture documentation. Quiz behavior is intentionally not implemented yet.
+Clean replacement for the Filmový Kvíz application. The current foundation includes a React web client, Firebase Functions, emulator-only staff authentication, tested Firestore authorization rules, routing, and architecture documentation. Quiz behavior is intentionally not implemented yet.
 
 ## Requirements
 
 - Node.js 22+
 - pnpm 11+
-- Firebase CLI (only needed for local emulators)
+- Java JDK 21+ recommended for the current and upcoming Firestore Emulator releases
 
 ## Install and run
 
 ```bash
 pnpm install
 cp apps/web/.env.example apps/web/.env.local
+pnpm emulators
+```
+
+In a second terminal, seed the emulator-only accounts and start Vite:
+
+```bash
+pnpm seed:auth
 pnpm dev
 ```
 
-The Vite application is available at `http://localhost:5173`. Routes prepared in this phase:
+The application is available at `http://localhost:5173`. Administrative routes:
 
-- `/admin` — private administration area placeholder
+- `/admin/login` — email/password sign-in against Authentication Emulator
+- `/admin` — protected staff dashboard
+- `/admin/no-access` — authenticated account without a staff role
 - `/projector` — public projector placeholder
 - `/events` — public events placeholder
 
-For Firebase-backed local development, copy `.firebaserc.example` to `.firebaserc` and start the Emulator Suite in a separate terminal:
+The seed is idempotent and creates only local Authentication Emulator users:
+
+| Account | Password | Custom claim |
+| --- | --- | --- |
+| `admin@example.test` | `LocalQuiz123!` | `role: "admin"` |
+| `moderator@example.test` | `LocalQuiz123!` | `role: "moderator"` |
+| `user@example.test` | `LocalQuiz123!` | none |
+
+The seed script refuses to run unless `FIREBASE_AUTH_EMULATOR_HOST` points to local port `9099` and the project ID starts with `demo-`. The Vite development build also refuses to initialize Firebase unless emulator mode is enabled. Production access is not part of this workflow.
+
+## Firestore Security Rules tests
+
+Run the rules suite when the full Emulator Suite is stopped, because this command manages its own Firestore Emulator lifecycle:
 
 ```bash
-firebase emulators:start --project demo-filmovy-kviz-v2
+pnpm test:rules
 ```
 
-The example web configuration points only to local emulators and uses a `demo-*` project ID. The application refuses non-demo project IDs unless the developer deliberately opts in; production access is not part of this setup.
+The tests use `@firebase/rules-unit-testing` against the real local Firestore rules runtime. They verify anonymous users, authenticated users without claims, moderators, admins, and unknown paths.
 
 ## Quality checks
 
@@ -36,6 +57,7 @@ The example web configuration points only to local emulators and uses a `demo-*`
 pnpm typecheck
 pnpm lint
 pnpm build
+pnpm test:rules
 # or all checks:
 pnpm check
 ```

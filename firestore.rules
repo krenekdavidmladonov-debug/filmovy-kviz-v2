@@ -2,7 +2,47 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Secure baseline. Add narrowly scoped rules only with tests.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+
+    function isModerator() {
+      return isSignedIn() && request.auth.token.role == 'moderator';
+    }
+
+    function isStaff() {
+      return isAdmin() || isModerator();
+    }
+
+    // Quiz, event, and media source data is private. Moderators may inspect it,
+    // but mutations stay admin-only until narrower workflows are implemented.
+    match /quizzes/{document=**} {
+      allow read: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /events/{document=**} {
+      allow read: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /media/{document=**} {
+      allow read: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Staff can see only their own profile; role and other user management is
+    // admin-only. Custom claims remain the source of authorization.
+    match /users/{userId} {
+      allow read: if isAdmin() || (isStaff() && request.auth.uid == userId);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // No public data flow exists yet. Everything not named above remains denied.
     match /{document=**} {
       allow read, write: if false;
     }
