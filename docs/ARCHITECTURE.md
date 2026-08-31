@@ -11,6 +11,8 @@ The repository is a pnpm workspace with two deployable units:
 1. `apps/web` — one React/Vite single-page application with three route groups.
 2. `functions` — Firebase Cloud Functions forming the trusted server boundary.
 
+Local-only tooling lives outside deployable units. `tools/migration-v1` is a fail-closed V1 library migration pipeline and has no deployment role.
+
 Keeping one web application avoids duplicated infrastructure while route-level modules preserve separation between audiences.
 
 ## Web route groups

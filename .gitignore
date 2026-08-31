@@ -9,6 +9,7 @@ lib/
 *.tsbuildinfo
 
 # Local environment and Firebase state
+.local-data/
 .env
 .env.*
 !.env.example

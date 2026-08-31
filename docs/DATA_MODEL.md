@@ -19,13 +19,17 @@ Current required fields:
 - `createdBy`, `updatedBy` as trusted actor identifiers;
 - `roundCount`, `questionCount` as denormalized list counters maintained by trusted server/editor workflows.
 
+V1-migrated drafts may additionally contain private `legacy: { source, metadata }`. This field preserves V1 quiz metadata that does not yet have a native V2 field and is never copied into a public projection.
+
 ### `quizzes/{quizId}/rounds/{roundId}`
 
 Round metadata: `title`, `position`, `type` (`classic`, `picture`, `audio`), `questionCount`, and future optional presentation settings.
 
+V1-migrated rounds may contain private `legacy` source metadata. A generated implicit round is explicitly marked when V1 slides precede the first round header.
+
 ### `quizzes/{quizId}/rounds/{roundId}/questions/{questionId}`
 
-Private question source: `prompt`, `type` (`text`, `image`, `audio`), `position`, and the private `correctAnswer`. Accepted alternatives, scoring rules, explanation, and media references will be added only with their features. This collection is never readable by public/projector clients. The current admin view model selects only type, prompt, and position and does not expose the answer to list/detail components.
+Private question source: `prompt`, `type` (`text`, `image`, `audio`, or migration-only `legacy`), `position`, and the private `correctAnswer`. V1-migrated drafts may also carry `sourceSlidePosition`, `options`, `moderatorNote`, classified external `media`, video ranges, an audio trigger, and private `legacy.raw`. The legacy representation is the minimum lossless extension for V1 slide types not yet expressible by a native V2 feature. This collection is never readable by public/projector clients. The current admin view model selects only supported type, prompt, and position and does not expose the answer or migration metadata to list/detail components.
 
 The local seed uses stable quiz, round, and question IDs. It is development data only and is never copied from production.
 

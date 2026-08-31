@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "collection": "library",
+  "documents": [
+    {
+      "id": "synthetic-quiz",
+      "data": {
+        "title": "Syntetický kvíz",
+        "description": "Pouze testovací data bez osobních údajů.",
+        "customQuizValue": "preserve-me",
+        "slides": [
+          {
+            "type": "roundHeader",
+            "roundHeader": true,
+            "title": "První kolo"
+          },
+          {
+            "type": "text",
+            "text": "Kdo režíroval testovací film?",
+            "options": ["A", "B", "C"],
+            "correct": "A",
+            "note": "Poznámka moderátora",
+            "customSlideValue": 42
+          },
+          {
+            "type": "image",
+            "text": "Poznej film podle obrázku.",
+            "bgImage": "https://media.example.test/frame.jpg",
+            "answerImg": "not a url",
+            "correctAnswer": "Testovací film"
+          },
+          {
+            "type": "audio",
+            "text": "Poznej hudbu.",
+            "mediaRaw": "https://audio.example.test/theme.mp3",
+            "audioTrigger": "manual",
+            "correct": "Testovací skladatel"
+          },
+          {
+            "type": "video",
+            "text": "Poznej video.",
+            "mediaRaw": "https://video.example.test/clip.mp4",
+            "videoStart": 12,
+            "videoEnd": 20,
+            "correct": "Testovací video"
+          },
+          {
+            "type": "mystery-widget",
+            "text": "Neznámý legitimní slide",
+            "overlayValueFromV1": "kept"
+          }
+        ]
+      }
+    }
+  ]
+}

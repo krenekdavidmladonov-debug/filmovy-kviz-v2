@@ -12,5 +12,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["tests/**/*.ts", "vitest.config.ts", "vitest.rules.config.ts"]
+  "include": ["tests/**/*.ts", "tools/migration-v1/test/**/*.ts", "vitest.config.ts", "vitest.rules.config.ts"]
 }

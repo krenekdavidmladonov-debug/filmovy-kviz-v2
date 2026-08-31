@@ -31,7 +31,17 @@ export default tseslint.config(
     },
   },
   {
-    files: ['tests/**/*.ts', 'vitest.config.ts', 'vitest.rules.config.ts'],
+    files: ['tools/migration-v1/src/**/*.ts'],
+    languageOptions: {
+      globals: globals.node,
+      parserOptions: {
+        project: './tools/migration-v1/tsconfig.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ['tests/**/*.ts', 'tools/migration-v1/test/**/*.ts', 'vitest.config.ts', 'vitest.rules.config.ts'],
     languageOptions: {
       globals: globals.node,
       parserOptions: {

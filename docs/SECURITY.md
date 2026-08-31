@@ -53,6 +53,8 @@ The local auth seed uses Admin SDK only after two fail-closed checks: the Authen
 
 The quiz seed applies the same fail-closed design to Firestore: it requires local port `8080` and a `demo-*` project. Stable IDs make it safely repeatable. Its Admin SDK access is strictly an emulator-only development tool and does not justify client writes in Rules.
 
+The V1 migration tool follows the same fail-closed principle. Its input is restricted to the Git-ignored `.local-data/` tree. Its WRITE phase requires `FIRESTORE_EMULATOR_HOST` to be an explicit localhost port and the project ID to begin with `demo-`; no production override exists. Reports contain counts, ids, field names, media domains, and validation status but omit question text, answers, and contact values.
+
 ## Rules and tests
 
 Firestore Rules tests run through `firebase emulators:exec` and `@firebase/rules-unit-testing`, not mocked SDK calls. The current suite covers anonymous denial, unprivileged authenticated denial, moderator read/admin-write separation, admin read/write, and default denial for unknown paths.

@@ -50,4 +50,21 @@ describe('quiz Firestore mapping', () => {
     });
     expect('correctAnswer' in question).toBe(false);
   });
+
+  test('accepts a private migration-only legacy question without exposing legacy metadata', () => {
+    const question = mapQuizQuestion('question-legacy', {
+      type: 'legacy',
+      prompt: 'Starší typ slidu',
+      position: 2,
+      legacy: { raw: { correct: 'Soukromé' } },
+    });
+
+    expect(question).toEqual({
+      id: 'question-legacy',
+      type: 'legacy',
+      prompt: 'Starší typ slidu',
+      position: 2,
+    });
+    expect('legacy' in question).toBe(false);
+  });
 });

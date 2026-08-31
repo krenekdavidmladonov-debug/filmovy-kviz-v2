@@ -12,6 +12,7 @@ export const questionTypeLabels: Readonly<Record<QuestionType, string>> = {
   text: 'Textová',
   image: 'Obrázková',
   audio: 'Audio',
+  legacy: 'Legacy slide',
 };
 
 export const roundTypeLabels: Readonly<Record<RoundType, string>> = {

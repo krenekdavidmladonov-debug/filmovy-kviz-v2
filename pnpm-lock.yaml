@@ -82,6 +82,12 @@ importers:
         specifier: ^6.4.0
         version: 6.6.0(firebase-admin@13.10.0(@firebase/app-compat@0.5.17)(@firebase/app@0.16.1)(supports-color@7.2.0))(supports-color@7.2.0)
 
+  tools/migration-v1:
+    dependencies:
+      firebase-admin:
+        specifier: ^13.4.0
+        version: 13.10.0(@firebase/app-compat@0.5.17)(@firebase/app@0.16.1)(supports-color@7.2.0)
+
 packages:
 
   '@apidevtools/json-schema-ref-parser@9.1.2':

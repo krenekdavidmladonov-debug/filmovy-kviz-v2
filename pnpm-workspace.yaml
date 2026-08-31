@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - functions
+  - tools/*
 
 confirmModulesPurge: false
 
