@@ -67,4 +67,22 @@ describe('quiz Firestore mapping', () => {
     });
     expect('legacy' in question).toBe(false);
   });
+
+  test('accepts a native video question without exposing private timing or answer fields', () => {
+    const question = mapQuizQuestion('question-video', {
+      type: 'video',
+      prompt: 'Syntetická video otázka',
+      position: 3,
+      videoStart: 10,
+      videoEnd: 20,
+      correctAnswer: 'Soukromé',
+    });
+
+    expect(question).toEqual({
+      id: 'question-video',
+      type: 'video',
+      prompt: 'Syntetická video otázka',
+      position: 3,
+    });
+  });
 });

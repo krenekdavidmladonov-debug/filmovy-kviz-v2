@@ -6,6 +6,7 @@ import type {
   V2QuestionDocument,
   V2QuizDocument,
   V2RoundDocument,
+  V2SlideDocument,
 } from './types.js';
 
 const migrationActor = 'migration-v1-emulator';
@@ -30,35 +31,35 @@ function normalizedMediaValue(media: NormalizedMedia): JsonObject {
 }
 
 function mapQuestionType(slide: NormalizedSlide): string {
-  if (slide.classification === 'legacy') return 'legacy';
-  const kinds = new Set(slide.media.map((item) => item.kind));
-  if (slide.sourceType.includes('audio') || slide.sourceType === 'music' || kinds.has('audio')) return 'audio';
-  if (slide.sourceType.includes('image') || ['picture', 'photo'].includes(slide.sourceType) || kinds.has('image')) return 'image';
-  if (slide.sourceType.includes('video') || ['youtube'].includes(slide.sourceType) || kinds.has('video')) return 'legacy';
+  if (slide.sourceType === 'audio' || slide.sourceType === 'music') return 'audio';
+  if (['image', 'picture', 'photo'].includes(slide.sourceType)) return 'image';
+  if (slide.sourceType === 'video' || slide.sourceType === 'youtube') return 'video';
+  if (slide.classification === 'legacy' || slide.sourceType === 'pl') return 'legacy';
   return 'text';
 }
 
-function mapRoundType(slides: readonly NormalizedSlide[]): string {
-  const types = slides.map(mapQuestionType);
-  if (types.length > 0 && types.every((type) => type === 'audio')) return 'audio';
-  if (types.length > 0 && types.every((type) => type === 'image')) return 'picture';
-  return 'classic';
+function mappedPresentation(slide: NormalizedSlide): JsonObject {
+  return {
+    ...(slide.videoStart === undefined ? {} : { videoStart: slide.videoStart }),
+    ...(slide.videoEnd === undefined ? {} : { videoEnd: slide.videoEnd }),
+    ...(slide.audioTrigger === undefined ? {} : { audioTrigger: slide.audioTrigger }),
+    ...(slide.backgroundOverlay === undefined ? {} : { backgroundOverlay: slide.backgroundOverlay }),
+    ...(slide.answerOverlay === undefined ? {} : { answerOverlay: slide.answerOverlay }),
+    ...(slide.sourceQuestionNumber === undefined ? {} : { sourceQuestionNumber: slide.sourceQuestionNumber }),
+    ...(slide.recapOverrides === undefined ? {} : { recapOverrides: [...slide.recapOverrides] }),
+  };
 }
 
-function transformQuestion(
-  quizId: string,
-  roundId: string,
-  slide: NormalizedSlide,
-  position: number,
-): V2QuestionDocument {
-  const prompt = slide.text || slide.title;
+function commonSlideData(slide: NormalizedSlide): JsonObject {
   const data: JsonObject = {
-    prompt,
-    type: mapQuestionType(slide),
-    position,
-    sourceSlidePosition: slide.position,
+    position: slide.position,
+    kind: slide.sourceType || slide.classification,
+    isQuestion: slide.isQuestion,
+    title: slide.title,
+    text: slide.text,
     options: [...slide.options],
     media: slide.media.map(normalizedMediaValue),
+    presentation: mappedPresentation(slide),
     legacy: {
       source: 'v1',
       classification: slide.classification,
@@ -68,63 +69,130 @@ function transformQuestion(
   };
   if (slide.correctAnswer !== undefined) data.correctAnswer = slide.correctAnswer;
   if (slide.note !== undefined) data.moderatorNote = slide.note;
-  if (slide.videoStart !== undefined) data.videoStart = slide.videoStart;
-  if (slide.videoEnd !== undefined) data.videoEnd = slide.videoEnd;
-  if (slide.audioTrigger !== undefined) data.audioTrigger = slide.audioTrigger;
+  return data;
+}
 
+function transformQuestion(
+  quizId: string,
+  roundId: string,
+  slide: NormalizedSlide,
+  position: number,
+): V2QuestionDocument {
+  const data = commonSlideData(slide);
+  data.prompt = slide.text || slide.title;
+  data.type = mapQuestionType(slide);
+  data.position = position;
+  data.sourceSlideId = `slide-${pad(slide.position)}`;
+  data.sourceSlidePosition = slide.position;
+  delete data.kind;
+  delete data.isQuestion;
+  delete data.title;
+  delete data.text;
+  delete data.presentation;
+  const presentation = mappedPresentation(slide);
+  Object.assign(data, presentation);
   return { id: `slide-${pad(slide.position)}`, quizId, roundId, data };
 }
 
-interface RoundGroup {
-  readonly header?: NormalizedSlide;
+interface SlideSegment {
+  readonly header: string;
+  readonly explicit: boolean;
   readonly slides: NormalizedSlide[];
 }
 
-export function groupSlidesIntoRounds(slides: readonly NormalizedSlide[]): readonly RoundGroup[] {
-  const groups: RoundGroup[] = [];
-  let current: RoundGroup | undefined;
+export interface RoundGroup {
+  readonly title: string;
+  readonly slides: readonly NormalizedSlide[];
+  readonly questions: readonly NormalizedSlide[];
+  readonly generatedImplicitRound: boolean;
+}
+
+function segmentSlides(slides: readonly NormalizedSlide[]): readonly SlideSegment[] {
+  const segments: SlideSegment[] = [];
+  let current: SlideSegment | undefined;
   for (const slide of slides) {
-    if (slide.classification === 'round') {
-      current = { header: slide, slides: [] };
-      groups.push(current);
-      continue;
+    const explicitBoundary = slide.classification === 'round';
+    const headerTransition = current !== undefined
+      && slide.roundHeader !== current.header
+      && (slide.roundHeader !== '' || !current.explicit);
+    const shouldStart = current === undefined
+      || explicitBoundary
+      || headerTransition;
+    if (shouldStart) {
+      const header = explicitBoundary
+        ? slide.roundHeader || slide.title || slide.text
+        : slide.roundHeader;
+      current = { header, explicit: explicitBoundary, slides: [] };
+      segments.push(current);
     }
-    if (current === undefined) {
-      current = { slides: [] };
-      groups.push(current);
-    }
-    current.slides.push(slide);
+    current!.slides.push(slide);
   }
-  return groups;
+  return segments;
+}
+
+export function groupSlidesIntoRounds(slides: readonly NormalizedSlide[]): readonly RoundGroup[] {
+  return segmentSlides(slides)
+    .filter((segment) => segment.explicit || segment.slides.some((slide) => slide.isQuestion))
+    .map((segment, index) => ({
+      title: segment.header
+        || segment.slides.find((slide) => slide.classification === 'round')?.title
+        || `Kolo ${index + 1}`,
+      slides: segment.slides,
+      questions: segment.slides.filter((slide) => slide.isQuestion),
+      generatedImplicitRound: segment.header === '' && !segment.explicit,
+    }));
+}
+
+function mapRoundType(slides: readonly NormalizedSlide[]): string {
+  const types = slides.map(mapQuestionType);
+  if (types.length > 0 && types.every((type) => type === 'audio')) return 'audio';
+  if (types.length > 0 && types.every((type) => type === 'image')) return 'picture';
+  return 'classic';
 }
 
 function transformRound(quizId: string, group: RoundGroup, position: number): V2RoundDocument {
   const roundId = `round-${pad(position)}`;
-  const questions = group.slides.map((slide, index) => transformQuestion(quizId, roundId, slide, index + 1));
-  const legacy: JsonObject = group.header === undefined
-    ? { source: 'v1', generatedImplicitRound: true }
-    : {
-        source: 'v1',
-        sourceSlidePosition: group.header.position,
-        sourceType: group.header.sourceType,
-        raw: group.header.raw,
-      };
+  const questions = group.questions.map((slide, index) => transformQuestion(quizId, roundId, slide, index + 1));
   return {
     id: roundId,
     quizId,
     data: {
-      title: group.header?.title || group.header?.text || `Kolo ${position}`,
+      title: group.title,
       position,
-      type: mapRoundType(group.slides),
+      type: mapRoundType(group.questions),
+      slideCount: group.slides.length,
       questionCount: questions.length,
-      legacy,
+      sourceSlideStart: group.slides[0]?.position ?? 0,
+      sourceSlideEnd: group.slides.at(-1)?.position ?? 0,
+      legacy: {
+        source: 'v1',
+        generatedImplicitRound: group.generatedImplicitRound,
+      },
     },
     questions,
   };
 }
 
+function transformSlide(quizId: string, slide: NormalizedSlide, roundId?: string): V2SlideDocument {
+  const data = commonSlideData(slide);
+  if (roundId !== undefined) data.roundId = roundId;
+  return {
+    id: `slide-${pad(slide.position)}`,
+    quizId,
+    ...(roundId === undefined ? {} : { roundId }),
+    data,
+  };
+}
+
 export function transformQuiz(quiz: NormalizedQuiz, now = new Date()): V2QuizDocument {
-  const rounds = groupSlidesIntoRounds(quiz.slides).map((group, index) => transformRound(quiz.id, group, index + 1));
+  const groups = groupSlidesIntoRounds(quiz.slides);
+  const rounds = groups.map((group, index) => transformRound(quiz.id, group, index + 1));
+  const roundBySlidePosition = new Map<number, string>();
+  groups.forEach((group, index) => {
+    const roundId = rounds[index]!.id;
+    group.slides.forEach((slide) => roundBySlidePosition.set(slide.position, roundId));
+  });
+  const slides = quiz.slides.map((slide) => transformSlide(quiz.id, slide, roundBySlidePosition.get(slide.position)));
   const questionCount = rounds.reduce((total, round) => total + round.questions.length, 0);
   return {
     id: quiz.id,
@@ -136,6 +204,7 @@ export function transformQuiz(quiz: NormalizedQuiz, now = new Date()): V2QuizDoc
       updatedAt: taggedTimestamp(now.toISOString()),
       createdBy: migrationActor,
       updatedBy: migrationActor,
+      slideCount: slides.length,
       roundCount: rounds.length,
       questionCount,
       legacy: {
@@ -143,6 +212,7 @@ export function transformQuiz(quiz: NormalizedQuiz, now = new Date()): V2QuizDoc
         metadata: quiz.legacyMetadata,
       },
     },
+    slides,
     rounds,
   };
 }

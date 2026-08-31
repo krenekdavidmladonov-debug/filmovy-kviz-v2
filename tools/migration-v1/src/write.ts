@@ -21,22 +21,29 @@ export function assertSafeEmulatorEnvironment(environment: NodeJS.ProcessEnv = p
   if (host === undefined || host.trim() === '') {
     throw new MigrationSafetyError('Refusing to write: FIRESTORE_EMULATOR_HOST is not set.');
   }
-  if (host.includes('/') || host.includes('://')) {
-    throw new MigrationSafetyError('Refusing to write: FIRESTORE_EMULATOR_HOST must be a bare local host and port.');
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(`http://${host}`);
-  } catch {
-    throw new MigrationSafetyError('Refusing to write: FIRESTORE_EMULATOR_HOST is invalid.');
-  }
-  if (!['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname) || parsed.port === '') {
+  const match = /^(?:localhost|127\.0\.0\.1|\[::1\]):([1-9]\d{0,4})$/u.exec(host);
+  const port = match === null ? Number.NaN : Number(match[1]);
+  if (!Number.isInteger(port) || port > 65_535) {
     throw new MigrationSafetyError('Refusing to write: Firestore Emulator must use localhost with an explicit port.');
   }
   if (projectId === undefined || !projectId.startsWith('demo-')) {
     throw new MigrationSafetyError('Refusing to write: Firebase project ID must start with demo-.');
   }
-  return { baseUrl: parsed.origin, projectId };
+  return { baseUrl: `http://${host}`, projectId };
+}
+
+async function assertEmptyMigrationTarget(db: Firestore): Promise<void> {
+  const snapshots = await Promise.all([
+    db.collection('quizzes').limit(1).get(),
+    db.collectionGroup('slides').limit(1).get(),
+    db.collectionGroup('rounds').limit(1).get(),
+    db.collectionGroup('questions').limit(1).get(),
+  ]);
+  if (snapshots.some((snapshot) => !snapshot.empty)) {
+    throw new MigrationSafetyError(
+      'Refusing to write: the demo emulator already contains quiz migration data; use a fresh dedicated emulator.',
+    );
+  }
 }
 
 function toFirestoreData(value: JsonValue): unknown {
@@ -50,19 +57,22 @@ function toFirestoreData(value: JsonValue): unknown {
   return value;
 }
 
-function documentCount(quizzes: readonly V2QuizDocument[]): number {
-  return quizzes.reduce(
-    (total, quiz) => total + 1 + quiz.rounds.reduce(
+function quizDocumentCount(quiz: V2QuizDocument): number {
+  return 1 + quiz.slides.length + quiz.rounds.reduce(
       (roundTotal, round) => roundTotal + 1 + round.questions.length,
       0,
-    ),
-    0,
   );
 }
 
 function addQuizWrites(db: Firestore, batch: WriteBatch, quiz: V2QuizDocument): void {
   const quizRef = db.collection('quizzes').doc(quiz.id);
   batch.set(quizRef, toFirestoreData(quiz.data) as DocumentData);
+  for (const slide of quiz.slides) {
+    batch.set(
+      quizRef.collection('slides').doc(slide.id),
+      toFirestoreData(slide.data) as DocumentData,
+    );
+  }
   for (const round of quiz.rounds) {
     const roundRef = quizRef.collection('rounds').doc(round.id);
     batch.set(roundRef, toFirestoreData(round.data) as DocumentData);
@@ -79,21 +89,26 @@ export async function writeToFirestoreEmulator(
   quizzes: readonly V2QuizDocument[],
 ): Promise<number> {
   const target = assertSafeEmulatorEnvironment(process.env);
-  const count = documentCount(quizzes);
-  if (count > 500) {
-    throw new MigrationSafetyError(
-      `Refusing a non-atomic write of ${count} documents; the safe framework limit is 500 documents per run.`,
-    );
+  const counts = quizzes.map(quizDocumentCount);
+  for (const [index, count] of counts.entries()) {
+    if (count > 500) {
+      throw new MigrationSafetyError(
+        `Refusing quiz ${quizzes[index]!.id}: its ${count} documents exceed the atomic 500-document limit.`,
+      );
+    }
   }
 
   const app = initializeApp({ projectId: target.projectId }, `migration-v1-${Date.now()}`);
   try {
     const db = getFirestore(app);
-    const batch = db.batch();
-    for (const quiz of quizzes) addQuizWrites(db, batch, quiz);
-    await batch.commit();
+    await assertEmptyMigrationTarget(db);
+    for (const quiz of quizzes) {
+      const batch = db.batch();
+      addQuizWrites(db, batch, quiz);
+      await batch.commit();
+    }
   } finally {
     await deleteApp(app);
   }
-  return count;
+  return counts.reduce((total, count) => total + count, 0);
 }

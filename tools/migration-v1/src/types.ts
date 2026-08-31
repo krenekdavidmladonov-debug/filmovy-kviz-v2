@@ -13,7 +13,7 @@ export interface V1LibrarySnapshot {
   readonly documents: readonly V1LibraryDocument[];
 }
 
-export type SlideClassification = 'round' | 'question' | 'legacy';
+export type SlideClassification = 'round' | 'question' | 'content' | 'legacy';
 export type MediaKind = 'image' | 'audio' | 'video' | 'unknown';
 
 export interface NormalizedMedia {
@@ -29,7 +29,9 @@ export interface NormalizedMedia {
 export interface NormalizedSlide {
   readonly position: number;
   readonly classification: SlideClassification;
+  readonly isQuestion: boolean;
   readonly sourceType: string;
+  readonly roundHeader: string;
   readonly title: string;
   readonly text: string;
   readonly options: readonly JsonValue[];
@@ -39,6 +41,10 @@ export interface NormalizedSlide {
   readonly videoStart?: number;
   readonly videoEnd?: number;
   readonly audioTrigger?: JsonValue;
+  readonly backgroundOverlay?: number;
+  readonly answerOverlay?: number;
+  readonly sourceQuestionNumber?: string;
+  readonly recapOverrides?: readonly JsonValue[];
   readonly raw: JsonObject;
   readonly unknownFields: readonly string[];
 }
@@ -70,6 +76,13 @@ export interface V2QuestionDocument {
   readonly data: JsonObject;
 }
 
+export interface V2SlideDocument {
+  readonly id: string;
+  readonly quizId: string;
+  readonly roundId?: string;
+  readonly data: JsonObject;
+}
+
 export interface V2RoundDocument {
   readonly id: string;
   readonly quizId: string;
@@ -80,6 +93,7 @@ export interface V2RoundDocument {
 export interface V2QuizDocument {
   readonly id: string;
   readonly data: JsonObject;
+  readonly slides: readonly V2SlideDocument[];
   readonly rounds: readonly V2RoundDocument[];
 }
 
@@ -89,6 +103,7 @@ export interface QuizMigrationReport {
   readonly before: MigrationStats;
   readonly after: MigrationStats;
   readonly unknownSlideTypes: readonly string[];
+  readonly partiallyMappedSlideTypes: readonly string[];
   readonly unknownFields: readonly string[];
   readonly mediaDomains: readonly string[];
   readonly invalidMediaUrls: number;

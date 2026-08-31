@@ -50,7 +50,7 @@ function requireQuizStatus(data: DocumentData): QuizStatus {
 
 function requireQuestionType(data: DocumentData): QuestionType {
   const type = requireString(data, 'type');
-  if (type !== 'text' && type !== 'image' && type !== 'audio' && type !== 'legacy') {
+  if (type !== 'text' && type !== 'image' && type !== 'audio' && type !== 'video' && type !== 'legacy') {
     throw new Error('Invalid Firestore field: type');
   }
   return type;

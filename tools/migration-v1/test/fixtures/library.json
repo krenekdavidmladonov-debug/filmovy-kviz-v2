@@ -3,53 +3,199 @@
   "collection": "library",
   "documents": [
     {
-      "id": "synthetic-quiz",
+      "id": "synthetic-real-shapes",
       "data": {
-        "title": "Syntetický kvíz",
-        "description": "Pouze testovací data bez osobních údajů.",
-        "customQuizValue": "preserve-me",
-        "slides": [
-          {
-            "type": "roundHeader",
-            "roundHeader": true,
-            "title": "První kolo"
+        "name": "Syntetický kvíz",
+        "timestamp": 1788134400000,
+        "data": {
+          "settings": {
+            "defaultAudioTrigger": 0,
+            "scaleTitle": 1,
+            "time_R1": 30
           },
-          {
-            "type": "text",
-            "text": "Kdo režíroval testovací film?",
-            "options": ["A", "B", "C"],
-            "correct": "A",
-            "note": "Poznámka moderátora",
-            "customSlideValue": 42
-          },
-          {
-            "type": "image",
-            "text": "Poznej film podle obrázku.",
-            "bgImage": "https://media.example.test/frame.jpg",
-            "answerImg": "not a url",
-            "correctAnswer": "Testovací film"
-          },
-          {
-            "type": "audio",
-            "text": "Poznej hudbu.",
-            "mediaRaw": "https://audio.example.test/theme.mp3",
-            "audioTrigger": "manual",
-            "correct": "Testovací skladatel"
-          },
-          {
-            "type": "video",
-            "text": "Poznej video.",
-            "mediaRaw": "https://video.example.test/clip.mp4",
-            "videoStart": 12,
-            "videoEnd": 20,
-            "correct": "Testovací video"
-          },
-          {
-            "type": "mystery-widget",
-            "text": "Neznámý legitimní slide",
-            "overlayValueFromV1": "kept"
-          }
-        ]
+          "quiz": [
+            {
+              "type": "intro",
+              "title": "První kolo",
+              "text": "Syntetické intro",
+              "roundHeader": "První kolo",
+              "options": [],
+              "correct": "",
+              "note": "",
+              "mediaRaw": "",
+              "audioTrigger": 0,
+              "videoStart": 0,
+              "videoEnd": 0,
+              "qCount": ""
+            },
+            {
+              "type": "agenda",
+              "title": "Program",
+              "text": "Syntetická agenda",
+              "roundHeader": "První kolo",
+              "options": ["A", "B", "C", "D"],
+              "correct": "",
+              "note": "",
+              "mediaRaw": "",
+              "audioTrigger": 0,
+              "videoStart": 0,
+              "videoEnd": 0,
+              "qCount": ""
+            },
+            {
+              "type": "question",
+              "title": "Otázka",
+              "text": "Syntetická otázka s možnostmi",
+              "roundHeader": "První kolo",
+              "options": ["A", "B", "C", "D"],
+              "optionsStr": "A|B|C|D",
+              "correct": "A",
+              "note": "Syntetická poznámka",
+              "bgImage": "https://images.example.test/background.jpg",
+              "answerImg": "https://images.example.test/answer.jpg",
+              "bgOverlay": "75",
+              "answerOverlay": 30,
+              "mediaRaw": "",
+              "audioTrigger": 0,
+              "videoStart": 0,
+              "videoEnd": 0,
+              "qCount": "1/7",
+              "syntheticUnknownField": "preserve"
+            },
+            {
+              "type": "free",
+              "title": "Volná odpověď",
+              "text": "Syntetická volná otázka",
+              "roundHeader": "První kolo",
+              "options": [],
+              "correct": "Odpověď",
+              "note": "Poznámka",
+              "mediaRaw": "",
+              "audioTrigger": 0,
+              "videoStart": 0,
+              "videoEnd": 0,
+              "qCount": "2/7"
+            },
+            {
+              "type": "image",
+              "title": "Obrázek",
+              "text": "Syntetická obrázková otázka",
+              "roundHeader": "První kolo",
+              "options": [],
+              "correct": "Odpověď",
+              "note": "Poznámka",
+              "media": { "type": "image", "src": "https://media.example.test/image.png" },
+              "mediaRaw": "https://media.example.test/image.png",
+              "audioTrigger": 0,
+              "videoStart": 0,
+              "videoEnd": 0,
+              "qCount": "3/7"
+            },
+            {
+              "type": "audio",
+              "title": "Audio",
+              "text": "Syntetická audio otázka",
+              "roundHeader": "První kolo",
+              "options": [],
+              "correct": "Odpověď",
+              "note": "Poznámka",
+              "media": { "type": "youtube", "src": "synthetic-audio-id" },
+              "mediaRaw": "",
+              "audioTrigger": "35",
+              "videoStart": 0,
+              "videoEnd": 0,
+              "qCount": "4/7"
+            },
+            {
+              "type": "video",
+              "title": "Video",
+              "text": "Syntetická video otázka",
+              "roundHeader": "První kolo",
+              "options": [],
+              "correct": "Odpověď",
+              "note": "Poznámka",
+              "mediaRaw": "https://video.example.test/watch?v=synthetic",
+              "audioTrigger": 0,
+              "videoStart": "12",
+              "videoEnd": "20",
+              "qCount": "5/7"
+            },
+            {
+              "type": "pl",
+              "title": "Legacy PL",
+              "text": "Syntetická legacy otázka",
+              "roundHeader": "První kolo",
+              "options": [],
+              "correct": "Odpověď",
+              "note": "Poznámka",
+              "bgImage": "https://images.example.test/pl.jpg",
+              "mediaRaw": "",
+              "audioTrigger": 0,
+              "videoStart": 0,
+              "videoEnd": 0,
+              "qCount": "6/7",
+              "id": 42,
+              "bgRaw": ""
+            },
+            {
+              "type": "recap",
+              "title": "Rekapitulace",
+              "text": "Syntetický recap",
+              "roundHeader": "První kolo",
+              "options": [],
+              "correct": "",
+              "note": "",
+              "mediaRaw": "",
+              "audioTrigger": 0,
+              "videoStart": 0,
+              "videoEnd": 0,
+              "qCount": "",
+              "recapOverrides": [{ "extraText": "Syntetický text" }, { "overrideMedia": "" }]
+            },
+            {
+              "type": "intro",
+              "title": "Druhé kolo",
+              "text": "Syntetické intro druhého kola",
+              "roundHeader": "Druhé kolo",
+              "options": [],
+              "correct": "",
+              "note": "",
+              "mediaRaw": "",
+              "audioTrigger": 0,
+              "videoStart": 0,
+              "videoEnd": 0,
+              "qCount": ""
+            },
+            {
+              "type": "question",
+              "title": "Otázka",
+              "text": "Syntetická otázka druhého kola",
+              "roundHeader": "Druhé kolo",
+              "options": ["A", "B", "C", "D", "E"],
+              "correct": "B",
+              "note": "Poznámka",
+              "mediaRaw": "",
+              "audioTrigger": 0,
+              "videoStart": 0,
+              "videoEnd": 0,
+              "qCount": "7/7"
+            },
+            {
+              "type": "end",
+              "title": "Konec",
+              "text": "Syntetické outro",
+              "roundHeader": "",
+              "options": [],
+              "correct": "",
+              "note": "",
+              "mediaRaw": "",
+              "audioTrigger": 0,
+              "videoStart": 0,
+              "videoEnd": 0,
+              "qCount": ""
+            }
+          ]
+        }
       }
     }
   ]

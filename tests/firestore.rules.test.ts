@@ -13,6 +13,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, test } from 'vite
 const projectId = 'demo-filmovy-kviz-v2';
 const privateQuizPath = 'quizzes/security-test-quiz';
 const privateRoundPath = `${privateQuizPath}/rounds/security-test-round`;
+const privateSlidePath = `${privateQuizPath}/slides/security-test-slide`;
 const privateQuestionPath = `${privateRoundPath}/questions/security-test-question`;
 
 let testEnvironment: RulesTestEnvironment;
@@ -36,6 +37,10 @@ beforeEach(async () => {
       title: 'Security test round',
       position: 1,
     });
+    await setDoc(doc(context.firestore(), privateSlidePath), {
+      position: 1,
+      correctAnswer: 'Private slide answer',
+    });
     await setDoc(doc(context.firestore(), privateQuestionPath), {
       prompt: 'Private question',
       correctAnswer: 'Private answer',
@@ -56,6 +61,7 @@ describe('anonymous user', () => {
   test('cannot read private data', async () => {
     const db = testEnvironment.unauthenticatedContext().firestore();
     await assertFails(getDoc(doc(db, privateQuizPath)));
+    await assertFails(getDoc(doc(db, privateSlidePath)));
   });
 
   test('cannot write private data', async () => {
@@ -68,6 +74,7 @@ describe('authenticated user without a role', () => {
   test('cannot read private data', async () => {
     const db = testEnvironment.authenticatedContext('regular-user').firestore();
     await assertFails(getDoc(doc(db, privateQuizPath)));
+    await assertFails(getDoc(doc(db, privateSlidePath)));
   });
 
   test('cannot write private data', async () => {
@@ -96,6 +103,13 @@ describe('moderator', () => {
       .authenticatedContext('moderator-user', { role: 'moderator' })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateQuestionPath)));
+  });
+
+  test('can read a private source slide document', async () => {
+    const db = testEnvironment
+      .authenticatedContext('moderator-user', { role: 'moderator' })
+      .firestore();
+    await assertSucceeds(getDoc(doc(db, privateSlidePath)));
   });
 
   test('cannot write a quiz', async () => {

@@ -1,5 +1,5 @@
 export type QuizStatus = 'draft' | 'ready' | 'archived';
-export type QuestionType = 'text' | 'image' | 'audio' | 'legacy';
+export type QuestionType = 'text' | 'image' | 'audio' | 'video' | 'legacy';
 export type RoundType = 'classic' | 'picture' | 'audio';
 
 export interface QuizSummary {
