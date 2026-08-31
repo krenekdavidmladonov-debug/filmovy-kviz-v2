@@ -1,0 +1,15 @@
+packages:
+  - apps/*
+  - functions
+
+confirmModulesPurge: false
+
+allowBuilds:
+  '@firebase/util@1.15.3': true
+  'esbuild@0.28.2': true
+  'protobufjs@7.6.6': true
+
+# The managed Windows workspace blocks Rollup's native .node binary in OneDrive.
+# The official WASM build exposes the same API and keeps local builds portable.
+overrides:
+  rollup: npm:@rollup/wasm-node@4.63.1

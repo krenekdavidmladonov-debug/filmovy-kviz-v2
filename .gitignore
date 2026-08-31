@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+lib/
+*.tsbuildinfo
+
+# Local environment and Firebase state
+.env
+.env.*
+!.env.example
+.firebase/
+.firebaserc
+firebase-debug*.log
+firestore-debug.log
+ui-debug.log
+
+# Test and tool output
+coverage/
+.eslintcache
+
+# Editors and operating systems
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Secrets and credentials
+*service-account*.json
+*serviceAccount*.json
+*.pem
+*.key

@@ -1,0 +1,10 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Secure baseline. Add narrowly scoped rules only with tests.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
