@@ -12,13 +12,22 @@ Staff profile: `displayName`, `email`, `disabled`, and timestamps. Authorization
 
 Quiz metadata: `title`, `description`, `status` (`draft`, `ready`, `archived`), ownership/audit fields, and timestamps.
 
+Current required fields:
+
+- `title`, `description`, `status`;
+- `createdAt`, `updatedAt` as Firestore timestamps;
+- `createdBy`, `updatedBy` as trusted actor identifiers;
+- `roundCount`, `questionCount` as denormalized list counters maintained by trusted server/editor workflows.
+
 ### `quizzes/{quizId}/rounds/{roundId}`
 
-Round metadata: `title`, `position`, `type`, and optional presentation settings.
+Round metadata: `title`, `position`, `type` (`classic`, `picture`, `audio`), `questionCount`, and future optional presentation settings.
 
 ### `quizzes/{quizId}/rounds/{roundId}/questions/{questionId}`
 
-Private question source: prompt, correct answer, accepted alternatives, scoring rules, explanation, media references, and position. This collection is never readable by public/projector clients.
+Private question source: `prompt`, `type` (`text`, `image`, `audio`), `position`, and the private `correctAnswer`. Accepted alternatives, scoring rules, explanation, and media references will be added only with their features. This collection is never readable by public/projector clients. The current admin view model selects only type, prompt, and position and does not expose the answer to list/detail components.
+
+The local seed uses stable quiz, round, and question IDs. It is development data only and is never copied from production.
 
 ### `events/{eventId}`
 

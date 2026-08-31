@@ -18,11 +18,11 @@ service cloud.firestore {
       return isAdmin() || isModerator();
     }
 
-    // Quiz, event, and media source data is private. Moderators may inspect it,
-    // but mutations stay admin-only until narrower workflows are implemented.
+    // Quiz source data is read-only for both staff roles in this phase.
+    // Emulator seed tooling uses Admin SDK and never relies on client writes.
     match /quizzes/{document=**} {
       allow read: if isStaff();
-      allow create, update, delete: if isAdmin();
+      allow write: if false;
     }
 
     match /events/{document=**} {

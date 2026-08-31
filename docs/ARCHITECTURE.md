@@ -51,6 +51,8 @@ Sensitive state transitions—team registration, quiz publication, live-state ch
 
 Feature folders may be added when real behavior arrives. A generic repository/service abstraction is not required until repeated use proves it valuable.
 
+The first implemented feature is the read-only admin quiz library. `features/quizzes/quizRepository.ts` is a small query and runtime-mapping boundary. It reads only private `quizzes`, nested `rounds`, and nested `questions`; its UI view model deliberately omits correct answers.
+
 ## Firebase services
 
 - Authentication: staff sign-in; role authorization via custom claims.

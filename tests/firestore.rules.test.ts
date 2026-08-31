@@ -12,6 +12,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, test } from 'vite
 
 const projectId = 'demo-filmovy-kviz-v2';
 const privateQuizPath = 'quizzes/security-test-quiz';
+const privateRoundPath = `${privateQuizPath}/rounds/security-test-round`;
+const privateQuestionPath = `${privateRoundPath}/questions/security-test-question`;
 
 let testEnvironment: RulesTestEnvironment;
 
@@ -29,6 +31,15 @@ beforeEach(async () => {
     await setDoc(doc(context.firestore(), privateQuizPath), {
       title: 'Security test quiz',
       status: 'draft',
+    });
+    await setDoc(doc(context.firestore(), privateRoundPath), {
+      title: 'Security test round',
+      position: 1,
+    });
+    await setDoc(doc(context.firestore(), privateQuestionPath), {
+      prompt: 'Private question',
+      correctAnswer: 'Private answer',
+      position: 1,
     });
   });
 });
@@ -66,14 +77,28 @@ describe('authenticated user without a role', () => {
 });
 
 describe('moderator', () => {
-  test('can read administrative quiz data', async () => {
+  test('can read a quiz document', async () => {
     const db = testEnvironment
       .authenticatedContext('moderator-user', { role: 'moderator' })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateQuizPath)));
   });
 
-  test('cannot perform an admin-only write', async () => {
+  test('can read a round document', async () => {
+    const db = testEnvironment
+      .authenticatedContext('moderator-user', { role: 'moderator' })
+      .firestore();
+    await assertSucceeds(getDoc(doc(db, privateRoundPath)));
+  });
+
+  test('can read a private question document', async () => {
+    const db = testEnvironment
+      .authenticatedContext('moderator-user', { role: 'moderator' })
+      .firestore();
+    await assertSucceeds(getDoc(doc(db, privateQuestionPath)));
+  });
+
+  test('cannot write a quiz', async () => {
     const db = testEnvironment
       .authenticatedContext('moderator-user', { role: 'moderator' })
       .firestore();
@@ -82,18 +107,18 @@ describe('moderator', () => {
 });
 
 describe('admin', () => {
-  test('can read administrative quiz data', async () => {
+  test('can read a quiz document', async () => {
     const db = testEnvironment
       .authenticatedContext('admin-user', { role: 'admin' })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateQuizPath)));
   });
 
-  test('can write administrative quiz data', async () => {
+  test('cannot write a quiz in the read-only phase', async () => {
     const db = testEnvironment
       .authenticatedContext('admin-user', { role: 'admin' })
       .firestore();
-    await assertSucceeds(setDoc(doc(db, 'quizzes/admin-write'), { title: 'Allowed' }));
+    await assertFails(setDoc(doc(db, 'quizzes/admin-write'), { title: 'Denied' }));
   });
 });
 

@@ -31,7 +31,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['tests/**/*.ts', 'vitest.rules.config.ts'],
+    files: ['tests/**/*.ts', 'vitest.config.ts', 'vitest.rules.config.ts'],
     languageOptions: {
       globals: globals.node,
       parserOptions: {

@@ -20,6 +20,7 @@ In a second terminal, seed the emulator-only accounts and start Vite:
 
 ```bash
 pnpm seed:auth
+pnpm seed:quizzes
 pnpm dev
 ```
 
@@ -27,6 +28,8 @@ The application is available at `http://localhost:5173`. Administrative routes:
 
 - `/admin/login` — email/password sign-in against Authentication Emulator
 - `/admin` — protected staff dashboard
+- `/admin/quizzes` — read-only quiz library
+- `/admin/quizzes/:quizId` — read-only rounds and questions
 - `/admin/no-access` — authenticated account without a staff role
 - `/projector` — public projector placeholder
 - `/events` — public events placeholder
@@ -41,12 +44,15 @@ The seed is idempotent and creates only local Authentication Emulator users:
 
 The seed script refuses to run unless `FIREBASE_AUTH_EMULATOR_HOST` points to local port `9099` and the project ID starts with `demo-`. The Vite development build also refuses to initialize Firebase unless emulator mode is enabled. Production access is not part of this workflow.
 
+`pnpm seed:quizzes` creates three fixed emulator-only quizzes with rounds and private questions. It refuses non-local Firestore hosts and non-`demo-*` projects. Fixed document IDs and deterministic values make repeated runs safe. With both Auth and Firestore emulators running, `pnpm seed:emulators` runs both seeds.
+
 ## Firestore Security Rules tests
 
 Run the rules suite when the full Emulator Suite is stopped, because this command manages its own Firestore Emulator lifecycle:
 
 ```bash
 pnpm test:rules
+pnpm test:unit
 ```
 
 The tests use `@firebase/rules-unit-testing` against the real local Firestore rules runtime. They verify anonymous users, authenticated users without claims, moderators, admins, and unknown paths.
@@ -58,6 +64,7 @@ pnpm typecheck
 pnpm lint
 pnpm build
 pnpm test:rules
+pnpm test:unit
 # or all checks:
 pnpm check
 ```

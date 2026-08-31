@@ -31,12 +31,15 @@ The web `AuthProvider` reads `role` from the verified Firebase ID token and uses
 Current Firestore access is intentionally narrow:
 
 - anonymous and ordinary authenticated users cannot read or write private collections;
-- moderators can read explicit private `quizzes`, `events`, and `media` paths;
-- admins can read and write those explicit administrative paths;
+- moderators and admins can read private `quizzes` and their round/question subcollections;
+- quiz writes are denied to both roles while the library is read-only;
+- existing event/media policy remains staff-read and admin-write until those flows are revisited;
 - staff profiles are self-readable, while all user management is admin-only;
 - every other path, including future public collections, falls through to deny.
 
 Moderator writes are not enabled yet. Each future operational write must be introduced as a narrowly scoped rule and accompanied by emulator tests.
+
+The quiz library queries private documents directly only after staff authentication. Correct answers remain in private question documents, but the React repository mapper omits them from the detail view model. No `publicEvents`, `publicSessions`, projector copy, or public quiz API is created in this phase.
 
 ## Public registration
 
@@ -47,6 +50,8 @@ Registration is a callable/HTTP Function rather than a direct Firestore write. I
 Firebase web configuration is not a secret, but project selection is safety-critical. Local defaults use a `demo-*` project and emulators. The client requires explicit opt-in for a non-demo project ID. Service-account keys and secrets are forbidden in Git.
 
 The local auth seed uses Admin SDK only after two fail-closed checks: the Authentication Emulator must be on local port `9099`, and the project ID must start with `demo-`. It creates three documented development accounts and never loads credentials.
+
+The quiz seed applies the same fail-closed design to Firestore: it requires local port `8080` and a `demo-*` project. Stable IDs make it safely repeatable. Its Admin SDK access is strictly an emulator-only development tool and does not justify client writes in Rules.
 
 ## Rules and tests
 

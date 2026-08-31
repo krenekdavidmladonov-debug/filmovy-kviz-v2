@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { useAuth, type StaffRole } from '../../auth/AuthProvider';
 
@@ -50,6 +51,15 @@ export function AdminPage() {
           <p>Role pochází z Firebase ID tokenu. Datová oprávnění vynucují Firestore Security Rules.</p>
         </div>
       </div>
+
+      <Link className="admin-feature-card" to="/admin/quizzes">
+        <div>
+          <span className="feature-label">Knihovna</span>
+          <h2>Kvízy</h2>
+          <p>Procházejte metadata, kola a otázky v bezpečném read-only režimu.</p>
+        </div>
+        <span className="feature-arrow" aria-hidden="true">→</span>
+      </Link>
     </section>
   );
 }
