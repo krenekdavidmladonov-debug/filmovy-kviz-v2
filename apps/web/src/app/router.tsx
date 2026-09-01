@@ -44,6 +44,8 @@ function LazyProjectorRoute() {
 }
 
 export const router = createBrowserRouter([
+  { path: 'projector', element: <LazyProjectorRoute /> },
+  { path: 'projector/:sessionId', element: <LazyProjectorRoute /> },
   {
     element: <AppLayout />,
     children: [
@@ -62,8 +64,6 @@ export const router = createBrowserRouter([
           { path: '*', element: <NotFoundPage /> },
         ],
       },
-      { path: 'projector', element: <LazyProjectorRoute /> },
-      { path: 'projector/:sessionId', element: <LazyProjectorRoute /> },
       { path: 'events', element: <EventsPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],

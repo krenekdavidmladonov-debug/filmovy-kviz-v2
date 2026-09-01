@@ -1,4 +1,7 @@
 export type LiveSessionStatus = 'waiting' | 'active' | 'ended';
+export type LivePresentationMode = 'slide' | 'recap';
+export type LiveRenderMode = 'question' | 'recap' | 'roundIntro' | 'agenda' | 'rules' | 'end';
+export type LiveMediaCommand = 'idle' | 'play' | 'stop' | 'replay' | 'finished' | 'error';
 
 export interface PrivateLiveSession {
   readonly sessionId: string;
@@ -9,6 +12,12 @@ export interface PrivateLiveSession {
   readonly currentSlidePosition: number;
   readonly currentSlideId?: string;
   readonly answerRevealed: boolean;
+  readonly presentationMode: LivePresentationMode;
+  readonly recapQuestionPosition?: number;
+  readonly recapQuestionId?: string;
+  readonly mediaCommand: LiveMediaCommand;
+  readonly mediaGeneration: number;
+  readonly introGeneration: number;
   readonly revision: number;
   readonly createdBy: string;
   readonly updatedBy: string;
@@ -23,11 +32,22 @@ export interface PrivateSlide {
   readonly position: number;
   readonly kind: string;
   readonly isQuestion: boolean;
+  readonly roundId?: string;
+  readonly roundTitle?: string;
+  readonly questionNumber?: number;
+  readonly questionCount?: number;
   readonly title: string;
   readonly text: string;
   readonly options: readonly unknown[];
   readonly media: readonly unknown[];
   readonly presentation: unknown;
+  readonly backgroundImage?: unknown;
+  readonly questionImage?: unknown;
+  readonly answerImage?: unknown;
+  readonly mediaSource?: unknown;
+  readonly backgroundOverlay?: unknown;
+  readonly clipStartSeconds?: unknown;
+  readonly clipEndSeconds?: unknown;
   readonly correctAnswer?: unknown;
   readonly moderatorNote?: unknown;
   readonly legacy?: unknown;
@@ -40,9 +60,6 @@ export interface PublicMedia {
 }
 
 export interface PublicPresentation {
-  readonly videoStart?: number;
-  readonly videoEnd?: number;
-  readonly audioTrigger?: number;
   readonly backgroundOverlay?: number;
   readonly answerOverlay?: number;
   readonly sourceQuestionNumber?: string;
@@ -54,6 +71,11 @@ export interface PublicLiveSession {
   readonly quizTitle: string;
   readonly slidePosition: number;
   readonly answerRevealed: boolean;
+  readonly presentationMode: LivePresentationMode;
+  readonly renderMode: LiveRenderMode;
+  readonly mediaCommand: LiveMediaCommand;
+  readonly mediaGeneration: number;
+  readonly introGeneration: number;
   readonly revision: number;
   readonly updatedAt: unknown;
   readonly slideKind?: string;
@@ -62,6 +84,14 @@ export interface PublicLiveSession {
   readonly options?: readonly string[];
   readonly media?: readonly PublicMedia[];
   readonly presentation?: PublicPresentation;
+  readonly questionNumber?: number;
+  readonly questionCount?: number;
+  readonly backgroundImage?: string;
+  readonly questionImage?: string;
+  readonly mediaSource?: string;
+  readonly backgroundOverlay?: number;
+  readonly clipStartSeconds?: number;
+  readonly clipEndSeconds?: number;
   readonly revealedAnswer?: string;
   readonly answerImage?: string;
 }
@@ -72,4 +102,10 @@ export type LiveSessionAction =
   | { readonly type: 'previous-slide'; readonly slideId: string }
   | { readonly type: 'reveal-answer' }
   | { readonly type: 'hide-answer' }
+  | { readonly type: 'select-recap-question'; readonly position: number; readonly slideId: string }
+  | { readonly type: 'play-media' }
+  | { readonly type: 'stop-media' }
+  | { readonly type: 'replay-media' }
+  | { readonly type: 'finish-media' }
+  | { readonly type: 'start-intro' }
   | { readonly type: 'end-session' };

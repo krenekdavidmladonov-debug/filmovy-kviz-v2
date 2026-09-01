@@ -3,11 +3,17 @@ import { onRequest } from 'firebase-functions/v2/https';
 export {
   createLiveSession,
   endLiveSession,
+  finishMedia,
   goToSlide,
   hideAnswer,
   nextSlide,
+  playMedia,
   previousSlide,
+  replayMedia,
   revealAnswer,
+  selectRecapQuestion,
+  startIntro,
+  stopMedia,
 } from './live/callables.js';
 
 export {
