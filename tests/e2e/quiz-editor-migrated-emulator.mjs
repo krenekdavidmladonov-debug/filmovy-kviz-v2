@@ -31,7 +31,7 @@ connectFirestoreEmulator(db, '127.0.0.1', 8080);
 connectFunctionsEmulator(functions, '127.0.0.1', 5001);
 
 const supportedKinds = new Set([
-  'intro', 'agenda', 'recap', 'end', 'title', 'info', 'round', 'roundheader', 'round-header', 'section',
+  'intro', 'agenda', 'rules', 'recap', 'end', 'title', 'info', 'round', 'roundheader', 'round-header', 'section',
   'question', 'text', 'classic', 'free', 'image', 'picture', 'photo',
   'audio', 'music', 'video', 'youtube', 'pl', 'legacy',
 ]);
@@ -73,6 +73,13 @@ function editorPayload(data) {
       answerOverlay: nullableNumber(presentation.answerOverlay),
       sourceQuestionNumber: typeof presentation.sourceQuestionNumber === 'string' ? presentation.sourceQuestionNumber : null,
     },
+    backgroundImage: typeof data.backgroundImage === 'string' ? data.backgroundImage : '',
+    questionImage: typeof data.questionImage === 'string' ? data.questionImage : '',
+    answerImage: typeof data.answerImage === 'string' ? data.answerImage : '',
+    mediaSource: typeof data.mediaSource === 'string' ? data.mediaSource : '',
+    backgroundOverlay: nullableNumber(data.backgroundOverlay),
+    clipStartSeconds: nullableNumber(data.clipStartSeconds),
+    clipEndSeconds: nullableNumber(data.clipEndSeconds),
   };
 }
 

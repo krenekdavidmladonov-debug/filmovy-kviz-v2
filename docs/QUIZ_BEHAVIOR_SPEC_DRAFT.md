@@ -1,8 +1,28 @@
 # Quiz behavior discovery — draft
 
-Status: **DISCOVERY DRAFT, not an implementation specification**
+Status: **DISCOVERY BASELINE + CONFIRMED FOUNDATION (2026-09-01)**
 
 This document records what can be proven from the four local V1 quiz exports, the migration code, and the current V2 code. It intentionally does not invent final product behavior.
+
+## Confirmed product behavior implemented in the projector foundation
+
+The sections below retain the original discovery record. Where an older “current V2” paragraph conflicts with this section, this confirmed section is authoritative for `feature/projector-behavior-foundation`.
+
+- **GUARANTEED:** QUESTION, FREE, IMAGE, AUDIO, VIDEO, and legacy PL use explicit `questionNumber` / `questionCount` within their round. Strict `number/number` `qCount` remains a compatibility fallback only.
+- **GUARANTEED:** QUESTION and FREE may use a cover background with a black percentage overlay. IMAGE instead has a distinct contained question-image area with black bars; `backgroundImage`, `questionImage`, and `answerImage` are different normalized roles.
+- **GUARANTEED:** options are immediately visible for option-bearing question types and support general arrays, including the observed four-option questions and five/six-item agenda lists. FREE suppresses options.
+- **GUARANTEED:** AUDIO never mounts or receives a YouTube player/source on the normal public projector. The moderator's visible laptop player supplies system audio; the projector shows the question plus vinyl playback state.
+- **GUARANTEED:** VIDEO shows the static question before playback, replaces it with one 16:9 player while playing, and returns to the question after stop or finish. Media never reveals an answer or advances automatically.
+- **GUARANTEED:** media commands are manual. The client lifecycle is `IDLE → PREPARING → READY → PLAYING → STOPPING/FINISHED/ERROR`; monotonic generations discard stale callbacks after navigation or replay.
+- **GUARANTEED:** recap is an explicit authorized mode. The moderator may select questions in arbitrary order. The single public snapshot contains an answer only for the selected recap question. AUDIO/VIDEO recap starts at 0:00, ignores question clip bounds, does not autoplay, and uses a visible projector player.
+- **GUARANTEED:** recap PLAY/STOP/REPLAY are remote moderator commands. Pause, seek, current time, and duration are available through the projector's visible standard YouTube controls; mirroring that timeline into the moderator window is not part of this foundation.
+- **GUARANTEED:** PL means Pravda / Lež, remains migration-only in normal editor creation, and renders Czech `PRAVDA` / `LEŽ` when the stored value is a recognized boolean/truth form. Unrecognized legacy answer text is preserved rather than guessed.
+- **GUARANTEED:** intro/round-header animation starts only on an explicit moderator command. A newly inserted agenda is generated from ordered round headers, while authored legacy agenda options remain unchanged. Editable default rules have a dedicated mode. END stays authored and requires explicit further navigation/session ending.
+- **GUARANTEED:** the projector is a dedicated, black, responsive 16:9 shell with a manual fullscreen button and `F` shortcut. It never inherits admin navigation.
+- **GUARANTEED:** same-device `BroadcastChannel` is only a latency fast path for an already server-sanitized public snapshot. It carries no private slide, legacy raw, moderator note, or unrevealed answer; Firestore remains authoritative.
+- **GUARANTEED:** no player preload is enabled. A projector has a hard budget of one active heavy player and deterministic player/timer cleanup.
+- **BEST EFFORT / YOUTUBE LIMITATION:** title, thumbnail, branding, ads, keyframe start precision, embed availability, and browser autoplay behavior cannot be hidden or guaranteed. No player is obscured and no hidden/background YouTube audio is used on the projector.
+- **FUTURE:** owned media, robust offline bundles, results/rank reveal, winner music, scoring, digital answers, registrations, print/PDF, referee tools, and media upload are intentionally not implemented here.
 
 ## Evidence labels
 

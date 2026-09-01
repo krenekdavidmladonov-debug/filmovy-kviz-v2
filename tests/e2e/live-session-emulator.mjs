@@ -192,6 +192,87 @@ async function run() {
   const adminSession = await invoke('createLiveSession', { quizId: 'live-session-e2e' });
   assert.equal(adminSession.status, 'waiting');
 
+  let foundationControl = await invoke('goToSlide', {
+    sessionId: adminSession.sessionId, position: 1, expectedRevision: adminSession.revision,
+  });
+  foundationControl = await invoke('startIntro', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  let foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.introGeneration, 1);
+  assertPublicSafe(foundationState, false);
+
+  foundationControl = await invoke('goToSlide', {
+    sessionId: adminSession.sessionId, position: 5, expectedRevision: foundationControl.revision,
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.slideKind, 'audio');
+  assert.equal(Object.hasOwn(foundationState, 'mediaSource'), false, 'Normal audio must not publish its source.');
+  assert.equal(JSON.stringify(foundationState.media).includes('synthetic-audio-id'), false);
+  foundationControl = await invoke('playMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  assert.equal(foundationControl.mediaCommand, 'play');
+  foundationControl = await invoke('stopMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  assert.equal(foundationControl.mediaCommand, 'stop');
+
+  foundationControl = await invoke('goToSlide', {
+    sessionId: adminSession.sessionId, position: 6, expectedRevision: foundationControl.revision,
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.slideKind, 'video');
+  assert.equal(foundationState.mediaSource, 'https://example.test/video');
+  foundationControl = await invoke('playMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  foundationControl = await invoke('stopMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+
+  foundationControl = await invoke('goToSlide', {
+    sessionId: adminSession.sessionId, position: 7, expectedRevision: foundationControl.revision,
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.presentationMode, 'recap');
+  assert.equal(foundationState.renderMode, 'recap');
+  assertPublicSafe(foundationState, false);
+
+  foundationControl = await invoke('selectRecapQuestion', {
+    sessionId: adminSession.sessionId, position: 6, expectedRevision: foundationControl.revision,
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assertPublicSafe(foundationState, true);
+  assert.equal(foundationState.revealedAnswer, 'Video');
+  assert.equal(foundationState.mediaSource, 'https://example.test/video');
+  foundationControl = await invoke('playMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  const playingGeneration = foundationControl.mediaGeneration;
+  await expectFunctionError(
+    () => invoke('finishMedia', {
+      sessionId: adminSession.sessionId,
+      expectedRevision: foundationControl.revision,
+      mediaGeneration: playingGeneration - 1,
+    }),
+    'functions/aborted',
+  );
+  foundationControl = await invoke('finishMedia', {
+    sessionId: adminSession.sessionId,
+    expectedRevision: foundationControl.revision,
+    mediaGeneration: playingGeneration,
+  });
+  assert.equal(foundationControl.mediaCommand, 'finished');
+
+  foundationControl = await invoke('selectRecapQuestion', {
+    sessionId: adminSession.sessionId, position: 2, expectedRevision: foundationControl.revision,
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.revealedAnswer, 'Syntetická odpověď');
+  assert.equal(JSON.stringify(foundationState).includes('https://example.test/video'), false, 'Previous recap media must be replaced.');
+  assertPublicSafe(foundationState, true);
+
   await signOut(auth);
   await signInWithEmailAndPassword(auth, 'user@example.test', 'LocalQuiz123!');
   await assert.rejects(getDoc(doc(staffDb, 'sessions', adminSession.sessionId)), /permission-denied/u);
@@ -203,6 +284,9 @@ async function run() {
     normalUserDenied: true,
     answerLeakBeforeReveal: false,
     staleAndConcurrentOperationsVerified: true,
+    normalAudioSourceWithheld: true,
+    mediaGenerationVerified: true,
+    recapArbitrarySelectionVerified: true,
     endedStateVerified: true,
   }, null, 2));
 }

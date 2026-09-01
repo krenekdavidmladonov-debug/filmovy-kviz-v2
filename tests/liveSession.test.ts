@@ -17,6 +17,10 @@ function session(overrides: Partial<PrivateLiveSession> = {}): PrivateLiveSessio
     currentSlidePosition: 1,
     currentSlideId: 'slide-001',
     answerRevealed: false,
+    presentationMode: 'slide',
+    mediaCommand: 'idle',
+    mediaGeneration: 0,
+    introGeneration: 0,
     revision: 1,
     createdBy: 'staff-1',
     updatedBy: 'staff-1',
@@ -76,7 +80,8 @@ describe('live-session publication security', () => {
       answerRevealed: false,
       title: 'Syntetická otázka',
       options: ['A', 'B', 'C'],
-      presentation: { backgroundOverlay: 60, videoStart: 4 },
+      presentation: { backgroundOverlay: 60 },
+      clipStartSeconds: 4,
     });
     expect(publicState).not.toHaveProperty('revealedAnswer');
     expect(publicState).not.toHaveProperty('answerImage');
@@ -147,6 +152,28 @@ describe('live-session publication security', () => {
     expect(publicState.slideKind).toBe('pl');
     expectNoPrivateFields(publicState);
   });
+
+  test('normal audio never publishes its source while recap publishes only the selected answer and media', () => {
+    const audio: PrivateSlide = {
+      ...questionSlide(2), id: 'slide-002', kind: 'audio', mediaSource: 'abcdefghijk',
+      questionNumber: 2, questionCount: 10,
+    };
+    const normal = buildPublicSessionState(session({ currentSlidePosition: 2, currentSlideId: 'slide-002' }), audio);
+    expect(normal).not.toHaveProperty('mediaSource');
+    expect(normal).not.toHaveProperty('revealedAnswer');
+    expectNoPrivateFields(normal);
+
+    const recapState = buildPublicSessionState(session({
+      currentSlidePosition: 3,
+      currentSlideId: 'slide-003',
+      presentationMode: 'recap',
+      recapQuestionPosition: 2,
+      recapQuestionId: 'slide-002',
+      answerRevealed: true,
+    }), audio);
+    expect(recapState).toMatchObject({ renderMode: 'recap', mediaSource: 'abcdefghijk', revealedAnswer: 'SENTINEL-REVEALED-ANSWER' });
+    expectNoPrivateFields(recapState);
+  });
 });
 
 describe('live-session state machine', () => {
@@ -214,5 +241,44 @@ describe('live-session state machine', () => {
     expect(ended).toMatchObject({ status: 'ended', answerRevealed: false, revision: 2, endedAt: now });
     expect(() => applyLiveSessionAction(ended, { type: 'hide-answer' }, 2, 'admin', now, questionSlide()))
       .toThrow(/ended/u);
+  });
+
+  test('selects recap questions in arbitrary order and resets media generation on every selection', () => {
+    const recapSession = session({
+      currentSlidePosition: 3,
+      currentSlideId: 'slide-003',
+      presentationMode: 'recap',
+      mediaGeneration: 4,
+    });
+    const second = questionSlide(2);
+    const selectedSecond = applyLiveSessionAction(
+      recapSession,
+      { type: 'select-recap-question', position: 2, slideId: second.id },
+      1,
+      'moderator',
+      now,
+      second,
+    );
+    expect(selectedSecond).toMatchObject({ recapQuestionPosition: 2, answerRevealed: true, mediaGeneration: 5 });
+    const first = questionSlide(1);
+    const selectedFirst = applyLiveSessionAction(
+      selectedSecond,
+      { type: 'select-recap-question', position: 1, slideId: first.id },
+      2,
+      'moderator',
+      now,
+      first,
+    );
+    expect(selectedFirst).toMatchObject({ recapQuestionPosition: 1, answerRevealed: true, revision: 3, mediaGeneration: 6 });
+  });
+
+  test('media commands carry monotonic generations and stale slide callbacks cannot target a replaced slide', () => {
+    const audio = { ...questionSlide(), kind: 'audio' };
+    const playing = applyLiveSessionAction(session(), { type: 'play-media' }, 1, 'moderator', now, audio);
+    expect(playing).toMatchObject({ mediaCommand: 'play', mediaGeneration: 1, revision: 2 });
+    expect(() => applyLiveSessionAction(playing, { type: 'finish-media' }, 2, 'moderator', now, questionSlide(2)))
+      .toThrow(/active presentation slide/u);
+    const stopped = applyLiveSessionAction(playing, { type: 'stop-media' }, 2, 'moderator', now, audio);
+    expect(stopped).toMatchObject({ mediaCommand: 'stop', mediaGeneration: 2, revision: 3 });
   });
 });

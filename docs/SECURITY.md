@@ -12,7 +12,9 @@
 
 ## Preventing answer leakage
 
-The projector reads only one `publicSessions/{sessionId}` document. The trusted `buildPublicSessionState` allowlist builds this projection from private quiz data. Before reveal it copies only explicitly safe title/text/options, prompt/background media, and presentation controls. After an authorized reveal it adds only display-form `revealedAnswer` and an allowed answer image—not the private slide or question. Hiding an answer in React state, CSS, a network response, an error, or an unread UI branch is not acceptable.
+The projector reads only one `publicSessions/{sessionId}` document. The trusted `buildPublicSessionState` allowlist builds this projection from private quiz data. In ordinary question mode it copies only explicitly safe title/text/options, normalized visual media, and presentation controls; AUDIO source is omitted entirely. In explicit recap mode it adds only the selected question's display-form `revealedAnswer` and allowed answer image—not the private slide or question. Hiding an answer in React state, CSS, a network response, an error, or an unread UI branch is not acceptable.
+
+The same-device `BroadcastChannel` is not a second publication boundary. It rebuilds its message from `PublicLiveState` with another explicit allowlist and never receives a private editor/live slide. It uses neither URL state nor localStorage. Projector media-finished events contain only session ID and generation and cannot mutate server state without an authenticated staff Function call.
 
 Every navigation, reveal, hide, and end operation replaces the entire public document in the same transaction as the private update. Navigation resets `answerRevealed`; therefore old answer fields cannot survive through merge semantics. The projector rejects Firestore cache-only snapshots and clears itself on browser offline events so a disconnected client does not continue showing an old revealed answer.
 

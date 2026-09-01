@@ -8,6 +8,7 @@ export default defineConfig({
       'tests/liveSession.test.ts',
       'tests/liveRepository.test.ts',
       'tests/quizEditor.test.ts',
+      'tests/presentation.test.ts',
       'tools/migration-v1/test/**/*.test.ts',
     ],
   },
