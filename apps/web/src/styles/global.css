@@ -130,6 +130,40 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
 .question-type { color: #8f99a6; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
 .question-list p { margin: 5px 0 0; line-height: 1.55; }
 .round-empty { margin: 0; padding: 22px; color: var(--muted); }
+.quiz-detail-side { display: grid; gap: 12px; }
+.quiz-detail-side .primary-button { width: 100%; }
+.live-control { display: grid; gap: 34px; }
+.live-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 32px; }
+.live-heading h1 { font-size: clamp(2.7rem, 5vw, 4.8rem); }
+.live-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 24px; align-items: start; }
+.live-preview { min-height: 420px; padding: clamp(24px, 5vw, 44px); border: 1px solid var(--line); border-radius: 20px; background: var(--panel); }
+.live-preview h2 { margin: 26px 0 12px; font-size: clamp(2rem, 4vw, 3.6rem); }
+.live-preview p { color: var(--muted); font-size: 1.08rem; line-height: 1.65; }
+.live-slide-meta { display: flex; justify-content: space-between; gap: 18px; color: var(--accent); font-size: 0.75rem; font-weight: 900; letter-spacing: 0.09em; text-transform: uppercase; }
+.moderator-answer { margin-top: 28px; padding: 18px; display: grid; gap: 7px; border: 1px solid rgba(243, 179, 61, 0.3); border-radius: 14px; background: rgba(243, 179, 61, 0.08); }
+.moderator-answer span { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; }
+.moderator-answer strong { color: var(--accent); font-size: 1.25rem; }
+.live-actions { padding: 20px; display: grid; gap: 14px; border: 1px solid var(--line); border-radius: 18px; background: #151b22; }
+.live-button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.projector-url { overflow: hidden; color: var(--muted); font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
+.danger-button { padding: 11px 15px; border: 1px solid #8e3f49; border-radius: 10px; color: #ffd7dc; background: rgba(110, 29, 40, 0.35); cursor: pointer; font-weight: 800; }
+.danger-button:disabled { cursor: wait; opacity: 0.55; }
+.projector-stage { min-height: 64vh; display: grid; align-content: center; gap: 22px; }
+.projector-stage h1 { font-size: clamp(3.2rem, 8vw, 7rem); }
+.projector-message p:not(.eyebrow) { color: var(--muted); font-size: 1.2rem; }
+.projector-message.error h1 { color: #ffd7dc; }
+.projector-meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.76rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.projector-prompt { max-width: 1000px; margin: 0; color: #dfe4e9; font-size: clamp(1.35rem, 2.7vw, 2.4rem); line-height: 1.45; }
+.projector-options { margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; list-style-position: inside; }
+.projector-options li { padding: 18px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); font-size: 1.15rem; }
+.projector-media-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.projector-image { width: 100%; max-height: 48vh; object-fit: contain; border-radius: 16px; background: #080a0d; }
+.projector-media { padding: 20px; display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.projector-media span, .projector-media a { overflow-wrap: anywhere; color: var(--muted); }
+.projector-answer { padding: clamp(22px, 4vw, 38px); display: grid; gap: 10px; border: 2px solid var(--accent); border-radius: 20px; background: rgba(243, 179, 61, 0.1); }
+.projector-answer > span { color: var(--accent); font-size: 0.8rem; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
+.projector-answer > strong { font-size: clamp(2rem, 5vw, 4.5rem); }
+.projector-answer .answer { margin-top: 14px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -139,6 +173,7 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
   .surface { grid-template-columns: 1fr; align-items: start; min-height: auto; }
   .admin-auth-layout, .admin-dashboard-heading { grid-template-columns: 1fr; }
   .section-heading, .quiz-detail-heading { grid-template-columns: 1fr; }
+  .live-heading, .live-grid { grid-template-columns: 1fr; }
   .section-summary { width: 100%; grid-template-columns: auto auto; justify-content: center; gap: 8px; }
   .section-summary span { margin: 0; }
   .quiz-table-wrap { overflow: visible; border: 0; background: transparent; box-shadow: none; }
@@ -155,4 +190,5 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
   .question-count { grid-column: 2; }
   .admin-auth-intro h1 { font-size: clamp(2.7rem, 14vw, 4.4rem); }
   h1, .projector-surface h1 { font-size: clamp(2.7rem, 14vw, 4.4rem); }
+  .projector-options { grid-template-columns: 1fr; }
 }

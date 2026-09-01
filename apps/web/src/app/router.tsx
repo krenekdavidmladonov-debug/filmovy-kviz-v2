@@ -8,7 +8,6 @@ import { AdminNoAccessPage } from '../routes/admin/AdminNoAccessPage';
 import { RequireStaff } from '../routes/admin/RequireStaff';
 import { EventsPage } from '../routes/events/EventsPage';
 import { NotFoundPage } from '../routes/NotFoundPage';
-import { ProjectorPage } from '../routes/projector/ProjectorPage';
 import { AppLayout } from './AppLayout';
 
 const QuizLibraryPage = lazy(async () => {
@@ -21,8 +20,22 @@ const QuizDetailPage = lazy(async () => {
   return { default: module.QuizDetailPage };
 });
 
+const LiveControlPage = lazy(async () => {
+  const module = await import('../routes/admin/LiveControlPage');
+  return { default: module.LiveControlPage };
+});
+
+const ProjectorPage = lazy(async () => {
+  const module = await import('../routes/projector/ProjectorPage');
+  return { default: module.ProjectorPage };
+});
+
 function LazyAdminRoute({ children }: { readonly children: ReactNode }) {
   return <Suspense fallback={<AdminLoading />}>{children}</Suspense>;
+}
+
+function LazyProjectorRoute() {
+  return <Suspense fallback={<section className="projector-stage projector-message"><h1>Načítám projektor…</h1></section>}><ProjectorPage /></Suspense>;
 }
 
 export const router = createBrowserRouter([
@@ -39,10 +52,12 @@ export const router = createBrowserRouter([
           { index: true, element: <AdminPage /> },
           { path: 'quizzes', element: <LazyAdminRoute><QuizLibraryPage /></LazyAdminRoute> },
           { path: 'quizzes/:quizId', element: <LazyAdminRoute><QuizDetailPage /></LazyAdminRoute> },
+          { path: 'live/:sessionId', element: <LazyAdminRoute><LiveControlPage /></LazyAdminRoute> },
           { path: '*', element: <NotFoundPage /> },
         ],
       },
-      { path: 'projector', element: <ProjectorPage /> },
+      { path: 'projector', element: <LazyProjectorRoute /> },
+      { path: 'projector/:sessionId', element: <LazyProjectorRoute /> },
       { path: 'events', element: <EventsPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],

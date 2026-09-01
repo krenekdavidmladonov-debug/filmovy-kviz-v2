@@ -25,6 +25,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Live control state is private. All mutations go through trusted callable
+    // Functions using Admin SDK and are never accepted directly from clients.
+    match /sessions/{document=**} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // A projector may fetch one unguessable session document by id, but cannot
+    // enumerate sessions. Only server code publishes this sanitized snapshot.
+    match /publicSessions/{sessionId} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
     match /events/{document=**} {
       allow read: if isStaff();
       allow create, update, delete: if isAdmin();
@@ -42,7 +57,7 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    // No public data flow exists yet. Everything not named above remains denied.
+    // Everything not named above remains denied.
     match /{document=**} {
       allow read, write: if false;
     }
