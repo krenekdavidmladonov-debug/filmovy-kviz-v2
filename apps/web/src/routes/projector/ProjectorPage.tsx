@@ -2,29 +2,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { subscribePublicLiveState } from '../../features/live/liveRepository';
-import type { PublicLiveState, PublicMedia } from '../../features/live/types';
-
-function safeHttpUrl(value: string): string | undefined {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function MediaItem({ media }: { readonly media: PublicMedia }) {
-  const url = safeHttpUrl(media.source);
-  if (media.kind === 'image' && url) {
-    return <img className="projector-image" src={url} alt="Médium k otázce" />;
-  }
-  return (
-    <div className={`projector-media media-${media.kind}`}>
-      <strong>{media.kind === 'audio' ? 'Audio' : media.kind === 'video' ? 'Video' : 'Médium'}</strong>
-      {url ? <a href={url} target="_blank" rel="noreferrer">Otevřít bezpečný zdroj</a> : <span>{media.source}</span>}
-    </div>
-  );
-}
+import type { PublicLiveState } from '../../features/live/types';
+import { SlidePreview } from '../../features/presentation/SlidePreview';
 
 function ProjectorState({ state }: { readonly state: PublicLiveState }) {
   if (state.status === 'waiting') {
@@ -47,36 +26,23 @@ function ProjectorState({ state }: { readonly state: PublicLiveState }) {
     );
   }
 
-  const isLegacy = state.slideKind === 'pl' || state.slideKind === 'legacy';
   return (
-    <article className="projector-stage">
-      <header className="projector-meta">
-        <span>Slide {state.slidePosition}</span>
-        <span>{isLegacy ? 'Legacy slide' : state.slideKind}</span>
-      </header>
-      <p className="eyebrow">{state.quizTitle}</p>
-      <h1>{state.title || (isLegacy ? 'Legacy slide' : 'Filmový kvíz')}</h1>
-      {state.text && <p className="projector-prompt">{state.text}</p>}
-      {state.options.length > 0 && (
-        <ol className="projector-options">
-          {state.options.map((option, index) => <li key={`${index}-${option}`}>{option}</li>)}
-        </ol>
-      )}
-      {state.media.length > 0 && (
-        <div className="projector-media-grid">
-          {state.media.map((media, index) => <MediaItem key={`${media.role}-${media.source}-${index}`} media={media} />)}
-        </div>
-      )}
-      {state.answerRevealed && (
-        <section className="projector-answer" aria-live="polite">
-          <span>Správná odpověď</span>
-          <strong>{state.revealedAnswer}</strong>
-          {state.answerImage && safeHttpUrl(state.answerImage) && (
-            <img className="projector-image answer" src={state.answerImage} alt="Obrázek k odhalené odpovědi" />
-          )}
-        </section>
-      )}
-    </article>
+    <SlidePreview
+      quizTitle={state.quizTitle}
+      position={state.slidePosition}
+      showAnswer={state.answerRevealed}
+      slide={{
+        kind: state.slideKind ?? 'legacy',
+        title: state.title ?? '',
+        text: state.text ?? '',
+        options: state.options,
+        media: [
+          ...state.media,
+          ...(state.answerImage ? [{ role: 'answer', kind: 'image', source: state.answerImage }] : []),
+        ],
+        ...(state.revealedAnswer === undefined ? {} : { correctAnswer: state.revealedAnswer }),
+      }}
+    />
   );
 }
 

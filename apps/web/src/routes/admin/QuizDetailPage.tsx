@@ -107,6 +107,7 @@ export function QuizDetailPage() {
           <button className="primary-button" disabled={starting} onClick={() => void startLiveQuiz()}>
             {starting ? 'Spouštím…' : 'Spustit kvíz'}
           </button>
+          <Link className="secondary-link" to={`/admin/quizzes/${encodeURIComponent(quiz.id)}/edit`}>Otevřít editor</Link>
           {startError && <p className="form-error" role="alert">{startError}</p>}
         </div>
       </header>
