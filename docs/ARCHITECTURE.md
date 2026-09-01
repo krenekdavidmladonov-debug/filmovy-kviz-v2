@@ -42,7 +42,7 @@ Projector browser ── read only ───────────────
 Public browser ───── public reads / validated call> public events / Cloud Function
 ```
 
-Sensitive state transitions—team registration, quiz publication, live-state changes, answer reveal, role management, and result finalization—belong in Functions. The implemented live-session callables use Firestore transactions to update the private session and its sanitized public projection atomically. The server derives authoritative fields such as timestamps, revisions, and public projection payloads.
+Sensitive state transitions—quiz editing, team registration, quiz publication, live-state changes, answer reveal, role management, and result finalization—belong in Functions. The implemented editor and live-session callables use Firestore transactions and explicit optimistic revisions. The server derives authoritative fields such as timestamps, counters, ordering, revisions, derived round/question records, and public projection payloads.
 
 ## Frontend modules
 
@@ -56,6 +56,10 @@ Feature folders may be added when real behavior arrives. A generic repository/se
 The first implemented feature is the read-only admin quiz library. `features/quizzes/quizRepository.ts` is a small query and runtime-mapping boundary. It reads only private `quizzes`, nested `rounds`, and nested `questions`; its UI view model deliberately omits correct answers. V1-migrated quizzes additionally keep a private, globally ordered `slides` source stream so intro, agenda, recap, end, and other presentation records are not forced into question documents. That stream is not a projector API; trusted Functions derive the deliberately sanitized `publicSessions` state from private source data.
 
 The live feature now provides that trusted boundary. Staff control `/admin/live/:sessionId`, while anonymous `/projector/:sessionId` subscribes only to one `publicSessions` document. `functions/src/live/publication.ts` is the single allowlist-based PRIVATE → PUBLIC mapper. The projector refuses cached snapshots and clears visible state when the browser goes offline, preventing an old revealed answer from lingering after a disconnected slide transition.
+
+Quiz Editor V1 lives at `/admin/quizzes/:quizId/edit`. Its three panels consume the private global slide stream: ordered navigation, known-field editing, and a local projector-style preview. Admins can mutate; moderators receive the same private read model in a disabled read-only UI. Every write calls `functions/src/editor/callables.ts`; Firestore Rules continue to reject all direct quiz writes. The client sends the quiz revision it rendered, and a stale editor receives `aborted` instead of overwriting another save. There is no autosave.
+
+`functions/src/editor/model.ts` applies known-field patches to an authoritative server snapshot. Unknown top-level values, malformed future values, unedited media records, presentation extensions, and `legacy.raw` remain private and are preserved. Structural mutations normalize the global positions and refresh the derived round/question projection in the same bounded transaction. The shared `SlidePreview` component renders both the public projector input and the editor's private local preview; only the editor instance may receive a correct answer, and it never writes `publicSessions`.
 
 ## Firebase services
 
@@ -75,4 +79,4 @@ No production project identifiers or credentials are stored in this repository.
 
 ## Testing strategy
 
-The quality gate includes static checks, production builds, unit/migration tests, Firestore Rules emulator tests, and a live-session Auth/Firestore/Functions emulator E2E flow. Future UI depth should add focused component and browser automation tests.
+The quality gate includes static checks, production builds, unit/migration tests, Firestore Rules emulator tests, and Auth/Firestore/Functions emulator E2E flows for live control and editor CRUD. A separate local-only migrated-data check opens all 4 offline V1 quizzes and 315 slides through the editor read shape and round-trips one representative of each observed slide kind without printing private values. The real export is never available to CI.

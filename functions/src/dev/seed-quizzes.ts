@@ -131,7 +131,9 @@ function writeQuiz(batch: WriteBatch, quiz: SeedQuiz): void {
   const db = getFirestore();
   const quizRef = db.collection('quizzes').doc(quiz.id);
   const questionCount = quiz.rounds.reduce((total, round) => total + round.questions.length, 0);
-  const orderedQuestions = quiz.rounds.flatMap((round) => round.questions);
+  const orderedQuestions = quiz.rounds.flatMap((round) => (
+    round.questions.map((question) => ({ question, roundId: round.id }))
+  ));
 
   batch.set(quizRef, {
     title: quiz.title,
@@ -146,7 +148,7 @@ function writeQuiz(batch: WriteBatch, quiz: SeedQuiz): void {
     questionCount,
   });
 
-  orderedQuestions.forEach((question, index) => {
+  orderedQuestions.forEach(({ question, roundId }, index) => {
     batch.set(quizRef.collection('slides').doc(`slide-${String(index + 1).padStart(3, '0')}`), {
       position: index + 1,
       kind: question.type === 'text' ? 'question' : question.type,
@@ -156,6 +158,7 @@ function writeQuiz(batch: WriteBatch, quiz: SeedQuiz): void {
       options: [],
       media: [],
       presentation: {},
+      roundId,
       correctAnswer: question.correctAnswer,
       legacy: { source: 'synthetic-emulator-seed', raw: {} },
     });
@@ -171,7 +174,8 @@ function writeQuiz(batch: WriteBatch, quiz: SeedQuiz): void {
     });
 
     for (const question of round.questions) {
-      batch.set(roundRef.collection('questions').doc(question.id), {
+      const globalIndex = orderedQuestions.findIndex((entry) => entry.roundId === round.id && entry.question.id === question.id);
+      batch.set(roundRef.collection('questions').doc(`slide-${String(globalIndex + 1).padStart(3, '0')}`), {
         type: question.type,
         prompt: question.prompt,
         correctAnswer: question.correctAnswer,
@@ -223,11 +227,20 @@ function writeLiveFlowQuiz(batch: WriteBatch): void {
     batch.set(quizRef.collection('slides').doc(`slide-${String(index + 1).padStart(3, '0')}`), {
       ...slide,
       position: index + 1,
+      roundId: 'live-round',
       legacy: {
         source: 'synthetic-emulator-seed',
         raw: { correct: 'Never publish this raw field', moderatorNote: 'Never publish this note' },
       },
     });
+  });
+
+  batch.set(quizRef.collection('rounds').doc('live-round'), {
+    title: 'Syntetické kolo',
+    type: 'classic',
+    position: 1,
+    slideCount: slides.length,
+    questionCount: slides.filter((slide) => slide.isQuestion).length,
   });
 }
 

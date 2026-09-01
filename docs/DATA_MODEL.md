@@ -18,6 +18,7 @@ Current required fields:
 - `createdAt`, `updatedAt` as Firestore timestamps;
 - `createdBy`, `updatedBy` as trusted actor identifiers;
 - `slideCount`, `roundCount`, `questionCount` as denormalized list counters maintained by trusted server/editor workflows.
+- `revision` as a monotonic non-negative integer maintained by trusted editor workflows. A missing revision on an untouched migrated document is interpreted as `0` and initialized on its first mutation.
 
 V1-migrated drafts may additionally contain private `legacy: { source, metadata }`. This field preserves V1 quiz metadata that does not yet have a native V2 field and is never copied into a public projection.
 
@@ -25,7 +26,9 @@ V1-migrated drafts may additionally contain private `legacy: { source, metadata 
 
 Private, globally ordered presentation source. It preserves every V1 slide, including non-question intro, agenda, recap, round content, and end slides. Fields include `position`, `kind`, `isQuestion`, title/text, options, classified media, presentation controls, optional `roundId`, moderator-only fields, and private `legacy.raw`. A private `correctAnswer` may be present for question slides. Public and projector clients never read this collection directly.
 
-The separate slide stream is intentionally lossless and presentation-oriented. The nested questions below remain the operational question model used by the current admin library and future scoring logic.
+The separate slide stream is intentionally lossless, presentation-oriented, and authoritative for editor order. The nested rounds/questions remain an operational projection for the library and future scoring logic. Editor Functions refresh their known derived fields after a slide mutation while merge-preserving private legacy extensions.
+
+Known editor fields include `title`, `text`, `moderatorNote`, general string `options`, private `correctAnswer`, classified media references, and the known presentation controls `videoStart`, `videoEnd`, `audioTrigger`, `backgroundOverlay`, `answerOverlay`, and `sourceQuestionNumber`. Storage upload is intentionally outside Editor V1; media edits accept validated URLs/references only. A new round is represented by an explicit round-header slide with its own `roundId`. Unknown slide/media values remain locked or fallback-rendered and are retained rather than guessed.
 
 ### `quizzes/{quizId}/rounds/{roundId}`
 

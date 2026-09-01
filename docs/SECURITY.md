@@ -34,18 +34,20 @@ Current Firestore access is intentionally narrow:
 
 - anonymous and ordinary authenticated users cannot read or write private collections;
 - moderators and admins can read private `quizzes` and their slide/round/question subcollections;
-- quiz writes are denied to both roles while the library is read-only;
+- every direct client quiz write is denied to both roles; admin editor writes exist only as trusted callable Functions;
 - existing event/media policy remains staff-read and admin-write until those flows are revisited;
 - staff profiles are self-readable, while all user management is admin-only;
 - staff may read private `sessions`, but all client writes are denied;
 - anyone may get one known `publicSessions` document, collection listing is denied, and every client write is denied;
 - every other path falls through to deny.
 
-Moderator writes are not enabled yet. Each future operational write must be introduced as a narrowly scoped rule and accompanied by emulator tests.
+Moderator quiz writes are not enabled. The editor route is read-only for moderators, and all editor callables independently require the `admin` claim. Each future operational write must be introduced as a narrowly scoped trusted workflow and accompanied by emulator tests.
 
 The quiz library and live-control UI query private documents only after staff authentication. Correct answers remain in private slide/question documents and may also be present inside private `legacy.raw`. The library mapper omits them; the moderator live preview may show only the current top-level private answer to staff. Anonymous projector code has no query path to `quizzes` or `sessions`.
 
-Callable Functions independently require an `admin` or `moderator` custom claim. They validate identifiers, positions, quiz/slide existence, session lifecycle, and the caller's `expectedRevision`. Function success responses contain only control metadata; errors and application logs contain no slide, question, answer, note, or raw data.
+Live callable Functions independently require an `admin` or `moderator` custom claim. Quiz editor callables require `admin` specifically. They validate identifiers, positions, supported edit shapes, media schemes, quiz/slide existence, transaction size, and the caller's `expectedRevision`. Function success responses contain only IDs, revision, and counters; errors and application logs contain no slide, question, answer, note, or raw data.
+
+Editor preview is not a publication operation. It renders already-authorized private state inside the admin route and may optionally show the answer there, but it never creates or mutates `publicSessions`. The anonymous projector still receives only the live allowlist projection. Unknown fields and `legacy.raw` never enter the editor mutation response or projector model.
 
 ## Public registration
 
@@ -63,7 +65,7 @@ The V1 migration tool follows the same fail-closed principle. Managed export byt
 
 ## Rules and tests
 
-Firestore Rules tests run through `firebase emulators:exec` and `@firebase/rules-unit-testing`, not mocked SDK calls. The suite covers anonymous/unprivileged denial for private sessions and quiz sources, anonymous single-document public reads, public list/write denial, staff private reads, direct staff write denial, and default denial. The live E2E suite additionally invokes real callable emulators as anonymous, ordinary user, moderator, and admin, and reads the raw public document as an unauthenticated projector.
+Firestore Rules tests run through `firebase emulators:exec` and `@firebase/rules-unit-testing`, not mocked SDK calls. The suite covers anonymous/unprivileged denial for private sessions and quiz sources, anonymous single-document public reads, public list/write denial, staff private reads, direct staff write denial, and default denial. Emulator E2E additionally invokes real callable emulators as anonymous, ordinary user, moderator, and admin. Editor coverage verifies admin CRUD, moderator read-only behavior, direct-write denial, stale/concurrent saves, exact legacy round-trip, contiguous ordering, and that editor activity leaves a sentinel public session absent.
 
 Storage remains fully deny-all. Before additional Firestore or Storage access is granted, emulator tests must also cover cross-event access, private answers, contact isolation, reveal timing, and media paths/types/sizes as those features are implemented.
 

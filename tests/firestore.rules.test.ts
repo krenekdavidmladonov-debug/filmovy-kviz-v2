@@ -173,7 +173,7 @@ describe('admin', () => {
     await assertFails(setDoc(doc(db, privateSessionPath), { status: 'ended' }));
   });
 
-  test('cannot write a quiz in the read-only phase', async () => {
+  test('cannot bypass trusted editor Functions with a direct quiz write', async () => {
     const db = testEnvironment
       .authenticatedContext('admin-user', { role: 'admin' })
       .firestore();
