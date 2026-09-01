@@ -20,6 +20,7 @@
     "migration:v1:inspect": "pnpm --filter @filmovy-kviz/migration-v1 build && node tools/migration-v1/lib/cli.js inspect",
     "migration:v1:extract": "pnpm --filter @filmovy-kviz/migration-v1 build && node tools/migration-v1/lib/extract-library.js",
     "migration:v1:inventory": "pnpm --filter @filmovy-kviz/migration-v1 build && node tools/migration-v1/lib/inventory.js",
+    "migration:v1:behavior-inventory": "pnpm --filter @filmovy-kviz/migration-v1 build && node tools/migration-v1/lib/behavior-analysis.js",
     "migration:v1:validate": "pnpm --filter @filmovy-kviz/migration-v1 build && node tools/migration-v1/lib/cli.js validate",
     "migration:v1:dry-run": "pnpm --filter @filmovy-kviz/migration-v1 build && node tools/migration-v1/lib/cli.js dry-run",
     "migration:v1:emulator": "pnpm --filter @filmovy-kviz/migration-v1 build && node tools/migration-v1/lib/cli.js emulator",
