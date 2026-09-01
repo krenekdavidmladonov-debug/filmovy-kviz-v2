@@ -19,6 +19,13 @@ function slidePayload(slide: EditorSlide) {
     correctAnswer: slide.correctAnswer,
     media: slide.media.map((media) => ({ ...media })),
     presentation: { ...slide.presentation },
+    backgroundImage: slide.backgroundImage,
+    questionImage: slide.questionImage,
+    answerImage: slide.answerImage,
+    mediaSource: slide.mediaSource,
+    backgroundOverlay: slide.backgroundOverlay,
+    clipStartSeconds: slide.clipStartSeconds,
+    clipEndSeconds: slide.clipEndSeconds,
   };
 }
 

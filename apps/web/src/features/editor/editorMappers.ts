@@ -61,6 +61,20 @@ function mediaSource(data: Record<string, unknown>): string {
   return '';
 }
 
+function mediaByRoleAndKind(value: unknown, role: string, kind: string): string {
+  if (!Array.isArray(value)) return '';
+  for (const entry of value) {
+    const data = object(entry);
+    if (data?.role === role && data.kind === kind) return mediaSource(data);
+  }
+  return '';
+}
+
+function normalizedSource(value: unknown): string {
+  const data = object(value);
+  return data === undefined ? optionalText(value) : mediaSource(data);
+}
+
 function mapMedia(value: unknown): readonly EditorMedia[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry, sourceIndex) => {
@@ -83,6 +97,9 @@ export function mapEditorSlide(id: string, data: DocumentData): EditorSlide {
   const storedKind = requiredString(data, 'kind');
   const position = requiredCount(data, 'position');
   if (position < 1) throw new Error('Invalid editor field: position');
+  const mappedPresentation = mapPresentation(data.presentation);
+  const normalizedKind = storedKind.toLowerCase();
+  const explicitBackgroundOverlay = nullableNumber(data.backgroundOverlay);
   return {
     id,
     position,
@@ -96,7 +113,19 @@ export function mapEditorSlide(id: string, data: DocumentData): EditorSlide {
     options: Array.isArray(data.options) ? data.options.map(optionalText) : [],
     correctAnswer: optionalText(data.correctAnswer),
     media: mapMedia(data.media),
-    presentation: mapPresentation(data.presentation),
+    presentation: mappedPresentation,
+    ...(Number.isInteger(data.questionNumber) ? { questionNumber: data.questionNumber as number } : {}),
+    ...(Number.isInteger(data.questionCount) ? { questionCount: data.questionCount as number } : {}),
+    backgroundImage: optionalText(data.backgroundImage) || mediaByRoleAndKind(data.media, 'background', 'image'),
+    questionImage: optionalText(data.questionImage)
+      || (['image', 'picture', 'photo'].includes(normalizedKind) ? mediaByRoleAndKind(data.media, 'prompt', 'image') : ''),
+    answerImage: optionalText(data.answerImage) || mediaByRoleAndKind(data.media, 'answer', 'image'),
+    mediaSource: normalizedSource(data.mediaSource)
+      || (['audio', 'music'].includes(normalizedKind) ? mediaByRoleAndKind(data.media, 'prompt', 'audio') : '')
+      || (['video', 'youtube'].includes(normalizedKind) ? mediaByRoleAndKind(data.media, 'prompt', 'video') : ''),
+    backgroundOverlay: explicitBackgroundOverlay ?? mappedPresentation.backgroundOverlay,
+    clipStartSeconds: nullableNumber(data.clipStartSeconds) ?? mappedPresentation.videoStart,
+    clipEndSeconds: nullableNumber(data.clipEndSeconds) ?? mappedPresentation.videoEnd,
     hasLegacyData: object(data.legacy) !== undefined || !kindSet.has(storedKind),
   };
 }

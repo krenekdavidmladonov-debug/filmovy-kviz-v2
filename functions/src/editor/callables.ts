@@ -131,10 +131,37 @@ function publicResponse(
 }
 
 function orderedWithPositions(slides: readonly StoredEditorSlide[]): readonly StoredEditorSlide[] {
-  return slides.map((slide, index) => ({
+  const positioned: StoredEditorSlide[] = slides.map((slide, index) => ({
     id: slide.id,
     data: { ...slide.data, position: index + 1 },
   }));
+  const groups = new Map<string, typeof positioned>();
+  for (const slide of positioned) {
+    const roundId = slideRoundId(slide);
+    if (roundId === undefined) continue;
+    const group = groups.get(roundId) ?? [];
+    group.push(slide);
+    groups.set(roundId, group);
+  }
+  for (const group of groups.values()) {
+    const questions = group.filter((slide) => slide.data.isQuestion === true);
+    const header = group.find((slide) => isRoundKind(storedKind(slide)));
+    const existingTitle = group.map((slide) => slide.data.roundTitle).find((value): value is string => typeof value === 'string');
+    const roundTitle = typeof header?.data.title === 'string' && header.data.title.trim().length > 0
+      ? header.data.title : existingTitle;
+    group.forEach((slide) => {
+      if (roundTitle !== undefined) slide.data.roundTitle = roundTitle;
+      const questionIndex = questions.findIndex((question) => question.id === slide.id);
+      if (questionIndex >= 0) {
+        slide.data.questionNumber = questionIndex + 1;
+        slide.data.questionCount = questions.length;
+      } else {
+        delete slide.data.questionNumber;
+        delete slide.data.questionCount;
+      }
+    });
+  }
+  return positioned;
 }
 
 function derivedPresentation(data: Record<string, unknown>): Record<string, unknown> {

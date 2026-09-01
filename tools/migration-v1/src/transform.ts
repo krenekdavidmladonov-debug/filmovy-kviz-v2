@@ -69,6 +69,23 @@ function commonSlideData(slide: NormalizedSlide): JsonObject {
   };
   if (slide.correctAnswer !== undefined) data.correctAnswer = slide.correctAnswer;
   if (slide.note !== undefined) data.moderatorNote = slide.note;
+  const backgroundImage = slide.media.find((item) => item.role === 'background' && item.kind === 'image')?.value;
+  const questionImage = ['image', 'picture', 'photo'].includes(slide.sourceType)
+    ? slide.media.find((item) => item.role === 'prompt' && item.kind === 'image')?.value
+    : undefined;
+  const answerImage = slide.media.find((item) => item.role === 'answer' && item.kind === 'image')?.value;
+  const mediaKind = ['audio', 'music'].includes(slide.sourceType) ? 'audio'
+    : ['video', 'youtube'].includes(slide.sourceType) ? 'video' : undefined;
+  const mediaSource = mediaKind === undefined
+    ? undefined
+    : slide.media.find((item) => item.role === 'prompt' && item.kind === mediaKind)?.value;
+  if (backgroundImage !== undefined) data.backgroundImage = backgroundImage;
+  if (questionImage !== undefined) data.questionImage = questionImage;
+  if (answerImage !== undefined) data.answerImage = answerImage;
+  if (mediaSource !== undefined) data.mediaSource = mediaSource;
+  if (slide.backgroundOverlay !== undefined) data.backgroundOverlay = slide.backgroundOverlay;
+  if (slide.videoStart !== undefined && slide.videoStart >= 0) data.clipStartSeconds = slide.videoStart;
+  if (slide.videoEnd !== undefined && slide.videoEnd > (slide.videoStart ?? 0)) data.clipEndSeconds = slide.videoEnd;
   return data;
 }
 
@@ -173,9 +190,19 @@ function transformRound(quizId: string, group: RoundGroup, position: number): V2
   };
 }
 
-function transformSlide(quizId: string, slide: NormalizedSlide, roundId?: string): V2SlideDocument {
+function transformSlide(
+  quizId: string,
+  slide: NormalizedSlide,
+  roundId?: string,
+  roundTitle?: string,
+  questionNumber?: number,
+  questionCount?: number,
+): V2SlideDocument {
   const data = commonSlideData(slide);
   if (roundId !== undefined) data.roundId = roundId;
+  if (roundTitle !== undefined) data.roundTitle = roundTitle;
+  if (questionNumber !== undefined) data.questionNumber = questionNumber;
+  if (questionCount !== undefined) data.questionCount = questionCount;
   return {
     id: `slide-${pad(slide.position)}`,
     quizId,
@@ -188,11 +215,28 @@ export function transformQuiz(quiz: NormalizedQuiz, now = new Date()): V2QuizDoc
   const groups = groupSlidesIntoRounds(quiz.slides);
   const rounds = groups.map((group, index) => transformRound(quiz.id, group, index + 1));
   const roundBySlidePosition = new Map<number, string>();
+  const roundTitleBySlidePosition = new Map<number, string>();
+  const questionNumberBySlidePosition = new Map<number, number>();
+  const questionCountBySlidePosition = new Map<number, number>();
   groups.forEach((group, index) => {
     const roundId = rounds[index]!.id;
-    group.slides.forEach((slide) => roundBySlidePosition.set(slide.position, roundId));
+    group.slides.forEach((slide) => {
+      roundBySlidePosition.set(slide.position, roundId);
+      roundTitleBySlidePosition.set(slide.position, group.title);
+    });
+    group.questions.forEach((slide, questionIndex) => {
+      questionNumberBySlidePosition.set(slide.position, questionIndex + 1);
+      questionCountBySlidePosition.set(slide.position, group.questions.length);
+    });
   });
-  const slides = quiz.slides.map((slide) => transformSlide(quiz.id, slide, roundBySlidePosition.get(slide.position)));
+  const slides = quiz.slides.map((slide) => transformSlide(
+    quiz.id,
+    slide,
+    roundBySlidePosition.get(slide.position),
+    roundTitleBySlidePosition.get(slide.position),
+    questionNumberBySlidePosition.get(slide.position),
+    questionCountBySlidePosition.get(slide.position),
+  ));
   const questionCount = rounds.reduce((total, round) => total + round.questions.length, 0);
   return {
     id: quiz.id,

@@ -20,11 +20,12 @@ import {
   type EditorSlide,
 } from '../../features/editor/types';
 import { SlidePreview } from '../../features/presentation/SlidePreview';
+import { generatedAgendaOptions } from '../../features/presentation/model';
 import { QuizErrorState } from '../../features/quizzes/QuizErrorState';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
 
 const kindLabels: Record<EditableSlideKind, string> = {
-  intro: 'Intro', agenda: 'Agenda', recap: 'Rekapitulace', end: 'Konec', title: 'Titulek', info: 'Informace',
+  intro: 'Intro', agenda: 'Agenda', rules: 'Pravidla', recap: 'Rekapitulace', end: 'Konec', title: 'Titulek', info: 'Informace',
   round: 'Hlavička kola', roundheader: 'Hlavička kola (legacy)', 'round-header': 'Hlavička kola (legacy)', section: 'Sekce',
   question: 'Otázka', text: 'Textová otázka', classic: 'Klasická otázka', free: 'Volná odpověď',
   image: 'Obrázková otázka', picture: 'Obrázková otázka (legacy)', photo: 'Foto otázka',
@@ -33,7 +34,7 @@ const kindLabels: Record<EditableSlideKind, string> = {
 };
 
 const creatableKinds: readonly EditableSlideKind[] = [
-  'intro', 'agenda', 'recap', 'end', 'title', 'info', 'round',
+  'intro', 'agenda', 'rules', 'recap', 'end', 'title', 'info', 'round',
   'question', 'text', 'free', 'image', 'audio', 'video',
 ];
 
@@ -43,15 +44,73 @@ const newSlideDefaults: Omit<EditorSlide, 'id' | 'position' | 'kind' | 'storedKi
     videoStart: null, videoEnd: null, audioTrigger: null,
     backgroundOverlay: null, answerOverlay: null, sourceQuestionNumber: null,
   },
+  backgroundImage: '', questionImage: '', answerImage: '', mediaSource: '',
+  backgroundOverlay: null, clipStartSeconds: null, clipEndSeconds: null,
   hasLegacyData: false,
 };
 
-function draftSlide(kind: EditableSlideKind, position: number): EditorSlide {
+function draftSlide(kind: EditableSlideKind, position: number, agendaOptions: readonly string[] = []): EditorSlide {
   return {
     ...newSlideDefaults,
+    ...(kind === 'rules' ? { options: [
+      'Hrajte fér.',
+      'Během otázek nepoužívejte mobil ani internet.',
+      'Respektujte organizátory a ostatní týmy.',
+      'Užijte si filmový večer.',
+    ] } : {}),
+    ...(kind === 'agenda' ? { options: agendaOptions } : {}),
     id: 'new-slide', position, kind, storedKind: kind,
     isQuestion: ['question', 'text', 'classic', 'free', 'image', 'picture', 'photo', 'audio', 'music', 'video', 'youtube', 'pl', 'legacy'].includes(kind),
   };
+}
+
+function formatTime(seconds: number | null): string {
+  if (seconds === null) return '';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remaining = seconds % 60;
+  const secondText = Number.isInteger(remaining) ? String(remaining).padStart(2, '0') : remaining.toFixed(1).padStart(4, '0');
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${secondText}`
+    : `${minutes}:${secondText}`;
+}
+
+function parseTime(value: string): number | null | undefined {
+  if (value.trim() === '') return null;
+  if (/^\d+(?:\.\d)?$/u.test(value.trim())) return Number(value);
+  const parts = value.trim().split(':');
+  if (parts.length < 2 || parts.length > 3 || parts.some((part) => !/^\d+(?:\.\d)?$/u.test(part))) return undefined;
+  const numbers = parts.map(Number);
+  const seconds = numbers.at(-1)!;
+  const minutes = numbers.at(-2)!;
+  const hours = numbers.length === 3 ? numbers[0]! : 0;
+  if (minutes >= 60 || seconds >= 60) return undefined;
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function TimeField({ label, value, disabled, onChange }: {
+  readonly label: string;
+  readonly value: number | null;
+  readonly disabled: boolean;
+  readonly onChange: (value: number | null) => void;
+}) {
+  const [text, setText] = useState(() => formatTime(value));
+  useEffect(() => setText(formatTime(value)), [value]);
+  return (
+    <label>{label}
+      <input
+        value={text}
+        disabled={disabled}
+        placeholder="mm:ss nebo hh:mm:ss"
+        onChange={(event) => {
+          setText(event.target.value);
+          const parsed = parseTime(event.target.value);
+          if (parsed !== undefined) onChange(parsed);
+        }}
+        onBlur={() => setText(formatTime(value))}
+      />
+    </label>
+  );
 }
 
 function errorMessage(error: unknown): string {
@@ -83,6 +142,10 @@ function SlideFields({
   )));
   const roundLocked = ['round', 'roundheader', 'round-header', 'section'].includes(slide.storedKind);
   const unknownLocked = slide.kind === 'legacy' && slide.storedKind !== 'legacy';
+  const normalizedKind = slide.kind.toLowerCase();
+  const supportsBackground = ['question', 'text', 'classic', 'free', 'intro', 'round', 'roundheader', 'round-header', 'section', 'end'].includes(normalizedKind);
+  const imageQuestion = ['image', 'picture', 'photo'].includes(normalizedKind);
+  const timedMedia = ['audio', 'music', 'video', 'youtube'].includes(normalizedKind);
 
   return (
     <div className="editor-form-stack">
@@ -120,6 +183,32 @@ function SlideFields({
         <textarea rows={2} value={slide.correctAnswer} disabled={disabled} onChange={(event) => set('correctAnswer', event.target.value)} />
       </label>
 
+      {(supportsBackground || imageQuestion || timedMedia) && (
+        <fieldset className="editor-fieldset" disabled={disabled}>
+          <legend>Normalizovaná prezentace</legend>
+          {supportsBackground && <label className="form-field">Obrázek pozadí
+            <input value={slide.backgroundImage} placeholder="https://…" onChange={(event) => set('backgroundImage', event.target.value)} />
+          </label>}
+          {imageQuestion && <label className="form-field">Obrázek otázky (samostatná plocha, contain)
+            <input value={slide.questionImage} placeholder="https://…" onChange={(event) => set('questionImage', event.target.value)} />
+          </label>}
+          {imageQuestion && <label className="form-field">Obrázek odpovědi (primárně recap)
+            <input value={slide.answerImage} placeholder="https://…" onChange={(event) => set('answerImage', event.target.value)} />
+          </label>}
+          {(supportsBackground || imageQuestion) && <label className="form-field">Ztmavení / overlay 0–100
+            <input type="number" min="0" max="100" value={slide.backgroundOverlay ?? ''} onChange={(event) => set('backgroundOverlay', numberValue(event.target.value))} />
+          </label>}
+          {timedMedia && <label className="form-field">Zdroj média (YouTube URL nebo ID)
+            <input value={slide.mediaSource} placeholder="https://youtube.com/watch?v=…" onChange={(event) => set('mediaSource', event.target.value)} />
+          </label>}
+          {timedMedia && <div className="normalized-timing-row">
+            <TimeField label="Začátek segmentu" value={slide.clipStartSeconds} disabled={disabled} onChange={(value) => set('clipStartSeconds', value)} />
+            <TimeField label="Konec segmentu" value={slide.clipEndSeconds} disabled={disabled} onChange={(value) => set('clipEndSeconds', value)} />
+          </div>}
+          {timedMedia && <p className="field-help">Interně se ukládají sekundy. Konec musí být větší než začátek; prázdný konec se nedohaduje.</p>}
+        </fieldset>
+      )}
+
       <fieldset className="editor-fieldset" disabled={disabled}>
         <legend>Média — pouze URL / reference</legend>
         {slide.media.map((media, index) => (
@@ -140,7 +229,7 @@ function SlideFields({
 
       <fieldset className="editor-fieldset timing-grid" disabled={disabled}>
         <legend>Prezentace</legend>
-        {(['videoStart', 'videoEnd', 'audioTrigger', 'backgroundOverlay', 'answerOverlay'] as const).map((field) => (
+        {(['audioTrigger', 'answerOverlay'] as const).map((field) => (
           <label key={field}>{field}
             <input type="number" min="0" value={slide.presentation[field] ?? ''} onChange={(event) => setPresentation(field, numberValue(event.target.value))} />
           </label>
@@ -326,7 +415,8 @@ export function QuizEditorPage() {
               const element = document.querySelector<HTMLSelectElement>('#new-slide-kind');
               const kind = (element?.value ?? 'question') as EditableSlideKind;
               const position = (selectedStored?.position ?? quiz.slideCount) + 1;
-              void mutate(() => createQuizSlide(quiz.id, quiz.revision, position, draftSlide(kind, position)));
+              const roundSlides = quiz.slides.filter((slide) => ['round', 'roundheader', 'round-header', 'section'].includes(slide.kind));
+              void mutate(() => createQuizSlide(quiz.id, quiz.revision, position, draftSlide(kind, position, generatedAgendaOptions(roundSlides))));
             }}>+ Přidat</button>
           </div>
           <ol className="editor-slide-list">

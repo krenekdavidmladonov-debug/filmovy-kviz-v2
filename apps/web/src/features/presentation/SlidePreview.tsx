@@ -1,8 +1,7 @@
-export interface PreviewMedia {
-  readonly role: string;
-  readonly kind: string;
-  readonly source: string;
-}
+import { SlideRenderer } from './SlideRenderer';
+import type { SlideMediaReference, SlidePresentationInput } from './types';
+
+export type PreviewMedia = SlideMediaReference;
 
 export interface PreviewSlide {
   readonly kind: string;
@@ -11,28 +10,16 @@ export interface PreviewSlide {
   readonly options: readonly string[];
   readonly media: readonly PreviewMedia[];
   readonly correctAnswer?: string;
-}
-
-function safeHttpUrl(value: string): string | undefined {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function PreviewMediaItem({ media }: { readonly media: PreviewMedia }) {
-  const url = safeHttpUrl(media.source);
-  if (media.kind === 'image' && url) {
-    return <img className="projector-image" src={url} alt={media.role === 'answer' ? 'Obrázek odpovědi' : 'Médium ke slidu'} />;
-  }
-  return (
-    <div className={`projector-media media-${media.kind}`}>
-      <strong>{media.kind === 'audio' ? 'Audio' : media.kind === 'video' ? 'Video' : 'Médium'}</strong>
-      {url ? <a href={url} target="_blank" rel="noreferrer">Otevřít bezpečný zdroj</a> : <span>{media.source}</span>}
-    </div>
-  );
+  readonly questionNumber?: number;
+  readonly questionCount?: number;
+  readonly backgroundImage?: string;
+  readonly questionImage?: string;
+  readonly answerImage?: string;
+  readonly mediaSource?: string;
+  readonly clipStartSeconds?: number | null;
+  readonly clipEndSeconds?: number | null;
+  readonly backgroundOverlay?: number | null;
+  readonly presentation?: SlidePresentationInput;
 }
 
 export function SlidePreview({
@@ -46,35 +33,17 @@ export function SlidePreview({
   readonly position?: number;
   readonly showAnswer?: boolean;
 }) {
-  const isLegacy = slide.kind === 'pl' || slide.kind === 'legacy';
-  const promptMedia = slide.media.filter((media) => media.role !== 'answer');
-  const answerMedia = slide.media.filter((media) => media.role === 'answer');
   return (
-    <article className="projector-stage preview-stage">
-      <header className="projector-meta">
-        <span>{position === undefined ? 'Náhled' : `Slide ${position}`}</span>
-        <span>{isLegacy ? 'Legacy slide' : slide.kind}</span>
-      </header>
-      <p className="eyebrow">{quizTitle}</p>
-      <h1>{slide.title || (isLegacy ? 'Legacy slide' : 'Filmový kvíz')}</h1>
-      {slide.text && <p className="projector-prompt">{slide.text}</p>}
-      {slide.options.length > 0 && (
-        <ol className="projector-options">
-          {slide.options.map((option, index) => <li key={`${index}-${option}`}>{option}</li>)}
-        </ol>
-      )}
-      {promptMedia.length > 0 && (
-        <div className="projector-media-grid">
-          {promptMedia.map((media, index) => <PreviewMediaItem key={`${media.role}-${media.source}-${index}`} media={media} />)}
-        </div>
-      )}
-      {showAnswer && (slide.correctAnswer || answerMedia.length > 0) && (
-        <section className="projector-answer">
-          <span>Správná odpověď — pouze admin náhled</span>
-          {slide.correctAnswer && <strong>{slide.correctAnswer}</strong>}
-          {answerMedia.map((media, index) => <PreviewMediaItem key={`${media.source}-${index}`} media={media} />)}
-        </section>
-      )}
-    </article>
+    <div className="preview-stage" data-slide-position={position}>
+      <SlideRenderer
+        compact
+        quizTitle={quizTitle}
+        mode={showAnswer ? 'recap' : 'editorPreview'}
+        slide={{
+          ...slide,
+          ...(showAnswer && slide.correctAnswer ? { revealedAnswer: slide.correctAnswer } : {}),
+        }}
+      />
+    </div>
   );
 }

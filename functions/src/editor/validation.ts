@@ -91,10 +91,36 @@ function validatePresentation(value: unknown): EditorPresentationInput {
       ? null
       : boundedString(value.sourceQuestionNumber, 'sourceQuestionNumber', 100),
   };
-  if (result.videoStart !== null && result.videoEnd !== null && result.videoStart > result.videoEnd) {
-    throw new QuizEditorError('invalid-argument', 'videoStart must not be greater than videoEnd.');
+  if (result.videoStart !== null && result.videoEnd !== null
+    && !(result.videoStart === 0 && result.videoEnd === 0)
+    && result.videoStart >= result.videoEnd) {
+    throw new QuizEditorError('invalid-argument', 'videoEnd must be greater than videoStart.');
   }
   return result;
+}
+
+function validateNormalizedImage(value: unknown, field: string): string {
+  const source = value === undefined ? '' : boundedString(value, field, 4_096);
+  if (source === '') return source;
+  let parsed: URL;
+  try { parsed = new URL(source); }
+  catch { throw new QuizEditorError('invalid-argument', `${field} must be an http(s) URL.`); }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new QuizEditorError('invalid-argument', `${field} must be an http(s) URL.`);
+  }
+  return source;
+}
+
+function validateNormalizedMediaSource(value: unknown): string {
+  const source = value === undefined ? '' : boundedString(value, 'mediaSource', 4_096);
+  if (source === '' || /^[\w-]{11}$/u.test(source)) return source;
+  try {
+    const parsed = new URL(source);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return source;
+  } catch {
+    // Fall through to one sanitized error without echoing the source.
+  }
+  throw new QuizEditorError('invalid-argument', 'mediaSource must be an http(s) URL or YouTube video ID.');
 }
 
 function validateMediaSource(source: unknown, role: EditorMediaRole, kind: EditorMediaKind): string {
@@ -155,6 +181,16 @@ export function validateSlideInput(value: unknown): EditorSlideInput {
     throw new QuizEditorError('invalid-argument', 'options must contain at most 30 values.');
   }
   const options = value.options.map((option) => boundedString(option, 'option', 1_000));
+  const presentation = validatePresentation(value.presentation);
+  const clipStartSeconds = value.clipStartSeconds === undefined
+    ? presentation.videoStart
+    : nullableNumber(value.clipStartSeconds, 'clipStartSeconds', 86_400);
+  const clipEndSeconds = value.clipEndSeconds === undefined
+    ? presentation.videoEnd
+    : nullableNumber(value.clipEndSeconds, 'clipEndSeconds', 86_400);
+  if (clipStartSeconds !== null && clipEndSeconds !== null && clipStartSeconds >= clipEndSeconds) {
+    throw new QuizEditorError('invalid-argument', 'clipEndSeconds must be greater than clipStartSeconds.');
+  }
   return {
     kind: value.kind as EditorSlideKind,
     title: boundedString(value.title, 'slide title', 500),
@@ -163,6 +199,15 @@ export function validateSlideInput(value: unknown): EditorSlideInput {
     options,
     correctAnswer: boundedString(value.correctAnswer, 'correctAnswer', 20_000),
     media: validateMedia(value.media),
-    presentation: validatePresentation(value.presentation),
+    presentation,
+    backgroundImage: validateNormalizedImage(value.backgroundImage, 'backgroundImage'),
+    questionImage: validateNormalizedImage(value.questionImage, 'questionImage'),
+    answerImage: validateNormalizedImage(value.answerImage, 'answerImage'),
+    mediaSource: validateNormalizedMediaSource(value.mediaSource),
+    backgroundOverlay: value.backgroundOverlay === undefined
+      ? presentation.backgroundOverlay
+      : nullableNumber(value.backgroundOverlay, 'backgroundOverlay', 100),
+    clipStartSeconds,
+    clipEndSeconds,
   };
 }

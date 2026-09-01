@@ -1,5 +1,5 @@
 export const editableSlideKinds = [
-  'intro', 'agenda', 'recap', 'end', 'title', 'info', 'round', 'roundheader', 'round-header', 'section',
+  'intro', 'agenda', 'rules', 'recap', 'end', 'title', 'info', 'round', 'roundheader', 'round-header', 'section',
   'question', 'text', 'classic', 'free', 'image', 'picture', 'photo',
   'audio', 'music', 'video', 'youtube', 'pl', 'legacy',
 ] as const;
@@ -38,6 +38,15 @@ export interface EditorSlide {
   readonly correctAnswer: string;
   readonly media: readonly EditorMedia[];
   readonly presentation: EditorPresentation;
+  readonly questionNumber?: number;
+  readonly questionCount?: number;
+  readonly backgroundImage: string;
+  readonly questionImage: string;
+  readonly answerImage: string;
+  readonly mediaSource: string;
+  readonly backgroundOverlay: number | null;
+  readonly clipStartSeconds: number | null;
+  readonly clipEndSeconds: number | null;
   readonly hasLegacyData: boolean;
 }
 

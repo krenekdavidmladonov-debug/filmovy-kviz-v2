@@ -1,6 +1,7 @@
 export const editorSlideKinds = [
   'intro',
   'agenda',
+  'rules',
   'recap',
   'end',
   'title',
@@ -53,6 +54,13 @@ export interface EditorSlideInput {
   readonly correctAnswer: string;
   readonly media: readonly EditorMediaInput[];
   readonly presentation: EditorPresentationInput;
+  readonly backgroundImage: string;
+  readonly questionImage: string;
+  readonly answerImage: string;
+  readonly mediaSource: string;
+  readonly backgroundOverlay: number | null;
+  readonly clipStartSeconds: number | null;
+  readonly clipEndSeconds: number | null;
 }
 
 export interface EditorQuizMutationResponse {

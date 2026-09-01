@@ -133,6 +133,19 @@ function mergedOptions(current: unknown, input: readonly string[]): readonly unk
   return [...input];
 }
 
+function applyOptionalText(result: Record<string, unknown>, current: Record<string, unknown>, field: string, input: string): void {
+  if (input === '' && !Object.hasOwn(current, field)) delete result[field];
+  else result[field] = keepMalformedText(current[field], input);
+}
+
+function applyOptionalNumber(result: Record<string, unknown>, current: Record<string, unknown>, field: string, input: number | null): void {
+  const stored = current[field];
+  if (input === null) {
+    if (stored !== undefined && (typeof stored !== 'number' || !Number.isFinite(stored))) return;
+    delete result[field];
+  } else result[field] = input;
+}
+
 export function applyKnownSlideUpdate(
   current: Record<string, unknown>,
   input: EditorSlideInput,
@@ -156,6 +169,13 @@ export function applyKnownSlideUpdate(
   else result.moderatorNote = keepMalformedText(current.moderatorNote, input.moderatorNote);
   if (input.correctAnswer === '' && !Object.hasOwn(current, 'correctAnswer')) delete result.correctAnswer;
   else result.correctAnswer = keepMalformedText(current.correctAnswer, input.correctAnswer);
+  applyOptionalText(result, current, 'backgroundImage', input.backgroundImage);
+  applyOptionalText(result, current, 'questionImage', input.questionImage);
+  applyOptionalText(result, current, 'answerImage', input.answerImage);
+  applyOptionalText(result, current, 'mediaSource', input.mediaSource);
+  applyOptionalNumber(result, current, 'backgroundOverlay', input.backgroundOverlay);
+  applyOptionalNumber(result, current, 'clipStartSeconds', input.clipStartSeconds);
+  applyOptionalNumber(result, current, 'clipEndSeconds', input.clipEndSeconds);
   return result;
 }
 
