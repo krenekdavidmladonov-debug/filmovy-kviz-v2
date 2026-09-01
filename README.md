@@ -1,5 +1,7 @@
 # Filmový Kvíz V2
 
+[![CI](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/actions/workflows/ci.yml)
+
 Clean replacement for the Filmový Kvíz application. The current foundation includes a React web client, Firebase Functions, emulator-only staff authentication, tested Firestore authorization rules, routing, and architecture documentation. Quiz behavior is intentionally not implemented yet.
 
 ## Requirements
@@ -58,6 +60,8 @@ pnpm test:unit
 The tests use `@firebase/rules-unit-testing` against the real local Firestore rules runtime. They verify anonymous users, authenticated users without claims, moderators, admins, and unknown paths.
 
 ## Quality checks
+
+GitHub Actions runs on Node.js 22 and Temurin JDK 21 for pushes and pull requests targeting `main`. It installs the frozen pnpm lockfile, typechecks, lints, builds production bundles, runs unit and synthetic migration regression tests, verifies Firestore Rules, and exercises the live flow through local Auth, Firestore, and Functions emulators using only `demo-filmovy-kviz-v2`. The workflow requires no secrets and performs no Firebase deploy.
 
 ```bash
 pnpm typecheck
