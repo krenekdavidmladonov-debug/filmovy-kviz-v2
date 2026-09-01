@@ -51,9 +51,9 @@ Private registration: team name, normalized team name, contact person/email/phon
 
 Operational team: display name, check-in state, seat count, scoring state, and private registration reference. It does not duplicate contact details.
 
-### `events/{eventId}/sessions/{sessionId}`
+### `sessions/{sessionId}`
 
-Trusted live-session state: phase, current round/question references, reveal state, control version, timestamps, and operator identity.
+Private live-control state. Required fields are `quizId`, safe display copy `quizTitle`, `slideCount`, `status` (`waiting`, `active`, `ended`), `currentSlidePosition`, optional `currentSlideId`, `answerRevealed`, monotonic `revision`, `createdBy`, `updatedBy`, and lifecycle timestamps. Correct answers and raw slides are not duplicated into this document; trusted Functions load the current private ordered slide server-side. Staff may read sessions for control UI, but all direct client writes are denied.
 
 ### `events/{eventId}/sessions/{sessionId}/scores/{teamId}`
 
@@ -71,7 +71,9 @@ Safe listing data: title, venue display name, start time, public capacity state 
 
 ### `publicSessions/{sessionId}`
 
-Sanitized projector state: event display data, phase, current slide type, safe prompt/media payload, answer payload only after reveal, and a monotonic version.
+Server-generated projector snapshot: `sessionId`, `status`, `quizTitle`, `slidePosition`, `answerRevealed`, `revision`, and `updatedAt`. An active snapshot may add allowlisted `slideKind`, title, text, primitive options, sanitized prompt/background media, and presentation controls. `revealedAnswer` and optional answer image exist only while `answerRevealed == true`. Correct-answer source fields, moderator notes, `legacy`, `raw`, recap overrides, private references, and complete slide/question objects are forbidden.
+
+Anonymous clients may get one document when they already know its random session ID, but cannot list the collection or write any public state. Every state change replaces the whole public document in the same transaction as the private session update, removing stale reveal fields.
 
 ### `publicSessions/{sessionId}/leaderboard/{teamId}`
 

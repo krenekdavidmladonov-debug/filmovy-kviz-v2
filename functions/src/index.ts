@@ -1,5 +1,15 @@
 import { onRequest } from 'firebase-functions/v2/https';
 
+export {
+  createLiveSession,
+  endLiveSession,
+  goToSlide,
+  hideAnswer,
+  nextSlide,
+  previousSlide,
+  revealAnswer,
+} from './live/callables.js';
+
 /** Minimal endpoint that does not initialize Admin SDK or access data. */
 export const health = onRequest(
   {

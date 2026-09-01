@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
+import { createLiveSession } from '../../features/live/liveApi';
 import { QuizErrorState } from '../../features/quizzes/QuizErrorState';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
 import {
@@ -15,10 +16,13 @@ import type { QuizDetail } from '../../features/quizzes/types';
 
 export function QuizDetailPage() {
   const { quizId } = useParams<{ quizId: string }>();
+  const navigate = useNavigate();
   const [quiz, setQuiz] = useState<QuizDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const loadQuiz = useCallback(async () => {
     if (!quizId) {
@@ -45,6 +49,20 @@ export function QuizDetailPage() {
   useEffect(() => {
     void loadQuiz();
   }, [loadQuiz]);
+
+  async function startLiveQuiz() {
+    if (!quizId) return;
+    setStarting(true);
+    setStartError(null);
+    try {
+      const session = await createLiveSession(quizId);
+      void navigate(`/admin/live/${encodeURIComponent(session.sessionId)}`);
+    } catch {
+      setStartError('Live session se nepodařilo vytvořit. Kvíz musí mít ordered slides a Functions Emulator musí běžet.');
+    } finally {
+      setStarting(false);
+    }
+  }
 
   if (loading) {
     return <QuizLoading label="Načítám detail kvízu…" />;
@@ -80,11 +98,17 @@ export function QuizDetailPage() {
           <h1>{quiz.title}</h1>
           <p className="lead">{quiz.description}</p>
         </div>
-        <dl className="quiz-metrics">
-          <div><dt>Kola</dt><dd>{quiz.roundCount}</dd></div>
-          <div><dt>Otázky</dt><dd>{quiz.questionCount}</dd></div>
-          <div><dt>Aktualizoval</dt><dd>{quiz.updatedBy}</dd></div>
-        </dl>
+        <div className="quiz-detail-side">
+          <dl className="quiz-metrics">
+            <div><dt>Kola</dt><dd>{quiz.roundCount}</dd></div>
+            <div><dt>Otázky</dt><dd>{quiz.questionCount}</dd></div>
+            <div><dt>Aktualizoval</dt><dd>{quiz.updatedBy}</dd></div>
+          </dl>
+          <button className="primary-button" disabled={starting} onClick={() => void startLiveQuiz()}>
+            {starting ? 'Spouštím…' : 'Spustit kvíz'}
+          </button>
+          {startError && <p className="form-error" role="alert">{startError}</p>}
+        </div>
       </header>
 
       <section className="round-list" aria-label="Kola a otázky">

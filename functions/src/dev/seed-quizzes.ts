@@ -131,6 +131,7 @@ function writeQuiz(batch: WriteBatch, quiz: SeedQuiz): void {
   const db = getFirestore();
   const quizRef = db.collection('quizzes').doc(quiz.id);
   const questionCount = quiz.rounds.reduce((total, round) => total + round.questions.length, 0);
+  const orderedQuestions = quiz.rounds.flatMap((round) => round.questions);
 
   batch.set(quizRef, {
     title: quiz.title,
@@ -140,8 +141,24 @@ function writeQuiz(batch: WriteBatch, quiz: SeedQuiz): void {
     updatedAt: Timestamp.fromDate(quiz.updatedAt),
     createdBy: seedActor,
     updatedBy: seedActor,
+    slideCount: orderedQuestions.length,
     roundCount: quiz.rounds.length,
     questionCount,
+  });
+
+  orderedQuestions.forEach((question, index) => {
+    batch.set(quizRef.collection('slides').doc(`slide-${String(index + 1).padStart(3, '0')}`), {
+      position: index + 1,
+      kind: question.type === 'text' ? 'question' : question.type,
+      isQuestion: true,
+      title: `Otázka ${index + 1}`,
+      text: question.prompt,
+      options: [],
+      media: [],
+      presentation: {},
+      correctAnswer: question.correctAnswer,
+      legacy: { source: 'synthetic-emulator-seed', raw: {} },
+    });
   });
 
   for (const round of quiz.rounds) {
@@ -164,6 +181,56 @@ function writeQuiz(batch: WriteBatch, quiz: SeedQuiz): void {
   }
 }
 
+function writeLiveFlowQuiz(batch: WriteBatch): void {
+  const db = getFirestore();
+  const quizRef = db.collection('quizzes').doc('live-session-e2e');
+  const timestamp = Timestamp.fromDate(new Date('2026-09-01T08:00:00.000Z'));
+  const slides = [
+    { kind: 'intro', isQuestion: false, title: 'Začínáme', text: 'Syntetický úvod', options: [], media: [], presentation: {} },
+    {
+      kind: 'question', isQuestion: true, title: 'Otázka', text: 'Syntetický veřejný prompt',
+      options: ['A', 'B', 'C'], correctAnswer: 'Syntetická odpověď',
+      moderatorNote: 'Pouze moderátor',
+      media: [
+        { role: 'prompt', kind: 'image', value: 'https://example.test/prompt.jpg' },
+        { role: 'answer', kind: 'image', value: 'https://example.test/answer.jpg' },
+      ],
+      presentation: { backgroundOverlay: 55 },
+    },
+    { kind: 'agenda', isQuestion: false, title: 'Program', text: 'Syntetická agenda', options: [], media: [], presentation: {} },
+    { kind: 'image', isQuestion: true, title: 'Obrázek', text: 'Syntetická obrázková otázka', options: [], correctAnswer: 'Obrázek', media: [{ role: 'prompt', kind: 'image', value: 'https://example.test/image.jpg' }], presentation: {} },
+    { kind: 'audio', isQuestion: true, title: 'Audio', text: 'Syntetická audio otázka', options: [], correctAnswer: 'Audio', media: [{ role: 'prompt', kind: 'audio', value: 'synthetic-audio-id' }], presentation: { audioTrigger: 5 } },
+    { kind: 'video', isQuestion: true, title: 'Video', text: 'Syntetická video otázka', options: [], correctAnswer: 'Video', media: [{ role: 'prompt', kind: 'video', value: 'https://example.test/video' }], presentation: { videoStart: 2, videoEnd: 8 } },
+    { kind: 'recap', isQuestion: false, title: 'Rekapitulace', text: 'Syntetický přehled', options: [], media: [], presentation: {} },
+    { kind: 'pl', isQuestion: true, title: 'Legacy slide', text: 'Bezpečný fallback', options: [], correctAnswer: 'Legacy odpověď', media: [], presentation: {} },
+    { kind: 'end', isQuestion: false, title: 'Konec', text: 'Děkujeme', options: [], media: [], presentation: {} },
+  ] as const;
+
+  batch.set(quizRef, {
+    title: 'Live session E2E',
+    description: 'Syntetický lokální kvíz pro bezpečnostní ověření.',
+    status: 'ready',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    createdBy: seedActor,
+    updatedBy: seedActor,
+    slideCount: slides.length,
+    roundCount: 1,
+    questionCount: slides.filter((slide) => slide.isQuestion).length,
+  });
+
+  slides.forEach((slide, index) => {
+    batch.set(quizRef.collection('slides').doc(`slide-${String(index + 1).padStart(3, '0')}`), {
+      ...slide,
+      position: index + 1,
+      legacy: {
+        source: 'synthetic-emulator-seed',
+        raw: { correct: 'Never publish this raw field', moderatorNote: 'Never publish this note' },
+      },
+    });
+  });
+}
+
 async function seed(): Promise<void> {
   const projectId = assertSafeEmulatorEnvironment();
   const app = initializeApp({ projectId });
@@ -173,8 +240,9 @@ async function seed(): Promise<void> {
     for (const quiz of quizzes) {
       writeQuiz(batch, quiz);
     }
+    writeLiveFlowQuiz(batch);
     await batch.commit();
-    console.log(`Seeded ${quizzes.length} emulator-only quizzes into ${projectId}.`);
+    console.log(`Seeded ${quizzes.length + 1} emulator-only quizzes into ${projectId}.`);
   } finally {
     await deleteApp(app);
   }

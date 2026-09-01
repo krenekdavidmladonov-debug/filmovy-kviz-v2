@@ -12,7 +12,9 @@
 
 ## Preventing answer leakage
 
-The projector reads only `publicSessions/{sessionId}`. A trusted Function builds this sanitized projection from private quiz data. Before reveal, it copies only the prompt and safe media. After an authorized reveal transition, it may add the answer payload. Hiding an answer in React state, CSS, a network response, or an unread UI branch is not acceptable.
+The projector reads only one `publicSessions/{sessionId}` document. The trusted `buildPublicSessionState` allowlist builds this projection from private quiz data. Before reveal it copies only explicitly safe title/text/options, prompt/background media, and presentation controls. After an authorized reveal it adds only display-form `revealedAnswer` and an allowed answer image—not the private slide or question. Hiding an answer in React state, CSS, a network response, an error, or an unread UI branch is not acceptable.
+
+Every navigation, reveal, hide, and end operation replaces the entire public document in the same transaction as the private update. Navigation resets `answerRevealed`; therefore old answer fields cannot survive through merge semantics. The projector rejects Firestore cache-only snapshots and clears itself on browser offline events so a disconnected client does not continue showing an old revealed answer.
 
 Private answer media must use protected paths or server-controlled delivery; prompt and answer media must not share guessable unrestricted URLs.
 
@@ -35,11 +37,15 @@ Current Firestore access is intentionally narrow:
 - quiz writes are denied to both roles while the library is read-only;
 - existing event/media policy remains staff-read and admin-write until those flows are revisited;
 - staff profiles are self-readable, while all user management is admin-only;
-- every other path, including future public collections, falls through to deny.
+- staff may read private `sessions`, but all client writes are denied;
+- anyone may get one known `publicSessions` document, collection listing is denied, and every client write is denied;
+- every other path falls through to deny.
 
 Moderator writes are not enabled yet. Each future operational write must be introduced as a narrowly scoped rule and accompanied by emulator tests.
 
-The quiz library queries private documents directly only after staff authentication. Correct answers remain in private slide/question documents and may also be present inside private `legacy.raw`, but the React repository mapper omits them from the detail view model. No `publicEvents`, `publicSessions`, projector copy, or public quiz API is created in this phase.
+The quiz library and live-control UI query private documents only after staff authentication. Correct answers remain in private slide/question documents and may also be present inside private `legacy.raw`. The library mapper omits them; the moderator live preview may show only the current top-level private answer to staff. Anonymous projector code has no query path to `quizzes` or `sessions`.
+
+Callable Functions independently require an `admin` or `moderator` custom claim. They validate identifiers, positions, quiz/slide existence, session lifecycle, and the caller's `expectedRevision`. Function success responses contain only control metadata; errors and application logs contain no slide, question, answer, note, or raw data.
 
 ## Public registration
 
@@ -57,7 +63,7 @@ The V1 migration tool follows the same fail-closed principle. Managed export byt
 
 ## Rules and tests
 
-Firestore Rules tests run through `firebase emulators:exec` and `@firebase/rules-unit-testing`, not mocked SDK calls. The current suite covers anonymous denial, unprivileged authenticated denial, private slide/round/question reads for staff, moderator/admin write denial in the read-only phase, and default denial for unknown paths.
+Firestore Rules tests run through `firebase emulators:exec` and `@firebase/rules-unit-testing`, not mocked SDK calls. The suite covers anonymous/unprivileged denial for private sessions and quiz sources, anonymous single-document public reads, public list/write denial, staff private reads, direct staff write denial, and default denial. The live E2E suite additionally invokes real callable emulators as anonymous, ordinary user, moderator, and admin, and reads the raw public document as an unauthenticated projector.
 
 Storage remains fully deny-all. Before additional Firestore or Storage access is granted, emulator tests must also cover cross-event access, private answers, contact isolation, reveal timing, and media paths/types/sizes as those features are implemented.
 
