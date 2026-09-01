@@ -10,6 +10,15 @@ export {
   revealAnswer,
 } from './live/callables.js';
 
+export {
+  createQuizSlide,
+  deleteQuizSlide,
+  duplicateQuizSlide,
+  moveQuizSlide,
+  updateQuizMetadata,
+  updateQuizSlide,
+} from './editor/callables.js';
+
 /** Minimal endpoint that does not initialize Admin SDK or access data. */
 export const health = onRequest(
   {

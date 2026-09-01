@@ -1,0 +1,440 @@
+import { getApps, initializeApp } from 'firebase-admin/app';
+import {
+  FieldValue,
+  getFirestore,
+  Timestamp,
+  type DocumentSnapshot,
+  type Transaction,
+} from 'firebase-admin/firestore';
+import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+
+import { QuizEditorError } from './errors.js';
+import {
+  applyKnownSlideUpdate,
+  assertRevision,
+  createSlideData,
+  duplicateSlideData,
+  isQuestionKind,
+  isRoundKind,
+  questionTypeForKind,
+  sortedSlides,
+  type StoredEditorSlide,
+} from './model.js';
+import type { EditorQuizMutationResponse, EditorSlideKind } from './types.js';
+import {
+  expectedRevision,
+  isObject,
+  requestedDirection,
+  requestedPosition,
+  requestedSlide,
+  requiredId,
+  validateQuizMetadata,
+} from './validation.js';
+
+if (getApps().length === 0) initializeApp();
+
+const db = getFirestore();
+const callableOptions = { region: 'europe-west1', cors: true } as const;
+const maximumSlideCount = 400;
+
+interface AdminActor {
+  readonly uid: string;
+  readonly role: 'admin';
+}
+
+interface QuizState {
+  readonly quizId: string;
+  readonly quizRef: FirebaseFirestore.DocumentReference;
+  readonly quiz: Record<string, unknown>;
+  readonly revision: number;
+  readonly slides: readonly StoredEditorSlide[];
+}
+
+export function authorizeEditorAdmin(auth: CallableRequest<unknown>['auth']): AdminActor {
+  if (auth === undefined) throw new HttpsError('unauthenticated', 'Authentication is required.');
+  if (auth.token.role !== 'admin') {
+    throw new HttpsError('permission-denied', 'Only an administrator can edit quizzes.');
+  }
+  return { uid: auth.uid, role: 'admin' };
+}
+
+function snapshotData(snapshot: DocumentSnapshot, location: string): Record<string, unknown> {
+  const value: unknown = snapshot.data();
+  if (!isObject(value)) throw new QuizEditorError('failed-precondition', `${location} is malformed.`);
+  return value;
+}
+
+function requiredStoredCount(quiz: Record<string, unknown>, field: string): number {
+  const value = quiz[field];
+  if (!Number.isInteger(value) || (value as number) < 0) {
+    throw new QuizEditorError('failed-precondition', 'Quiz counters are malformed.');
+  }
+  return value as number;
+}
+
+async function loadQuizState(
+  transaction: Transaction,
+  quizId: string,
+  revision: number,
+): Promise<QuizState> {
+  const quizRef = db.collection('quizzes').doc(quizId);
+  const quizSnapshot = await transaction.get(quizRef);
+  if (!quizSnapshot.exists) throw new QuizEditorError('not-found', 'Quiz was not found.');
+  const quiz = snapshotData(quizSnapshot, 'Quiz');
+  const currentRevision = assertRevision(quiz, revision);
+  const slideSnapshot = await transaction.get(quizRef.collection('slides').orderBy('position'));
+  const slides = sortedSlides(slideSnapshot.docs.map((document) => ({
+    id: document.id,
+    data: snapshotData(document, 'Quiz slide'),
+  })));
+  if (slides.length !== requiredStoredCount(quiz, 'slideCount')) {
+    throw new QuizEditorError('failed-precondition', 'Quiz slideCount does not match its ordered slides.');
+  }
+  if (slides.length > maximumSlideCount) {
+    throw new QuizEditorError('failed-precondition', 'Quiz is too large for one safe editor transaction.');
+  }
+  return { quizId, quizRef, quiz, revision: currentRevision, slides };
+}
+
+function storedKind(slide: StoredEditorSlide): EditorSlideKind {
+  const value = slide.data.kind;
+  if (typeof value !== 'string') throw new QuizEditorError('failed-precondition', 'Quiz slide kind is malformed.');
+  return value as EditorSlideKind;
+}
+
+function slideRoundId(slide: StoredEditorSlide): string | undefined {
+  return typeof slide.data.roundId === 'string' && slide.data.roundId.length > 0
+    ? slide.data.roundId
+    : undefined;
+}
+
+function stateCounts(slides: readonly StoredEditorSlide[]) {
+  const roundIds = new Set(slides.map(slideRoundId).filter((value): value is string => value !== undefined));
+  return {
+    slideCount: slides.length,
+    questionCount: slides.filter((slide) => slide.data.isQuestion === true).length,
+    roundCount: roundIds.size,
+  };
+}
+
+function publicResponse(
+  state: QuizState,
+  slides: readonly StoredEditorSlide[],
+  selectedSlideId?: string,
+): EditorQuizMutationResponse {
+  return {
+    quizId: state.quizId,
+    revision: state.revision + 1,
+    ...stateCounts(slides),
+    ...(selectedSlideId === undefined ? {} : { selectedSlideId }),
+  };
+}
+
+function orderedWithPositions(slides: readonly StoredEditorSlide[]): readonly StoredEditorSlide[] {
+  return slides.map((slide, index) => ({
+    id: slide.id,
+    data: { ...slide.data, position: index + 1 },
+  }));
+}
+
+function derivedPresentation(data: Record<string, unknown>): Record<string, unknown> {
+  return isObject(data.presentation) ? data.presentation : {};
+}
+
+function writeDerivedState(
+  transaction: Transaction,
+  state: QuizState,
+  slides: readonly StoredEditorSlide[],
+): void {
+  const storedRoundIds = new Set(state.slides.map(slideRoundId).filter((value): value is string => value !== undefined));
+  const groups = new Map<string, StoredEditorSlide[]>();
+  for (const slide of slides) {
+    const roundId = slideRoundId(slide);
+    if (roundId === undefined) continue;
+    const group = groups.get(roundId) ?? [];
+    group.push(slide);
+    groups.set(roundId, group);
+  }
+
+  let roundPosition = 0;
+  for (const [roundId, group] of groups) {
+    roundPosition += 1;
+    const header = group.find((slide) => isRoundKind(storedKind(slide)));
+    const questions = group.filter((slide) => slide.data.isQuestion === true);
+    const inferredType = questions.length > 0 && questions.every((slide) => ['audio', 'music'].includes(String(slide.data.kind)))
+      ? 'audio'
+      : questions.length > 0 && questions.every((slide) => ['image', 'picture', 'photo'].includes(String(slide.data.kind))) ? 'picture' : 'classic';
+    transaction.set(state.quizRef.collection('rounds').doc(roundId), {
+      position: roundPosition,
+      ...(storedRoundIds.has(roundId) ? {} : { type: inferredType }),
+      slideCount: group.length,
+      questionCount: questions.length,
+      sourceSlideStart: group[0]?.data.position,
+      sourceSlideEnd: group[group.length - 1]?.data.position,
+      ...(header === undefined
+        ? {}
+        : { title: typeof header.data.title === 'string' ? header.data.title : `Kolo ${roundPosition}` }),
+    }, { merge: true });
+
+    questions.forEach((slide, index) => {
+      const kind = storedKind(slide);
+      const presentation = derivedPresentation(slide.data);
+      const presentationField = (field: string): unknown => (
+        Object.hasOwn(presentation, field) ? presentation[field] : FieldValue.delete()
+      );
+      const correctAnswer = Object.hasOwn(slide.data, 'correctAnswer')
+        ? slide.data.correctAnswer
+        : FieldValue.delete();
+      const moderatorNote = Object.hasOwn(slide.data, 'moderatorNote')
+        ? slide.data.moderatorNote
+        : FieldValue.delete();
+      transaction.set(state.quizRef.collection('rounds').doc(roundId).collection('questions').doc(slide.id), {
+        position: index + 1,
+        prompt: typeof slide.data.text === 'string' && slide.data.text.length > 0
+          ? slide.data.text
+          : typeof slide.data.title === 'string' ? slide.data.title : '',
+        type: questionTypeForKind(kind),
+        sourceSlideId: slide.id,
+        sourceSlidePosition: slide.data.position,
+        options: Array.isArray(slide.data.options) ? slide.data.options : [],
+        media: Array.isArray(slide.data.media) ? slide.data.media : [],
+        videoStart: presentationField('videoStart'),
+        videoEnd: presentationField('videoEnd'),
+        audioTrigger: presentationField('audioTrigger'),
+        backgroundOverlay: presentationField('backgroundOverlay'),
+        answerOverlay: presentationField('answerOverlay'),
+        sourceQuestionNumber: presentationField('sourceQuestionNumber'),
+        correctAnswer,
+        moderatorNote,
+      }, { merge: true });
+    });
+  }
+}
+
+function writeQuizState(
+  transaction: Transaction,
+  state: QuizState,
+  slides: readonly StoredEditorSlide[],
+  actor: AdminActor,
+): EditorQuizMutationResponse {
+  const derivedRoundIds = new Set(slides.map(slideRoundId).filter((value): value is string => value !== undefined));
+  const derivedQuestions = slides.filter((slide) => slide.data.isQuestion === true && slideRoundId(slide) !== undefined).length;
+  const estimatedWrites = slides.length + derivedQuestions + derivedRoundIds.size + 3;
+  if (estimatedWrites > 475) {
+    throw new QuizEditorError('failed-precondition', 'Quiz is too large for one safe editor transaction.');
+  }
+  const now = Timestamp.now();
+  for (const slide of slides) {
+    transaction.set(state.quizRef.collection('slides').doc(slide.id), slide.data);
+  }
+  writeDerivedState(transaction, state, slides);
+  const counts = stateCounts(slides);
+  transaction.update(state.quizRef, {
+    ...counts,
+    revision: state.revision + 1,
+    updatedAt: now,
+    updatedBy: actor.uid,
+  });
+  return publicResponse(state, slides);
+}
+
+function deleteOldDerivedQuestion(
+  transaction: Transaction,
+  state: QuizState,
+  slide: StoredEditorSlide,
+): void {
+  const roundId = slideRoundId(slide);
+  if (roundId !== undefined && slide.data.isQuestion === true) {
+    transaction.delete(state.quizRef.collection('rounds').doc(roundId).collection('questions').doc(slide.id));
+  }
+}
+
+function mapError(error: unknown): never {
+  if (error instanceof HttpsError) throw error;
+  if (error instanceof QuizEditorError) throw new HttpsError(error.code, error.message);
+  throw new HttpsError('internal', 'Quiz editor operation failed.');
+}
+
+export const updateQuizMetadata = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const revision = expectedRevision(request.data);
+    if (!isObject(request.data)) throw new HttpsError('invalid-argument', 'Request data is required.');
+    const metadata = validateQuizMetadata(request.data.quiz);
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      transaction.update(state.quizRef, {
+        ...metadata,
+        revision: state.revision + 1,
+        updatedAt: Timestamp.now(),
+        updatedBy: actor.uid,
+      });
+      return publicResponse(state, state.slides);
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const updateQuizSlide = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const slideId = requiredId(request.data, 'slideId');
+    const revision = expectedRevision(request.data);
+    const input = requestedSlide(request.data);
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      const current = state.slides.find((slide) => slide.id === slideId);
+      if (current === undefined) throw new QuizEditorError('not-found', 'Quiz slide was not found.');
+      const currentIsRound = isRoundKind(storedKind(current));
+      if (currentIsRound !== isRoundKind(input.kind)) {
+        throw new QuizEditorError('invalid-argument', 'Round headers cannot be converted to another slide type.');
+      }
+      const updated = orderedWithPositions(state.slides.map((slide) => {
+        if (slide.id !== slideId) return slide;
+        const data = applyKnownSlideUpdate(slide.data, input);
+        if (slideRoundId(slide) === undefined && data.isQuestion === true) {
+          data.roundId = state.quizRef.collection('rounds').doc().id;
+        }
+        return { id: slide.id, data };
+      }));
+      if (current.data.isQuestion === true && !updated.find((slide) => slide.id === slideId)?.data.isQuestion) {
+        deleteOldDerivedQuestion(transaction, state, current);
+      }
+      const result = writeQuizState(transaction, state, updated, actor);
+      return { ...result, selectedSlideId: slideId };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const createQuizSlide = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const revision = expectedRevision(request.data);
+    const position = requestedPosition(request.data);
+    const input = requestedSlide(request.data);
+    const quizRef = db.collection('quizzes').doc(quizId);
+    const slideRef = quizRef.collection('slides').doc();
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      if (state.slides.length >= maximumSlideCount || position > state.slides.length + 1) {
+        throw new QuizEditorError('invalid-argument', 'Slide position is outside the quiz range.');
+      }
+      const before = state.slides[position - 2];
+      const inheritedRoundId = before === undefined ? undefined : slideRoundId(before);
+      const roundId = isRoundKind(input.kind) || (inheritedRoundId === undefined && isQuestionKind(input.kind))
+        ? quizRef.collection('rounds').doc().id
+        : inheritedRoundId;
+      const created: StoredEditorSlide = {
+        id: slideRef.id,
+        data: createSlideData(input, position, roundId),
+      };
+      const updated = orderedWithPositions([
+        ...state.slides.slice(0, position - 1),
+        created,
+        ...state.slides.slice(position - 1),
+      ]);
+      const result = writeQuizState(transaction, state, updated, actor);
+      return { ...result, selectedSlideId: slideRef.id };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const duplicateQuizSlide = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const slideId = requiredId(request.data, 'slideId');
+    const revision = expectedRevision(request.data);
+    const quizRef = db.collection('quizzes').doc(quizId);
+    const duplicateRef = quizRef.collection('slides').doc();
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      if (state.slides.length >= maximumSlideCount) {
+        throw new QuizEditorError('failed-precondition', 'Quiz reached the safe slide limit.');
+      }
+      const index = state.slides.findIndex((slide) => slide.id === slideId);
+      const source = state.slides[index];
+      if (source === undefined) throw new QuizEditorError('not-found', 'Quiz slide was not found.');
+      const data = duplicateSlideData(source.data, index + 2);
+      if (isRoundKind(storedKind(source))) data.roundId = quizRef.collection('rounds').doc().id;
+      const duplicate: StoredEditorSlide = { id: duplicateRef.id, data };
+      const updated = orderedWithPositions([
+        ...state.slides.slice(0, index + 1), duplicate, ...state.slides.slice(index + 1),
+      ]);
+      const result = writeQuizState(transaction, state, updated, actor);
+      return { ...result, selectedSlideId: duplicateRef.id };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const deleteQuizSlide = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const slideId = requiredId(request.data, 'slideId');
+    const revision = expectedRevision(request.data);
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      if (state.slides.length <= 1) {
+        throw new QuizEditorError('failed-precondition', 'A quiz must keep at least one slide.');
+      }
+      const current = state.slides.find((slide) => slide.id === slideId);
+      if (current === undefined) throw new QuizEditorError('not-found', 'Quiz slide was not found.');
+      const roundId = slideRoundId(current);
+      if (isRoundKind(storedKind(current)) && roundId !== undefined
+        && state.slides.some((slide) => slide.id !== slideId && slideRoundId(slide) === roundId)) {
+        throw new QuizEditorError('failed-precondition', 'Move or delete the slides in this round before deleting its header.');
+      }
+      deleteOldDerivedQuestion(transaction, state, current);
+      transaction.delete(state.quizRef.collection('slides').doc(slideId));
+      const updated = orderedWithPositions(state.slides.filter((slide) => slide.id !== slideId));
+      if (roundId !== undefined && !updated.some((slide) => slideRoundId(slide) === roundId)) {
+        transaction.delete(state.quizRef.collection('rounds').doc(roundId));
+      }
+      const result = writeQuizState(transaction, state, updated, actor);
+      return { ...result, selectedSlideId: updated[Math.min((current.data.position as number) - 1, updated.length - 1)]?.id };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const moveQuizSlide = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const slideId = requiredId(request.data, 'slideId');
+    const revision = expectedRevision(request.data);
+    const direction = requestedDirection(request.data);
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      const index = state.slides.findIndex((slide) => slide.id === slideId);
+      if (index < 0) throw new QuizEditorError('not-found', 'Quiz slide was not found.');
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= state.slides.length) {
+        throw new QuizEditorError('invalid-argument', 'Slide cannot move outside the quiz.');
+      }
+      const reordered = [...state.slides];
+      const target = reordered[targetIndex];
+      const current = reordered[index];
+      if (target === undefined || current === undefined) throw new QuizEditorError('failed-precondition', 'Slide order is malformed.');
+      reordered[index] = target;
+      reordered[targetIndex] = current;
+      const updated = orderedWithPositions(reordered);
+      const result = writeQuizState(transaction, state, updated, actor);
+      return { ...result, selectedSlideId: slideId };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
