@@ -42,7 +42,7 @@ Projector browser ── read only ───────────────
 Public browser ───── public reads / validated call> public events / Cloud Function
 ```
 
-Sensitive state transitions—team registration, quiz publication, live-state changes, answer reveal, role management, and result finalization—belong in Functions. The server derives authoritative fields such as timestamps, capacity counters, and public projection payloads.
+Sensitive state transitions—team registration, quiz publication, live-state changes, answer reveal, role management, and result finalization—belong in Functions. The implemented live-session callables use Firestore transactions to update the private session and its sanitized public projection atomically. The server derives authoritative fields such as timestamps, revisions, and public projection payloads.
 
 ## Frontend modules
 
@@ -53,14 +53,16 @@ Sensitive state transitions—team registration, quiz publication, live-state ch
 
 Feature folders may be added when real behavior arrives. A generic repository/service abstraction is not required until repeated use proves it valuable.
 
-The first implemented feature is the read-only admin quiz library. `features/quizzes/quizRepository.ts` is a small query and runtime-mapping boundary. It reads only private `quizzes`, nested `rounds`, and nested `questions`; its UI view model deliberately omits correct answers. V1-migrated quizzes additionally keep a private, globally ordered `slides` source stream so intro, agenda, recap, end, and other presentation records are not forced into question documents. That stream is not a projector API. A future trusted Function must derive the deliberately sanitized `publicSessions` state from private source data.
+The first implemented feature is the read-only admin quiz library. `features/quizzes/quizRepository.ts` is a small query and runtime-mapping boundary. It reads only private `quizzes`, nested `rounds`, and nested `questions`; its UI view model deliberately omits correct answers. V1-migrated quizzes additionally keep a private, globally ordered `slides` source stream so intro, agenda, recap, end, and other presentation records are not forced into question documents. That stream is not a projector API; trusted Functions derive the deliberately sanitized `publicSessions` state from private source data.
+
+The live feature now provides that trusted boundary. Staff control `/admin/live/:sessionId`, while anonymous `/projector/:sessionId` subscribes only to one `publicSessions` document. `functions/src/live/publication.ts` is the single allowlist-based PRIVATE → PUBLIC mapper. The projector refuses cached snapshots and clears visible state when the browser goes offline, preventing an old revealed answer from lingering after a disconnected slide transition.
 
 ## Firebase services
 
 - Authentication: staff sign-in; role authorization via custom claims.
 - Firestore: operational and public projection data.
 - Storage: quiz media, with metadata/access controlled by Firestore and Rules.
-- Functions: validation, authorization, transactions, sanitized publication, and other trusted operations.
+- Functions: validation, explicit staff authorization, revision-checked live transactions, sanitized publication, and other trusted operations.
 - Hosting: Vite static build with SPA rewrites.
 
 ## Environments
@@ -73,4 +75,4 @@ No production project identifiers or credentials are stored in this repository.
 
 ## Testing strategy
 
-The current foundation uses static checks and production builds. As features arrive, add unit tests, emulator Rules tests, Functions integration tests, focused component tests, and a small end-to-end smoke suite.
+The quality gate includes static checks, production builds, unit/migration tests, Firestore Rules emulator tests, and a live-session Auth/Firestore/Functions emulator E2E flow. Future UI depth should add focused component and browser automation tests.
