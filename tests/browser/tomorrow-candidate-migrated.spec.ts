@@ -32,11 +32,14 @@ test('candidate opens every round and question forward and backward without stal
   }
   const questions = page.locator('.outline-question');
   await expect(questions).toHaveCount(manifest.candidate.questions);
+  let peakPlayerHosts = 0;
   for (let index = 0; index < manifest.candidate.questions; index += 1) {
     await questions.nth(index).click();
     await expect(questions.nth(index)).toHaveClass(/selected/u);
     await expect(page.locator('.question-form')).toBeVisible();
-    await expect(page.locator('.youtube-player-shell')).toHaveCount(0);
+    const playerHosts = await page.locator('.youtube-player-shell').count();
+    peakPlayerHosts = Math.max(peakPlayerHosts, playerHosts);
+    expect(playerHosts).toBeLessThanOrEqual(1);
     await expect(page.locator('.slide-answer')).toHaveCount(0);
   }
   for (let index = manifest.candidate.questions - 1; index >= 0; index -= 1) {
@@ -44,6 +47,13 @@ test('candidate opens every round and question forward and backward without stal
     await expect(questions.nth(index)).toHaveClass(/selected/u);
     await expect(page.locator('.question-form')).toBeVisible();
   }
+  await questions.first().click();
+  await expect(page.locator('.youtube-player-shell')).toHaveCount(0);
+  const playerDiagnostics = await page.evaluate(() => window.__FILMOVY_KVIZ_MEDIA_DEBUG__);
+  expect(peakPlayerHosts).toBe(1);
+  expect(playerDiagnostics?.activePlayers ?? 0).toBe(0);
+  expect(playerDiagnostics?.peakPlayers ?? 0).toBeLessThanOrEqual(1);
+  expect(playerDiagnostics?.createdPlayers ?? 0).toBe(playerDiagnostics?.destroyedPlayers ?? 0);
 
   await page.goto(`${baseURL}/admin/quizzes/${encodeURIComponent(manifest.candidate.quizId)}/readiness`);
   const readiness = page.locator('[data-preflight-status]');
