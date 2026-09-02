@@ -51,6 +51,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ['tools/**/*.mjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
     files: ['tests/**/*.tsx'],
     rules: {
       '@typescript-eslint/require-await': 'off',

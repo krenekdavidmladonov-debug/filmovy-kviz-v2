@@ -23,18 +23,12 @@ import {
   getFunctions,
   httpsCallable,
 } from 'firebase/functions';
+import { requireFullEmulatorEnvironment } from '../../tools/local-emulator-environment.mjs';
 
-const projectId = globalThis.process.env.GCLOUD_PROJECT ?? globalThis.process.env.GOOGLE_CLOUD_PROJECT;
-if (!projectId?.startsWith('demo-')) throw new Error('Editor E2E requires a demo-* project ID.');
-if (!['127.0.0.1:8080', 'localhost:8080'].includes(globalThis.process.env.FIRESTORE_EMULATOR_HOST)) {
-  throw new Error('Editor E2E requires the local Firestore Emulator.');
-}
-if (!['127.0.0.1:9099', 'localhost:9099'].includes(globalThis.process.env.FIREBASE_AUTH_EMULATOR_HOST)) {
-  throw new Error('Editor E2E requires the local Authentication Emulator.');
-}
-if (!['127.0.0.1:5001', 'localhost:5001'].includes(globalThis.process.env.FUNCTIONS_EMULATOR_HOST)) {
-  throw new Error('Editor E2E requires the local Functions Emulator.');
-}
+const { projectId, authEndpoint, firestoreEndpoint, functionsEndpoint } = requireFullEmulatorEnvironment(
+  globalThis.process.env,
+  'Editor E2E',
+);
 
 const app = initializeApp({
   apiKey: 'demo-api-key', authDomain: `${projectId}.firebaseapp.com`, projectId,
@@ -43,9 +37,9 @@ const app = initializeApp({
 const auth = getAuth(app);
 const db = getFirestore(app);
 const functions = getFunctions(app, 'europe-west1');
-connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-connectFirestoreEmulator(db, '127.0.0.1', 8080);
-connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+connectAuthEmulator(auth, `http://${authEndpoint.host}:${authEndpoint.port}`, { disableWarnings: true });
+connectFirestoreEmulator(db, firestoreEndpoint.host, firestoreEndpoint.port);
+connectFunctionsEmulator(functions, functionsEndpoint.host, functionsEndpoint.port);
 
 const quizId = 'quiz-editor-e2e';
 const quizRef = doc(db, 'quizzes', quizId);

@@ -10,6 +10,7 @@ export default defineConfig({
       'tests/quizEditor.test.ts',
       'tests/presentation.test.ts',
       'tests/presentationComponents.test.tsx',
+      'tests/localEmulatorEnvironment.test.ts',
       'tools/migration-v1/test/**/*.test.ts',
     ],
   },

@@ -6,19 +6,12 @@ import {
   collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore, orderBy, query,
 } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
+import { requireFullEmulatorEnvironment } from '../../tools/local-emulator-environment.mjs';
 
-const projectId = globalThis.process.env.GCLOUD_PROJECT ?? globalThis.process.env.GOOGLE_CLOUD_PROJECT;
-if (!projectId?.startsWith('demo-')) throw new Error('Migrated editor E2E requires a demo-* project ID.');
-
-function localEndpoint(value, label) {
-  const match = /^(127\.0\.0\.1|localhost):(\d+)$/u.exec(value ?? '');
-  if (!match) throw new Error(`Migrated editor E2E requires the local ${label} Emulator.`);
-  return { host: match[1], port: Number(match[2]) };
-}
-
-const firestoreEndpoint = localEndpoint(globalThis.process.env.FIRESTORE_EMULATOR_HOST, 'Firestore');
-const authEndpoint = localEndpoint(globalThis.process.env.FIREBASE_AUTH_EMULATOR_HOST, 'Authentication');
-const functionsEndpoint = localEndpoint(globalThis.process.env.FUNCTIONS_EMULATOR_HOST, 'Functions');
+const { projectId, authEndpoint, firestoreEndpoint, functionsEndpoint } = requireFullEmulatorEnvironment(
+  globalThis.process.env,
+  'Migrated editor E2E',
+);
 
 const app = initializeApp({
   apiKey: 'demo-api-key', authDomain: `${projectId}.firebaseapp.com`, projectId,
