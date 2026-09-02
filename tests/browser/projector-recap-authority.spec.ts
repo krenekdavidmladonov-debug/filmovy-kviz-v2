@@ -40,9 +40,9 @@ async function installAnswerRenderCounter(page: Page, channelName: string): Prom
 async function advanceToRecap(moderator: Page): Promise<void> {
   for (let position = 1; position <= 7; position += 1) {
     await moderator.getByRole('button', { name: 'Další →' }).click();
-    await expect(moderator.getByText(`${position} / 9`, { exact: true })).toBeVisible();
+    await expect(moderator.locator('.focused-live-shell')).toHaveAttribute('data-current-position', String(position));
   }
-  await expect(moderator.getByText('Rekapitulace · libovolné pořadí')).toBeVisible();
+  await expect(moderator.locator('.live-progress strong')).toHaveText('Rekapitulace');
 }
 
 async function latestState(page: Page): Promise<Record<string, unknown>> {
@@ -166,7 +166,7 @@ test('answer-bearing BroadcastChannel state renders zero times on two projectors
   }
 
   const authoritativeStart = Date.now();
-  await moderator.getByRole('button', { name: '2', exact: true }).click();
+  await moderator.getByRole('button', { name: 'Zobrazit odpověď na otázku 1' }).click();
   await expect(projectorA.locator('.slide-answer strong')).toHaveText(confirmedAnswer);
   await expect(projectorB.locator('.slide-answer strong')).toHaveText(confirmedAnswer);
   await expect(projectorA.getByAltText('Obrázek odpovědi')).toHaveCount(1);
@@ -184,7 +184,7 @@ test('answer-bearing BroadcastChannel state renders zero times on two projectors
     revision: Number(firstAnswerState.revision) + 1,
   });
   await projectorA.waitForTimeout(150);
-  await moderator.getByRole('button', { name: '4', exact: true }).click();
+  await moderator.getByRole('button', { name: 'Zobrazit odpověď na otázku 2' }).click();
   await expect(projectorA.locator('.slide-answer strong')).toHaveText('Obrázek');
   await expect(projectorB.locator('.slide-answer strong')).toHaveText('Obrázek');
   for (const projector of [projectorA, projectorB]) {

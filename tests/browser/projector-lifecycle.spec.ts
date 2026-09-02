@@ -45,7 +45,7 @@ async function installYouTubeMock(page: Page): Promise<void> {
 
 async function nextSlide(moderator: Page, position: number): Promise<void> {
   await moderator.getByRole('button', { name: 'Další →' }).click();
-  await expect(moderator.getByText(`${position} / 9`, { exact: true })).toBeVisible();
+  await expect(moderator.locator('.focused-live-shell')).toHaveAttribute('data-current-position', String(position));
 }
 
 test('audio error/retry, stale callback, video fallback and projector refresh', async ({ browser, baseURL }) => {
@@ -72,11 +72,11 @@ test('audio error/retry, stale callback, video fallback and projector refresh', 
   for (let position = 1; position <= 5; position += 1) await nextSlide(moderator, position);
   await expect(projector.getByText('Syntetická audio otázka', { exact: true })).toBeVisible();
 
-  await moderator.getByRole('button', { name: 'PLAY', exact: true }).click();
-  await expect(moderator.getByText('Médium není dostupné. Moderátor může pokračovat textovou otázkou.')).toBeVisible();
+  await moderator.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(moderator.getByText('Video nelze přehrát z YouTube')).toBeVisible();
   await expect(projector.locator('.vinyl-visual.is-playing')).toHaveCount(0);
 
-  await moderator.getByRole('button', { name: 'REPLAY', exact: true }).click();
+  await moderator.getByRole('button', { name: 'Pustit znovu', exact: true }).click();
   await expect(projector.locator('.vinyl-visual.is-playing')).toBeVisible();
   await moderator.evaluate(() => {
     const mock = (window as unknown as {
@@ -89,8 +89,8 @@ test('audio error/retry, stale callback, video fallback and projector refresh', 
 
   await nextSlide(moderator, 6);
   await expect(projector.getByText('Syntetická video otázka', { exact: true })).toBeVisible();
-  await moderator.getByRole('button', { name: 'PLAY', exact: true }).click();
-  await expect(moderator.getByText('Projektor médium nepřehrál. Otázka zůstala zobrazená; použijte REPLAY pro nový pokus.')).toBeVisible();
+  await moderator.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(moderator.getByText('Médium se na projektoru nepřehrálo')).toBeVisible();
   await expect(projector.getByText('Syntetická video otázka', { exact: true })).toBeVisible();
   await expect(projector.locator('.video-presentation')).toHaveCount(0);
   await expect(projector.locator('.projector-media-error')).toHaveCount(0);
