@@ -1,5 +1,14 @@
 # Round-first quiz editor
 
+## Documentation map
+
+- This document is the canonical implemented behavior and persistence contract.
+- [ROUND_FIRST_EDITOR_USER_GUIDE.md](ROUND_FIRST_EDITOR_USER_GUIDE.md) explains the administrator/moderator workflow.
+- [ROUND_FIRST_EDITOR_DEVELOPER_GUIDE.md](ROUND_FIRST_EDITOR_DEVELOPER_GUIDE.md) maps the implementation and extension rules.
+- [ROUND_FIRST_EDITOR_TESTING.md](ROUND_FIRST_EDITOR_TESTING.md) contains local operation, quality-gate, browser, migrated-data, and release procedures.
+- [ROUND_FIRST_EDITOR_IMPLEMENTATION_REPORT.md](ROUND_FIRST_EDITOR_IMPLEMENTATION_REPORT.md) records the sanitized completion evidence.
+- [UX_IMPLEMENTATION_FOLLOWUPS.md](UX_IMPLEMENTATION_FOLLOWUPS.md) records intentionally deferred work.
+
 ## Product model
 
 The focused editor at `/admin/quizzes/:quizId/edit` presents the private lossless slide stream as **quiz → rounds → questions**. The left outline contains the opening screen, generated agenda, editable rules, round settings, locally numbered questions, and one system recap entry per round. Positions, stored kind aliases, Firestore revisions, and legacy payloads stay out of the ordinary workflow.
