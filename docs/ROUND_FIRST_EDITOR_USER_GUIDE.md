@@ -192,7 +192,11 @@ After every structural operation, positions and local numbers are derived again.
 
 Validation appears after a field has been left, a Save is attempted, media is tested, or **Check readiness** is selected. The editor does not display errors on every keystroke.
 
-The selected question receives a local readiness summary for question content, answer, media, and timing as applicable. The outline displays an issue badge without displaying the private answer. This is not yet a whole-quiz publication preflight.
+The selected question receives inline validation for question content, answer, media, and timing as applicable. The outline displays an issue badge without displaying the private answer.
+
+**Připravenost** in the editor header runs a whole-quiz check. For the selected item it uses the current local draft; the rest comes from the saved quiz. The panel states this source explicitly. Each question issue identifies its round, local question number, and type; **Opravit** selects that semantic question and focuses the relevant field when possible. Unsaved changes block live start until they are saved.
+
+Quiz detail offers **Zkontrolovat připravenost**. **Spustit kvíz** goes through the same saved-quiz check: blockers disable start, warnings require an explicit acknowledgement and **Spustit i tak**, and a clean quiz offers the normal start action.
 
 ## Preview and answer privacy
 
@@ -211,7 +215,7 @@ Mobile supports structure browsing, common question edits, readiness, saving, an
 ## Current intentional limits
 
 - Unsaved drafts cannot be opened in a separate projector window. A future design requires an isolated local transport and must not reuse `publicSessions`.
-- Readiness covers the selected content, not the complete quiz publication contract.
+- Static readiness cannot guarantee external media availability, YouTube embed/playability, browser autoplay, projector presence, fullscreen, or offline operation.
 - Media accepts the existing URL/reference mechanism; Storage upload and lifecycle management are separate work.
 - Generated agenda is derived in the editor while authored legacy agenda payload is conservatively preserved.
 - Quiz creation, events, registration, scoring, leaderboard, referee tools, PDF, and email are outside this editor phase.

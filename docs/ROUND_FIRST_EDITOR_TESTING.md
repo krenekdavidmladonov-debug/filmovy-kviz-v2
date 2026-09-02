@@ -85,6 +85,7 @@ Unit/component coverage includes:
 - dirty/save/failure/navigation state;
 - immediate local preview without public publication;
 - preservation of unknown and legacy shapes.
+- whole-quiz preflight severity, structure, answer, image, media/timing, PL, draft, and private-value exclusion rules.
 
 ## Synthetic emulator E2E
 
@@ -113,7 +114,7 @@ The editor E2E verifies:
 
 Synthetic browser and script-based E2E use distinct quiz fixture IDs. This allows `live → editor → browser` and `browser → editor → live` to run against the same fresh emulator seed without a suite inheriting another suite's quiz revision.
 
-The complete browser suite also protects projector media lifecycle, recap answer authority, focused-shell behavior, and responsive editor behavior.
+The complete browser suite also protects projector media lifecycle, recap answer authority, focused-shell behavior, responsive editor behavior, and the preflight detail/editor/live-start workflow.
 
 ## Browser QA matrix
 
@@ -166,7 +167,7 @@ pnpm migration:v1:verify-emulator
 pnpm seed:auth
 pnpm test:e2e:editor-migrated
 $env:MIGRATED_EDITOR_E2E = '1'
-pnpm exec playwright test tests/browser/round-first-editor-migrated.spec.ts --config playwright.config.ts
+pnpm exec playwright test tests/browser/round-first-editor-migrated.spec.ts tests/browser/quiz-preflight-migrated.spec.ts --config playwright.config.ts
 Remove-Item Env:MIGRATED_EDITOR_E2E
 Remove-Item Env:FIRESTORE_EMULATOR_HOST
 Remove-Item Env:GCLOUD_PROJECT
@@ -196,7 +197,7 @@ For every migrated quiz the E2E contract is:
 open -> edit one safe field -> save -> reload -> verify -> restore
 ```
 
-The independent emulator verifier must still pass afterward. The migrated browser suite verifies that all four quizzes open through the real editor facade, all rounds/questions are accessible, PL is represented, and the largest quiz remains responsive.
+The independent emulator verifier must still pass afterward. The migrated browser suites verify that all four quizzes open through the real editor facade, all rounds/questions are accessible, PL is represented, the largest quiz remains responsive, and all 263 questions produce a sanitised readiness result without answer values, question copy, media URLs, notes, or raw legacy data in the report.
 
 ## Security regression checklist
 

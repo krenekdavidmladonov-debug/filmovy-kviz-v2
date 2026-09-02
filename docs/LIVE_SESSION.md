@@ -53,7 +53,7 @@ Each private/public state carries a monotonic `revision`. A client must send the
 
 ## UI workflow
 
-Staff start a quiz from its private detail page and are routed to `/admin/live/:sessionId`. The control subscribes to the private session/current slide, shows the current answer only to staff, and offers previous, next, reveal/hide, end, and a projector link.
+Staff start a quiz from its private detail page through `/admin/quizzes/:quizId/readiness`. Blockers disable the normal start; warning-only results require explicit acknowledgement; a clean saved quiz starts normally after one fresh bounded recheck. The current practice gate is a staff UI policy and does not change the callable authorization/publication contract. After creation, staff are routed to `/admin/live/:sessionId`. The control subscribes to the private session/current slide, shows the current answer only to staff, and offers previous, next, reveal/hide, end, and a projector link.
 
 `/projector/:sessionId` requires no login and subscribes only to the public document. It renders waiting, active slide, selected recap answer, ended, not-found, loading, and connection-safe states through the shared `SlideRenderer`. Normal AUDIO playback stays on the moderator device and publishes no source to the projector. VIDEO and recap media use the explicit revisioned PLAY/STOP/REPLAY lifecycle described in `MEDIA_ARCHITECTURE.md`. A media ownership/upload subsystem remains intentionally deferred.
 

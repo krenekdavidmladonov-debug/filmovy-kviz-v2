@@ -14,6 +14,7 @@ The implementation must preserve these invariants:
 6. Every editor write is an admin-only callable Function with an expected revision.
 7. Firestore Rules deny direct client quiz writes for both admins and moderators.
 8. Projector publication, BroadcastChannel authority, and media lifecycle semantics are outside this facade.
+9. Whole-quiz preflight is derived and ephemeral; it never persists validation truth or publishes private findings.
 
 ## Architecture
 
@@ -55,6 +56,9 @@ The semantic model is derived on read. The server mutates the stored lossless mo
 | `apps/web/src/features/editor/EditorForms.tsx` | Quiz, system, round, question, readiness, media timing, and preview forms. |
 | `apps/web/src/features/editor/EditorDialogs.tsx` | Unsaved-change and round-removal native dialogs. |
 | `apps/web/src/features/editor/validation.ts` | Client question validation and correct-option matching. |
+| `apps/web/src/features/preflight/validation.ts` | Whole-quiz structure validation, shared issue aggregation, draft overlay, and semantic fix URLs. |
+| `apps/web/src/features/preflight/QuizPreflightPanel.tsx` | Human Czech readiness summary and issue actions. |
+| `apps/web/src/routes/admin/QuizPreflightPage.tsx` | Saved-quiz readiness route and normal practice/live start policy. |
 | `apps/web/src/features/editor/time.ts` | Human timing parsing, formatting, and duration. |
 | `apps/web/src/features/editor/sessionState.ts` | Save labels and navigation-decision predicate. |
 | `apps/web/src/features/editor/editorRepository.ts` | Private Firestore reads. |
@@ -82,6 +86,9 @@ The semantic model is derived on read. The server mutates the stored lossless mo
 | `tests/e2e/quiz-editor-migrated-emulator.mjs` | Sanitized structural verification and safe round trips against all offline migrated quiz shapes. |
 | `tests/browser/round-first-editor.spec.ts` | Human workflow and responsive synthetic browser QA. |
 | `tests/browser/round-first-editor-migrated.spec.ts` | All four offline migrated quizzes through the real editor UI. |
+| `tests/quizPreflight.test.ts` | Shared blocker/warning/status and private-value exclusion contract. |
+| `tests/browser/quiz-preflight.spec.ts` | Detail/editor/live policy, semantic fix links, dirty drafts, and responsive QA. |
+| `tests/browser/quiz-preflight-migrated.spec.ts` | Sanitized whole-quiz readiness and performance over all four offline migrated quizzes. |
 
 ## Semantic model
 

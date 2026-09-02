@@ -7,6 +7,7 @@
 - [ROUND_FIRST_EDITOR_DEVELOPER_GUIDE.md](ROUND_FIRST_EDITOR_DEVELOPER_GUIDE.md) maps the implementation and extension rules.
 - [ROUND_FIRST_EDITOR_TESTING.md](ROUND_FIRST_EDITOR_TESTING.md) contains local operation, quality-gate, browser, migrated-data, and release procedures.
 - [ROUND_FIRST_EDITOR_IMPLEMENTATION_REPORT.md](ROUND_FIRST_EDITOR_IMPLEMENTATION_REPORT.md) records the sanitized completion evidence.
+- [QUIZ_PREFLIGHT.md](QUIZ_PREFLIGHT.md) defines the implemented whole-quiz readiness contract.
 - [UX_IMPLEMENTATION_FOLLOWUPS.md](UX_IMPLEMENTATION_FOLLOWUPS.md) records intentionally deferred work.
 
 ## Product model
@@ -37,6 +38,8 @@ The visible states are Uloženo, Ukládám…, Neuložené změny, and Uložení
 
 Inline validation appears after a touched field, Save, media testing, or the local readiness action. Blocking rules cover required prompts/answers, option consistency, image source, media source, and finite ordered clip timing. The outline shows issue status without revealing answer data.
 
+The editor header also opens a whole-quiz preflight panel. It overlays the currently selected local draft on the saved remainder of the quiz, identifies that source explicitly, and blocks live start while any editor draft is dirty. Issue actions use semantic round/question IDs and focus the relevant editor field when practical.
+
 ## Round and question operations
 
 Admins can rename, duplicate, move, and remove rounds, and duplicate, move, reorder, or remove questions. Reordering always derives question numbering from authoritative order. A non-empty round removal names its question count and requires either an explicit destination round or an explicit delete choice; cancel is focused by default.
@@ -65,4 +68,4 @@ The current 63–91-row quizzes do not require virtualization. Semantic indexing
 
 Synthetic unit, Functions, Rules, callable E2E, browser, live/projector regression, and migrated-data suites cover the editor. The local-only migrated check opens all 4 offline V1 quizzes / 315 slides / 23 rounds / 263 questions, round-trips a safe representative of all 10 observed kinds, restores each changed value, and reruns the independent migration verifier without printing private content.
 
-Projecting an unsaved local draft is intentionally deferred. It needs a separate isolated preview-window protocol and must never reuse live `publicSessions`. A whole-quiz preflight engine and Storage upload are also separate features.
+Projecting an unsaved local draft is intentionally deferred. It needs a separate isolated preview-window protocol and must never reuse live `publicSessions`. Controlled online media probing and Storage upload are also separate features. Whole-quiz static preflight is implemented as documented in [QUIZ_PREFLIGHT.md](QUIZ_PREFLIGHT.md).
