@@ -36,6 +36,13 @@ class FakePlayer {
   }
 }
 
+class DomReplacingFakePlayer extends FakePlayer {
+  constructor(element: HTMLElement, options: { readonly events: FakePlayerEvents }) {
+    super(element, options);
+    element.replaceWith(document.createElement('iframe'));
+  }
+}
+
 function installFakeYouTube(): void {
   Object.assign(window, {
     YT: {
@@ -253,6 +260,24 @@ describe('mounted media lifecycle regressions', () => {
       value instanceof HTMLScriptElement && value.dataset.filmovyKvizYoutubeApi === 'true'
     ));
     expect(scriptAttempts).toHaveLength(2);
+    await act(async () => { view.root.unmount(); });
+  });
+
+  test('keeps YouTube DOM replacement behind a stable React-owned boundary', async () => {
+    Object.assign(window, {
+      YT: {
+        Player: DomReplacingFakePlayer,
+        PlayerState: { ENDED: 0, PLAYING: 1 },
+      },
+    });
+    const view = await mounted(<YouTubePlayer source="abcdefghijk" command="play" generation={1} startSeconds={0} />);
+    await act(async () => {
+      view.root.render(<p>Bezpečně nahrazený slide</p>);
+    });
+    expect(view.host.textContent).toContain('Bezpečně nahrazený slide');
+    expect(window.__FILMOVY_KVIZ_MEDIA_DEBUG__).toEqual({
+      activePlayers: 0, peakPlayers: 1, createdPlayers: 1, destroyedPlayers: 1,
+    });
     await act(async () => { view.root.unmount(); });
   });
 

@@ -125,7 +125,6 @@ export function YouTubePlayer({
   const [machine, dispatch] = useReducer(reduceMediaMachine, initialMediaMachineState);
   const [visibleError, setVisibleError] = useState<string>();
   const videoId = youtubeVideoId(source);
-  const hostKey = `${videoId ?? source}:${command}:${generation}:${startSeconds}:${endSeconds ?? ''}`;
 
   useEffect(() => { onFinishedRef.current = onFinished; }, [onFinished]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
@@ -146,8 +145,10 @@ export function YouTubePlayer({
     epochSequenceRef.current = epoch;
     activeEpochRef.current = epoch;
     let cancelled = false;
+    let mountedPlayer: YouTubePlayerInstance | undefined;
     const active = () => !cancelled && activeEpochRef.current === epoch;
     setVisibleError(undefined);
+    hostRef.current?.replaceChildren();
     if (videoId === undefined || hostRef.current === null) {
       const message = 'Zdroj není podporovaný YouTube odkaz ani video ID.';
       dispatch({ type: 'error', generation, message });
@@ -167,7 +168,9 @@ export function YouTubePlayer({
     else dispatch({ type: 'reset', generation });
     void loadYouTubeApi().then((YT) => {
       if (!active() || hostRef.current === null) return;
-      const player = new YT.Player(hostRef.current, {
+      const mountPoint = document.createElement('div');
+      hostRef.current.append(mountPoint);
+      const player = new YT.Player(mountPoint, {
         videoId,
         playerVars: { controls: 1, rel: 0, playsinline: 1, origin: window.location.origin },
         events: {
@@ -217,6 +220,7 @@ export function YouTubePlayer({
           },
         },
       });
+      mountedPlayer = player;
       playerRef.current = player;
       mediaDebug(1);
     }).catch(() => {
@@ -229,17 +233,18 @@ export function YouTubePlayer({
     return () => {
       cancelled = true;
       if (activeEpochRef.current === epoch) activeEpochRef.current = undefined;
-      if (playerRef.current !== undefined) {
-        playerRef.current.destroy();
-        playerRef.current = undefined;
+      if (mountedPlayer !== undefined) {
+        mountedPlayer.destroy();
+        if (playerRef.current === mountedPlayer) playerRef.current = undefined;
         mediaDebug(-1);
       }
+      hostRef.current?.replaceChildren();
     };
   }, [command, endSeconds, generation, startSeconds, videoId]);
 
   return (
     <div className={className ?? 'youtube-player-shell'} data-media-lifecycle={machine.lifecycle} data-player-id={reactId}>
-      <div key={hostKey} ref={hostRef} className="youtube-player-host" />
+      <div ref={hostRef} className="youtube-player-host" />
       {visibleError && <p className="projector-media-error" role="status">Médium není dostupné. Moderátor může pokračovat textovou otázkou.</p>}
     </div>
   );
