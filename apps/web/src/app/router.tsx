@@ -8,6 +8,7 @@ import { AdminNoAccessPage } from '../routes/admin/AdminNoAccessPage';
 import { RequireStaff } from '../routes/admin/RequireStaff';
 import { EventsPage } from '../routes/events/EventsPage';
 import { NotFoundPage } from '../routes/NotFoundPage';
+import { AdminShell } from './AdminShell';
 import { AppLayout } from './AppLayout';
 
 const QuizLibraryPage = lazy(async () => {
@@ -47,23 +48,28 @@ export const router = createBrowserRouter([
   { path: 'projector', element: <LazyProjectorRoute /> },
   { path: 'projector/:sessionId', element: <LazyProjectorRoute /> },
   {
-    element: <AppLayout />,
+    path: 'admin',
+    element: <RequireStaff />,
     children: [
-      { index: true, element: <Navigate to="/events" replace /> },
-      { path: 'admin/login', element: <AdminLoginPage /> },
-      { path: 'admin/no-access', element: <AdminNoAccessPage /> },
+      { path: 'live/:sessionId', element: <LazyAdminRoute><LiveControlPage /></LazyAdminRoute> },
       {
-        path: 'admin',
-        element: <RequireStaff />,
+        element: <AdminShell />,
         children: [
           { index: true, element: <AdminPage /> },
           { path: 'quizzes', element: <LazyAdminRoute><QuizLibraryPage /></LazyAdminRoute> },
           { path: 'quizzes/:quizId', element: <LazyAdminRoute><QuizDetailPage /></LazyAdminRoute> },
           { path: 'quizzes/:quizId/edit', element: <LazyAdminRoute><QuizEditorPage /></LazyAdminRoute> },
-          { path: 'live/:sessionId', element: <LazyAdminRoute><LiveControlPage /></LazyAdminRoute> },
-          { path: '*', element: <NotFoundPage /> },
         ],
       },
+      { path: '*', element: <NotFoundPage /> },
+    ],
+  },
+  {
+    element: <AppLayout />,
+    children: [
+      { index: true, element: <Navigate to="/events" replace /> },
+      { path: 'admin/login', element: <AdminLoginPage /> },
+      { path: 'admin/no-access', element: <AdminNoAccessPage /> },
       { path: 'events', element: <EventsPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],

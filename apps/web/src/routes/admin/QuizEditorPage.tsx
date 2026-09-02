@@ -23,14 +23,15 @@ import { SlidePreview } from '../../features/presentation/SlidePreview';
 import { generatedAgendaOptions } from '../../features/presentation/model';
 import { QuizErrorState } from '../../features/quizzes/QuizErrorState';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
+import { TechnicalDetails } from '../../ui/TechnicalDetails';
 
 const kindLabels: Record<EditableSlideKind, string> = {
   intro: 'Intro', agenda: 'Agenda', rules: 'Pravidla', recap: 'Rekapitulace', end: 'Konec', title: 'Titulek', info: 'Informace',
-  round: 'Hlavička kola', roundheader: 'Hlavička kola (legacy)', 'round-header': 'Hlavička kola (legacy)', section: 'Sekce',
+  round: 'Úvod kola', roundheader: 'Úvod kola (původní)', 'round-header': 'Úvod kola (původní)', section: 'Část kvízu',
   question: 'Otázka', text: 'Textová otázka', classic: 'Klasická otázka', free: 'Volná odpověď',
-  image: 'Obrázková otázka', picture: 'Obrázková otázka (legacy)', photo: 'Foto otázka',
+  image: 'Obrázková otázka', picture: 'Obrázková otázka (původní)', photo: 'Foto otázka',
   audio: 'Audio otázka', music: 'Hudební otázka', video: 'Video otázka', youtube: 'YouTube otázka',
-  pl: 'Legacy PL', legacy: 'Neznámý legacy typ',
+  pl: 'Pravda / lež (původní)', legacy: 'Původní obsah',
 };
 
 const creatableKinds: readonly EditableSlideKind[] = [
@@ -56,7 +57,7 @@ function draftSlide(kind: EditableSlideKind, position: number, agendaOptions: re
       'Hrajte fér.',
       'Během otázek nepoužívejte mobil ani internet.',
       'Respektujte organizátory a ostatní týmy.',
-      'Užijte si filmový večer.',
+      'Užijte si kvízový večer.',
     ] } : {}),
     ...(kind === 'agenda' ? { options: agendaOptions } : {}),
     id: 'new-slide', position, kind, storedKind: kind,
@@ -114,8 +115,10 @@ function TimeField({ label, value, disabled, onChange }: {
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Operaci editoru se nepodařilo dokončit. Zkontrolujte Functions Emulator.';
+  if (error instanceof Error && /aborted|revision|newer|stale/iu.test(error.message)) {
+    return 'Kvíz mezitím upravil někdo jiný. Načtěte aktuální verzi a změnu proveďte znovu.';
+  }
+  return 'Změnu se nepodařilo uložit. Vaše rozepsané hodnoty zůstaly v editoru.';
 }
 
 function numberValue(value: string): number | null {
@@ -149,13 +152,16 @@ function SlideFields({
 
   return (
     <div className="editor-form-stack">
-      <label className="form-field">Typ slidu
+      <label className="form-field">Typ obsahu
         <select value={slide.kind} disabled={disabled || roundLocked || unknownLocked} onChange={(event) => set('kind', event.target.value as EditableSlideKind)}>
           {editableSlideKinds.map((kind) => <option key={kind} value={kind}>{kindLabels[kind]}</option>)}
         </select>
       </label>
       {(unknownLocked || slide.hasLegacyData) && (
-        <p className="legacy-notice">Legacy data jsou soukromá a při uložení zůstanou beze změny. Původní typ: <strong>{slide.storedKind}</strong>.</p>
+        <div className="legacy-notice">
+          <p>Původní data jsou soukromá a při uložení zůstanou beze změny.</p>
+          <TechnicalDetails><code>Původní typ: {slide.storedKind}</code></TechnicalDetails>
+        </div>
       )}
       <label className="form-field">Titulek
         <input value={slide.title} disabled={disabled} onChange={(event) => set('title', event.target.value)} />
@@ -173,7 +179,7 @@ function SlideFields({
           <div className="inline-editor-row" key={index}>
             <span>{index + 1}.</span>
             <input aria-label={`Možnost ${index + 1}`} value={option} onChange={(event) => set('options', slide.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} />
-            <button type="button" className="icon-button" onClick={() => set('options', slide.options.filter((_, itemIndex) => itemIndex !== index))}>×</button>
+            <button type="button" className="icon-button" aria-label={`Odstranit možnost ${index + 1}`} onClick={() => set('options', slide.options.filter((_, itemIndex) => itemIndex !== index))}>×</button>
           </div>
         ))}
         <button type="button" className="secondary-button compact-button" onClick={() => set('options', [...slide.options, ''])}>+ Přidat možnost</button>
@@ -185,7 +191,7 @@ function SlideFields({
 
       {(supportsBackground || imageQuestion || timedMedia) && (
         <fieldset className="editor-fieldset" disabled={disabled}>
-          <legend>Normalizovaná prezentace</legend>
+          <legend>Vzhled a média</legend>
           {supportsBackground && <label className="form-field">Obrázek pozadí
             <input value={slide.backgroundImage} placeholder="https://…" onChange={(event) => set('backgroundImage', event.target.value)} />
           </label>}
@@ -205,16 +211,16 @@ function SlideFields({
             <TimeField label="Začátek segmentu" value={slide.clipStartSeconds} disabled={disabled} onChange={(value) => set('clipStartSeconds', value)} />
             <TimeField label="Konec segmentu" value={slide.clipEndSeconds} disabled={disabled} onChange={(value) => set('clipEndSeconds', value)} />
           </div>}
-          {timedMedia && <p className="field-help">Interně se ukládají sekundy. Konec musí být větší než začátek; prázdný konec se nedohaduje.</p>}
+          {timedMedia && <p className="field-help">Konec musí být později než začátek. Prázdný konec znamená přehrávání bez nastaveného omezení.</p>}
         </fieldset>
       )}
 
       <fieldset className="editor-fieldset" disabled={disabled}>
-        <legend>Média — pouze URL / reference</legend>
+        <legend>Připojená média</legend>
         {slide.media.map((media, index) => (
           <div className="media-editor-row" key={`${media.sourceIndex ?? 'new'}-${index}`}>
             <select aria-label={`Role média ${index + 1}`} value={media.role} onChange={(event) => setMedia(index, { role: event.target.value as EditorMedia['role'] })}>
-              <option value="prompt">zadání</option><option value="background">pozadí</option><option value="answer">odpověď</option><option value="unknown">legacy</option>
+              <option value="prompt">zadání</option><option value="background">pozadí</option><option value="answer">odpověď</option><option value="unknown">původní</option>
             </select>
             <select aria-label={`Typ média ${index + 1}`} value={media.kind} onChange={(event) => setMedia(index, { kind: event.target.value as EditorMedia['kind'] })}>
               <option value="image">obrázek</option><option value="audio">audio</option><option value="video">video</option><option value="unknown">jiné</option>
@@ -224,20 +230,23 @@ function SlideFields({
           </div>
         ))}
         <button type="button" className="secondary-button compact-button" onClick={() => set('media', [...slide.media, { role: 'prompt', kind: 'image', source: '' }])}>+ Přidat médium</button>
-        <p className="field-help">Upload do Storage není součástí Editoru V1.</p>
+        <p className="field-help">Médium zatím přidejte pomocí odkazu.</p>
       </fieldset>
 
-      <fieldset className="editor-fieldset timing-grid" disabled={disabled}>
-        <legend>Prezentace</legend>
-        {(['audioTrigger', 'answerOverlay'] as const).map((field) => (
-          <label key={field}>{field}
-            <input type="number" min="0" value={slide.presentation[field] ?? ''} onChange={(event) => setPresentation(field, numberValue(event.target.value))} />
+      <details className="editor-advanced-settings">
+        <summary>Rozšířené nastavení prezentace</summary>
+        <fieldset className="editor-fieldset timing-grid" disabled={disabled}>
+          <legend className="visually-hidden">Rozšířené nastavení prezentace</legend>
+          {(['audioTrigger', 'answerOverlay'] as const).map((field) => (
+            <label key={field}>{field === 'audioTrigger' ? 'Čas spuštění zvuku' : 'Ztmavení obrázku odpovědi'}
+              <input type="number" min="0" value={slide.presentation[field] ?? ''} onChange={(event) => setPresentation(field, numberValue(event.target.value))} />
+            </label>
+          ))}
+          <label>Původní číslo otázky
+            <input value={slide.presentation.sourceQuestionNumber ?? ''} onChange={(event) => setPresentation('sourceQuestionNumber', event.target.value || null)} />
           </label>
-        ))}
-        <label>Číslo otázky ze zdroje
-          <input value={slide.presentation.sourceQuestionNumber ?? ''} onChange={(event) => setPresentation('sourceQuestionNumber', event.target.value || null)} />
-        </label>
-      </fieldset>
+        </fieldset>
+      </details>
     </div>
   );
 }
@@ -305,7 +314,7 @@ export function QuizEditorPage() {
   const selectedStored = useMemo(() => quiz?.slides.find((slide) => slide.id === selectedId), [quiz, selectedId]);
 
   function selectSlide(slide: EditorSlide) {
-    if (dirtySlide && !window.confirm('Zahodit neuložené změny aktuálního slidu?')) return;
+    if (dirtySlide && !window.confirm('Zahodit neuložené změny aktuálního obsahu?')) return;
     setSelectedId(slide.id);
     setDraft(slide);
     setDirtySlide(false);
@@ -373,7 +382,7 @@ export function QuizEditorPage() {
   }
 
   if (loading && !quiz) return <QuizLoading label="Načítám editor kvízu…" />;
-  if (!quiz || !draft) return <QuizErrorState message={error ?? 'Kvíz nemá žádný editovatelný slide.'} onRetry={() => void load()} />;
+  if (!quiz || !draft) return <QuizErrorState message={error ?? 'Kvíz nemá žádný upravitelný obsah.'} onRetry={() => void load()} />;
 
   return (
     <article className="quiz-editor">
@@ -392,8 +401,9 @@ export function QuizEditorPage() {
         </div>
         <div className="editor-status">
           {readOnly && <span className="read-only-badge">Pouze pro čtení — moderátor</span>}
-          <span className={dirty ? 'save-state dirty' : 'save-state'}>{saving ? 'Ukládám…' : dirty ? 'Neuložené změny' : `Uloženo · revize ${quiz.revision}`}</span>
-          <button className="primary-button" disabled={readOnly || saving || !dirtySlide} onClick={() => void saveSlide()}>Uložit slide</button>
+          <span className={dirty ? 'save-state dirty' : 'save-state'} role="status" aria-live="polite">{saving ? 'Ukládám…' : dirty ? 'Neuložené změny' : 'Uloženo'}</span>
+          <TechnicalDetails><code>Verze kvízu: {quiz.revision}</code></TechnicalDetails>
+          <button className="primary-button" disabled={readOnly || saving || !dirtySlide} onClick={() => void saveSlide()}>Uložit obsah</button>
         </div>
       </header>
 
@@ -406,9 +416,9 @@ export function QuizEditorPage() {
 
       <section className="editor-grid">
         <aside className="slide-navigator">
-          <header><strong>{quiz.slideCount} slidů</strong><span>{quiz.roundCount} kol · {quiz.questionCount} otázek</span></header>
+          <header><strong>{quiz.slideCount} položek obsahu</strong><span>{quiz.roundCount} kol · {quiz.questionCount} otázek</span></header>
           <div className="slide-actions">
-            <select aria-label="Typ nového slidu" id="new-slide-kind" defaultValue="question" disabled={readOnly || saving}>
+            <select aria-label="Typ nového obsahu" id="new-slide-kind" defaultValue="question" disabled={readOnly || saving}>
               {creatableKinds.map((kind) => <option key={kind} value={kind}>{kindLabels[kind]}</option>)}
             </select>
             <button className="secondary-button compact-button" disabled={readOnly || saving} onClick={() => {
@@ -424,7 +434,7 @@ export function QuizEditorPage() {
               <li key={slide.id}>
                 <button className={slide.id === selectedId ? 'selected' : ''} onClick={() => selectSlide(slide)}>
                   <span>{slide.position}</span>
-                  <div><strong>{slide.title || kindLabels[slide.kind]}</strong><small>{slide.storedKind}{slide.roundId ? ' · kolo' : ''}</small></div>
+                  <div><strong>{slide.title || kindLabels[slide.kind]}</strong><small>{kindLabels[slide.kind]}{slide.roundId ? ' · součást kola' : ''}</small></div>
                 </button>
               </li>
             ))}
@@ -433,13 +443,13 @@ export function QuizEditorPage() {
 
         <main className="slide-editor-panel">
           <header className="panel-heading">
-            <div><span>Slide {draft.position}</span><h2>{draft.title || kindLabels[draft.kind]}</h2></div>
+            <div><span>Obsah {draft.position}</span><h2>{draft.title || kindLabels[draft.kind]}</h2></div>
             <div className="slide-structure-actions">
-              <button className="icon-button" title="Posunout nahoru" disabled={readOnly || saving || draft.position === 1} onClick={() => void mutate(() => moveQuizSlide(quiz.id, quiz.revision, draft.id, -1))}>↑</button>
-              <button className="icon-button" title="Posunout dolů" disabled={readOnly || saving || draft.position === quiz.slideCount} onClick={() => void mutate(() => moveQuizSlide(quiz.id, quiz.revision, draft.id, 1))}>↓</button>
+              <button className="icon-button" title="Posunout nahoru" aria-label={`Posunout obsah ${draft.position} nahoru`} disabled={readOnly || saving || draft.position === 1} onClick={() => void mutate(() => moveQuizSlide(quiz.id, quiz.revision, draft.id, -1))}>↑</button>
+              <button className="icon-button" title="Posunout dolů" aria-label={`Posunout obsah ${draft.position} dolů`} disabled={readOnly || saving || draft.position === quiz.slideCount} onClick={() => void mutate(() => moveQuizSlide(quiz.id, quiz.revision, draft.id, 1))}>↓</button>
               <button className="secondary-button compact-button" disabled={readOnly || saving} onClick={() => void mutate(() => duplicateQuizSlide(quiz.id, quiz.revision, draft.id))}>Duplikovat</button>
               <button className="danger-button compact-button" disabled={readOnly || saving || quiz.slideCount <= 1} onClick={() => {
-                if (window.confirm('Opravdu smazat tento slide?')) void mutate(() => deleteQuizSlide(quiz.id, quiz.revision, draft.id));
+                if (window.confirm('Opravdu smazat tento obsah?')) void mutate(() => deleteQuizSlide(quiz.id, quiz.revision, draft.id));
               }}>Smazat</button>
             </div>
           </header>
@@ -447,10 +457,10 @@ export function QuizEditorPage() {
         </main>
 
         <aside className="editor-preview-panel">
-          <header className="panel-heading"><div><span>Projektor</span><h2>Živý náhled</h2></div></header>
+          <header className="panel-heading"><div><span>Projektor</span><h2>Náhled projektoru</h2></div></header>
           <SlidePreview slide={draft} quizTitle={title || quiz.title} position={draft.position} showAnswer={showAnswer} />
           <label className="answer-preview-toggle"><input type="checkbox" checked={showAnswer} onChange={(event) => setShowAnswer(event.target.checked)} /> Zobrazit správnou odpověď pouze v admin náhledu</label>
-          <p className="field-help">Náhled pracuje jen s lokálním stavem editoru a nezapisuje do veřejné projector session.</p>
+          <p className="field-help">Náhled ukazuje rozepsané změny pouze v tomto editoru. Na živý projektor je neposílá.</p>
         </aside>
       </section>
     </article>

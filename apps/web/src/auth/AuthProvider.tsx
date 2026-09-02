@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       };
     } catch {
       setInitializationError(
-        'Přihlášení není lokálně nakonfigurované. Zkontrolujte Firebase Emulator a soubor .env.local.',
+        'Přihlášení teď není dostupné. Zkuste aplikaci načíst znovu.',
       );
       setLoading(false);
       return () => {

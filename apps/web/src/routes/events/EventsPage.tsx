@@ -4,8 +4,8 @@ export function EventsPage() {
   return (
     <SurfacePlaceholder
       eyebrow="Veřejná část"
-      title="Nadcházející filmové kvízy"
-      description="Zde bude bezpečný veřejný seznam akcí, informace o kapacitě a serverově validovaná registrace týmů."
+      title="Nadcházející kvízy"
+      description="Zde bude bezpečný veřejný seznam akcí, informace o kapacitě a ověřená registrace týmů."
       status="Žádné akce k zobrazení"
     />
   );

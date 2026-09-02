@@ -5,7 +5,7 @@ const messages: Readonly<Record<string, string>> = {
   'auth/invalid-email': 'Zadejte platnou e-mailovou adresu.',
   'auth/missing-password': 'Zadejte heslo.',
   'auth/too-many-requests': 'Příliš mnoho pokusů. Chvíli počkejte a zkuste to znovu.',
-  'auth/network-request-failed': 'Přihlášení se nemůže spojit s Authentication Emulatorem.',
+  'auth/network-request-failed': 'Přihlášení je dočasně nedostupné. Zkontrolujte připojení a zkuste to znovu.',
   'auth/user-disabled': 'Tento účet je deaktivovaný.',
 };
 

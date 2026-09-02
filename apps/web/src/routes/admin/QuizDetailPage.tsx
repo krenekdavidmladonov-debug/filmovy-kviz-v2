@@ -1,3 +1,4 @@
+import { FirebaseError } from 'firebase/app';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
@@ -13,6 +14,7 @@ import {
 } from '../../features/quizzes/presentation';
 import { getQuizDetail } from '../../features/quizzes/quizRepository';
 import type { QuizDetail } from '../../features/quizzes/types';
+import { HumanError, type HumanErrorValue } from '../../ui/HumanError';
 
 export function QuizDetailPage() {
   const { quizId } = useParams<{ quizId: string }>();
@@ -22,7 +24,7 @@ export function QuizDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
+  const [startError, setStartError] = useState<HumanErrorValue | null>(null);
 
   const loadQuiz = useCallback(async () => {
     if (!quizId) {
@@ -57,8 +59,14 @@ export function QuizDetailPage() {
     try {
       const session = await createLiveSession(quizId);
       void navigate(`/admin/live/${encodeURIComponent(session.sessionId)}`);
-    } catch {
-      setStartError('Live session se nepodařilo vytvořit. Kvíz musí mít ordered slides a Functions Emulator musí běžet.');
+    } catch (startFailure) {
+      setStartError({
+        title: 'Kvíz se nepodařilo spustit',
+        message: 'Kvíz zůstal beze změny. Zkontrolujte připojení a zkuste to znovu.',
+        technicalCode: startFailure instanceof FirebaseError
+          ? startFailure.code.toUpperCase().replaceAll('/', '_').replaceAll('-', '_')
+          : 'LIVE_SESSION_CREATE_FAILED',
+      });
     } finally {
       setStarting(false);
     }
@@ -102,13 +110,12 @@ export function QuizDetailPage() {
           <dl className="quiz-metrics">
             <div><dt>Kola</dt><dd>{quiz.roundCount}</dd></div>
             <div><dt>Otázky</dt><dd>{quiz.questionCount}</dd></div>
-            <div><dt>Aktualizoval</dt><dd>{quiz.updatedBy}</dd></div>
           </dl>
           <button className="primary-button" disabled={starting} onClick={() => void startLiveQuiz()}>
             {starting ? 'Spouštím…' : 'Spustit kvíz'}
           </button>
           <Link className="secondary-link" to={`/admin/quizzes/${encodeURIComponent(quiz.id)}/edit`}>Otevřít editor</Link>
-          {startError && <p className="form-error" role="alert">{startError}</p>}
+          {startError && <HumanError error={startError} onRetry={() => void startLiveQuiz()} />}
         </div>
       </header>
 
@@ -129,7 +136,9 @@ export function QuizDetailPage() {
             </header>
 
             {round.questions.length === 0 ? (
-              <p className="round-empty">V tomto kole zatím nejsou otázky.</p>
+              <p className="round-empty">{round.questionCount > 0
+                ? 'Detail otázek teď není dostupný. Zkuste stránku načíst znovu.'
+                : 'V tomto kole zatím nejsou otázky.'}</p>
             ) : (
               <ol className="question-list">
                 {round.questions.map((question) => (

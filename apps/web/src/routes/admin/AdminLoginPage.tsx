@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
 import { getCzechAuthError } from '../../auth/authErrors';
+import { productConfig } from '../../config/product';
 import { AdminLoading } from './AdminLoading';
 
 export function AdminLoginPage() {
@@ -40,16 +41,16 @@ export function AdminLoginPage() {
         <p className="eyebrow">Soukromá část</p>
         <h1>Přihlášení do administrace</h1>
         <p className="lead">
-          Přístup je určen pouze administrátorům a moderátorům filmového kvízu.
+          Přístup je určen pouze administrátorům a moderátorům kvízové platformy.
         </p>
       </div>
 
       <form className="login-card" onSubmit={(event) => void handleSubmit(event)}>
         <div className="login-card-heading">
-          <span className="secure-badge" aria-hidden="true">FK</span>
+          <span className="secure-badge" aria-hidden="true">{productConfig.shortName}</span>
           <div>
             <h2>Vítejte zpět</h2>
-            <p>Přihlaste se testovacím účtem z lokálního emulátoru.</p>
+            <p>Přihlaste se svým pracovním účtem.</p>
           </div>
         </div>
 
@@ -86,8 +87,6 @@ export function AdminLoginPage() {
         <button className="primary-button" type="submit" disabled={submitting || Boolean(initializationError)}>
           {submitting ? 'Přihlašuji…' : 'Přihlásit se'}
         </button>
-
-        <p className="form-note">Pouze lokální vývoj · Firebase Authentication Emulator</p>
       </form>
     </section>
   );

@@ -1,65 +1,103 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { useAuth, type StaffRole } from '../../auth/AuthProvider';
-
-const roleLabels: Readonly<Record<StaffRole, string>> = {
-  admin: 'Administrátor',
-  moderator: 'Moderátor',
-};
+import { useAuth } from '../../auth/AuthProvider';
+import { formatQuizDate, getQuizDataError, quizStatusLabels } from '../../features/quizzes/presentation';
+import { listQuizzes } from '../../features/quizzes/quizRepository';
+import type { QuizSummary } from '../../features/quizzes/types';
+import { QuizLoading } from '../../features/quizzes/QuizLoading';
+import { HumanError } from '../../ui/HumanError';
 
 export function AdminPage() {
-  const { currentUser, role, signOut } = useAuth();
-  const [pending, setPending] = useState(false);
+  const { role } = useAuth();
+  const [quizzes, setQuizzes] = useState<readonly QuizSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  async function handleSignOut() {
-    setPending(true);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      await signOut();
+      setQuizzes(await listQuizzes());
+    } catch (loadError) {
+      setError(getQuizDataError(loadError));
     } finally {
-      setPending(false);
+      setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  if (loading) return <QuizLoading label="Načítám přehled…" />;
+
+  const continueQuiz = quizzes.find((quiz) => quiz.status === 'draft') ?? quizzes[0];
+  const recentQuizzes = quizzes.slice(0, 4);
 
   return (
     <section className="admin-dashboard">
-      <header className="admin-dashboard-heading">
+      <header className="section-heading compact-heading">
         <div>
-          <p className="eyebrow">Soukromá část</p>
-          <h1>Administrace</h1>
-          <p className="lead">Bezpečný základ je připravený. Obsah administrace přidáme v dalších krocích.</p>
+          <p className="eyebrow">Administrace</p>
+          <h1>Přehled</h1>
+          <p className="lead">Rychlý návrat k práci s vašimi kvízy.</p>
         </div>
-        <div className="account-card">
-          <div className="avatar" aria-hidden="true">
-            {currentUser?.email?.slice(0, 1).toUpperCase() ?? 'U'}
-          </div>
-          <div className="account-details">
-            <span>Přihlášený účet</span>
-            <strong>{currentUser?.email}</strong>
-            <span className="role-pill">{role ? roleLabels[role] : 'Bez role'}</span>
-          </div>
-          <button className="secondary-button" type="button" onClick={() => void handleSignOut()} disabled={pending}>
-            {pending ? 'Odhlašuji…' : 'Odhlásit'}
-          </button>
-        </div>
+        <Link className="secondary-link" to="/admin/quizzes">Zobrazit všechny kvízy</Link>
       </header>
 
-      <div className="admin-ready-card">
-        <span className="status-dot" aria-hidden="true" />
-        <div>
-          <strong>Přístup ověřen</strong>
-          <p>Role pochází z Firebase ID tokenu. Datová oprávnění vynucují Firestore Security Rules.</p>
-        </div>
-      </div>
+      {error && (
+        <HumanError
+          error={{ title: 'Přehled se nepodařilo načíst', message: error }}
+          onRetry={() => void load()}
+        />
+      )}
 
-      <Link className="admin-feature-card" to="/admin/quizzes">
-        <div>
-          <span className="feature-label">Knihovna</span>
-          <h2>Kvízy</h2>
-          <p>Procházejte metadata, kola a otázky v bezpečném read-only režimu.</p>
+      {!error && quizzes.length === 0 && (
+        <section className="dashboard-empty surface-card">
+          <p className="eyebrow">Kvízy</p>
+          <h2>Zatím tu nejsou žádné kvízy</h2>
+          <p>Jakmile bude dostupný první kvíz, najdete ho na tomto přehledu i v knihovně.</p>
+          <Link className="secondary-link" to="/admin/quizzes">Otevřít knihovnu</Link>
+        </section>
+      )}
+
+      {!error && continueQuiz && (
+        <div className="dashboard-grid">
+          <section className="continue-card surface-card">
+            <p className="eyebrow">Pokračovat</p>
+            <span className={`quiz-status status-${continueQuiz.status}`}>{quizStatusLabels[continueQuiz.status]}</span>
+            <h2>{continueQuiz.title}</h2>
+            <p>{continueQuiz.description || 'Kvíz je připravený k další práci.'}</p>
+            <p className="card-meta">Naposledy upraveno {formatQuizDate(continueQuiz.updatedAt)}</p>
+            <Link
+              className="primary-link"
+              to={role === 'admin'
+                ? `/admin/quizzes/${encodeURIComponent(continueQuiz.id)}/edit`
+                : `/admin/quizzes/${encodeURIComponent(continueQuiz.id)}`}
+            >
+              {role === 'admin' ? 'Pokračovat v úpravách' : 'Otevřít detail'}
+            </Link>
+          </section>
+
+          <section className="recent-card surface-card" aria-labelledby="recent-quizzes-title">
+            <div className="card-heading-row">
+              <div>
+                <p className="eyebrow">Naposledy změněné</p>
+                <h2 id="recent-quizzes-title">Poslední kvízy</h2>
+              </div>
+            </div>
+            <ul className="recent-quiz-list">
+              {recentQuizzes.map((quiz) => (
+                <li key={quiz.id}>
+                  <Link to={`/admin/quizzes/${encodeURIComponent(quiz.id)}`}>
+                    <span><strong>{quiz.title}</strong><small>{quizStatusLabels[quiz.status]}</small></span>
+                    <time dateTime={quiz.updatedAt.toISOString()}>{formatQuizDate(quiz.updatedAt)}</time>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
         </div>
-        <span className="feature-arrow" aria-hidden="true">→</span>
-      </Link>
+      )}
     </section>
   );
 }

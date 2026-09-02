@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 
+import { productConfig } from '../../config/product';
 import { buildSlideRenderModel, defaultRules, formatPlAnswer, isSafeHttpUrl, projectorMediaPlan } from './model';
 import type { MediaPlaybackCommand, MediaPlaybackState, SlideRenderInput, SlideRenderMode } from './types';
 import { YouTubePlayer } from './YouTubePlayer';
@@ -8,7 +9,7 @@ function QuestionHeader({ number, count, legacyPl }: { readonly number?: number;
   return (
     <div className="slide-question-label">
       <span>{number !== undefined && count !== undefined ? `OTÁZKA ${number} / ${count}` : 'OTÁZKA'}</span>
-      {legacyPl && <span className="legacy-pl-badge">LEGACY · PRAVDA / LEŽ</span>}
+      {legacyPl && <span className="legacy-pl-badge">PŮVODNÍ · PRAVDA / LEŽ</span>}
     </div>
   );
 }
@@ -145,7 +146,7 @@ export function SlideRenderer({
   } else if (model.contentKind === 'rules') {
     content = <div className="slide-centered slide-list"><p className="slide-kicker">PRAVIDLA</p><h1>{model.title || 'Hrajeme fér'}</h1><Options options={model.options.length > 0 ? model.options : defaultRules} /></div>;
   } else if (model.contentKind === 'intro' || model.contentKind === 'roundIntro') {
-    content = <div key={introGeneration} className={`slide-centered round-intro-content ${introGeneration > 0 ? 'intro-running' : ''}`}><p className="slide-kicker">{model.contentKind === 'intro' ? 'FILMOVÝ KVÍZ' : 'NOVÉ KOLO'}</p><h1>{model.title || quizTitle}</h1>{model.text && <p>{model.text}</p>}</div>;
+    content = <div key={introGeneration} className={`slide-centered round-intro-content ${introGeneration > 0 ? 'intro-running' : ''}`}><p className="slide-kicker">{model.contentKind === 'intro' ? productConfig.name : 'NOVÉ KOLO'}</p><h1>{model.title || quizTitle}</h1>{model.text && <p>{model.text}</p>}</div>;
   } else if (model.contentKind === 'end') {
     content = <div className="slide-centered"><p className="slide-kicker">DĚKUJEME</p><h1>{model.title || 'To je pro dnešek vše'}</h1>{model.text && <p>{model.text}</p>}</div>;
   } else if (model.contentKind === 'audio') {
@@ -154,7 +155,7 @@ export function SlideRenderer({
         <QuestionHeader number={model.questionNumber} count={model.questionCount} legacyPl={false} />
         <QuestionCopy title={model.title} text={model.text} />
           <div className={`vinyl-visual ${mediaPlan.vinylPlaying ? 'is-playing' : ''}`} aria-label={mediaPlan.vinylPlaying ? 'Audio se přehrává' : 'Audio je připravené'}>
-          <div className="vinyl-disc"><div className="vinyl-label">FK</div></div><div className="vinyl-arm" />
+          <div className="vinyl-disc"><div className="vinyl-label">{productConfig.shortName}</div></div><div className="vinyl-arm" />
           <span>{mediaPlan.vinylPlaying ? 'PŘEHRÁVÁ SE AUDIO' : mediaFinished ? 'AUDIO DOHRÁLO' : 'AUDIO OTÁZKA'}</span>
         </div>
       </div>
@@ -193,7 +194,7 @@ export function SlideRenderer({
       <div className="slide-background" style={backgroundStyle} aria-hidden="true" />
       <div className="slide-background-overlay" style={{ opacity: model.backgroundOverlay / 100 }} aria-hidden="true" />
       <div className="slide-safe-area">
-        <header className="slide-brand"><span>{quizTitle}</span><span>FILMOVÝ KVÍZ</span></header>
+        <header className="slide-brand"><span>{quizTitle}</span><span>{productConfig.name}</span></header>
         {content}
       </div>
     </article>

@@ -38,7 +38,7 @@ export function getQuizDataError(error: unknown): string {
     }
 
     if (error.code === 'unavailable') {
-      return 'Firestore Emulator není dostupný. Zkontrolujte, že běží na portu 8080.';
+      return 'Data jsou dočasně nedostupná. Zkontrolujte připojení a zkuste to znovu.';
     }
   }
 
