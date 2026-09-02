@@ -156,7 +156,7 @@ export function QuizEditorPage() {
   const [saveFailed, setSaveFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
-  const deepLinkHandled = useRef(false);
+  const handledDeepLink = useRef<string | undefined>(undefined);
   const dirty = dirtySlide || dirtyQuiz || dirtyRound;
   const blocker = useBlocker(dirty);
   const semantic = useMemo(() => quiz === null ? null : buildSemanticQuizModel(quiz), [quiz]);
@@ -217,7 +217,9 @@ export function QuizEditorPage() {
   useEffect(() => { void reload(); }, [reload]);
 
   useEffect(() => {
-    if (semantic === null || deepLinkHandled.current) return;
+    if (semantic === null || quiz?.id !== quizId) return;
+    const deepLinkKey = `${quizId ?? ''}?${searchParams.toString()}`;
+    if (handledDeepLink.current === deepLinkKey) return;
     const questionId = searchParams.get('questionId');
     const roundId = searchParams.get('roundId');
     const section = searchParams.get('section');
@@ -227,12 +229,12 @@ export function QuizEditorPage() {
     else if (roundId !== null && semantic.rounds.some((round) => round.id === roundId)) selectionKey = `round:${roundId}`;
     else if (section === 'agenda') selectionKey = 'system:agenda';
     else if (field === 'quizTitle') selectionKey = 'quiz';
-    deepLinkHandled.current = true;
+    handledDeepLink.current = deepLinkKey;
     if (selectionKey === undefined) return;
     setSelectedKey(selectionKey);
     setActivePanel('content');
     if (field !== null) setPendingFixFocus({ selectionKey, field, ...(questionId === null ? {} : { questionId }) });
-  }, [searchParams, semantic]);
+  }, [quiz?.id, quizId, searchParams, semantic]);
 
   useEffect(() => {
     if (quiz === null || semantic === null || selectedKey === 'draft') return;
@@ -450,7 +452,11 @@ export function QuizEditorPage() {
             else if (pendingSelection !== null) setSelectedKey(pendingSelection);
             setPendingSelection(null);
           }}
-          onCancel={() => { if (blocker.state === 'blocked') blocker.reset(); setPendingSelection(null); }}
+          onCancel={() => {
+            if (blocker.state === 'blocked') blocker.reset();
+            setPendingSelection(null);
+            setPendingFixFocus(null);
+          }}
         />
       )}
       {removeRound !== null && (

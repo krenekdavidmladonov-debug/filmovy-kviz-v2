@@ -19,6 +19,7 @@ export function QuizPreflightPage() {
   const [notFound, setNotFound] = useState(false);
   const [starting, setStarting] = useState(false);
   const [confirmWarnings, setConfirmWarnings] = useState(false);
+  const [warningConfirmationRevision, setWarningConfirmationRevision] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [startError, setStartError] = useState<HumanErrorValue | null>(null);
   const result = useMemo(() => quiz === null ? null : runQuizPreflight(quiz), [quiz]);
@@ -33,6 +34,7 @@ export function QuizPreflightPage() {
     setError(null);
     setStartError(null);
     setConfirmWarnings(false);
+    setWarningConfirmationRevision(null);
     try {
       const loaded = await getEditorQuiz(quizId);
       setQuiz(loaded);
@@ -62,12 +64,16 @@ export function QuizPreflightPage() {
       const latestResult = runQuizPreflight(latest);
       if (latestResult.blockerCount > 0) {
         setConfirmWarnings(false);
+        setWarningConfirmationRevision(null);
         return;
       }
-      if (latestResult.warningCount > 0 && !warningsConfirmed) {
+      if (latestResult.warningCount > 0
+        && (!warningsConfirmed || warningConfirmationRevision !== latest.revision)) {
         setConfirmWarnings(true);
+        setWarningConfirmationRevision(latest.revision);
         return;
       }
+      setWarningConfirmationRevision(null);
       const session = await createLiveSession(quizId);
       void navigate(`/admin/live/${encodeURIComponent(session.sessionId)}`);
     } catch (failure) {
@@ -107,7 +113,7 @@ export function QuizPreflightPage() {
               <p>Externí média nejsou garantovaná. Opravdu chcete pokračovat?</p>
               <div>
                 <button type="button" className="primary-button" disabled={starting} onClick={() => void startQuiz(true)}>{starting ? 'Spouštím…' : 'Potvrdit a spustit'}</button>
-                <button type="button" className="secondary-button" disabled={starting} onClick={() => setConfirmWarnings(false)}>Zrušit</button>
+                <button type="button" className="secondary-button" disabled={starting} onClick={() => { setConfirmWarnings(false); setWarningConfirmationRevision(null); }}>Zrušit</button>
               </div>
             </div>
           ) : (
