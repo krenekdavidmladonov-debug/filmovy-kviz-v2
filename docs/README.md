@@ -4,6 +4,8 @@ This directory is the source of truth for Filmovy Kviz V2 product, architecture,
 
 ## Round-first quiz editor
 
+- [TOMORROW_RELEASE_CHECKLIST.md](TOMORROW_RELEASE_CHECKLIST.md) — short operator checklist for one ready quiz, real media, venue setup, and failure fallback.
+- [TOMORROW_RELEASE_AUDIT.md](TOMORROW_RELEASE_AUDIT.md) — sanitized release-hardening evidence, remaining blockers, and exact merge plan.
 - [RELEASE_CANDIDATE_AUDIT.md](RELEASE_CANDIDATE_AUDIT.md) — sanitized integration, quality-gate, hygiene, and merge-readiness audit for core editor v0.2.
 - [QUIZ_PREFLIGHT.md](QUIZ_PREFLIGHT.md) — canonical blocker/warning, editor/live integration, media, and security contract for quiz readiness.
 - [QUIZ_PREFLIGHT_IMPLEMENTATION_REPORT.md](QUIZ_PREFLIGHT_IMPLEMENTATION_REPORT.md) — sanitized implementation and verification evidence for the preflight feature branch.
