@@ -50,6 +50,7 @@ describe('event-night launcher safety contract', () => {
     expect(start).toContain("Start-EventNightWorker -Mode 'Import'");
     expect(worker).toContain("'event-night:emulators'");
     expect(worker).toContain("'event-night:emulators:fresh'");
+    expect(worker).toContain('$eventArguments = @(if (');
   });
 
   test('verifies manifests, backs up data, exports before stop, and tracks one owned worker', () => {

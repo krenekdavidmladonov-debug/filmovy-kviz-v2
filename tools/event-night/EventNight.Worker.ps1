@@ -38,7 +38,7 @@ $env:JAVA_HOME = $JavaHome
 $env:Path = "$NodeDirectory;$(Split-Path -Parent $PnpmExecutable);$(Join-Path $JavaHome 'bin');$env:Path"
 
 $prefixArguments = if ([string]::IsNullOrWhiteSpace($PnpmPrefix)) { @() } else { @($PnpmPrefix -split '\|') }
-$eventArguments = if ($Mode -eq 'Import') { @('event-night:emulators') } else { @('event-night:emulators:fresh') }
+$eventArguments = @(if ($Mode -eq 'Import') { 'event-night:emulators' } else { 'event-night:emulators:fresh' })
 
 Push-Location $RepoRoot
 try {
