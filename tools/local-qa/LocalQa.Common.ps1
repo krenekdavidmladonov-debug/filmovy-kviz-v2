@@ -441,7 +441,16 @@ function Test-TrackedWorker {
   try {
     $processId = [int]$Worker.pid
     $process = Get-Process -Id $processId -ErrorAction Stop
-    if ((Get-ProcessStartUtc $process) -ne [string]$Worker.startedAtUtc) { return $false }
+    $expectedStartUtc = if ($Worker.startedAtUtc -is [DateTime]) {
+      ([DateTime]$Worker.startedAtUtc).ToUniversalTime()
+    } else {
+      [DateTime]::Parse(
+        [string]$Worker.startedAtUtc,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::RoundtripKind
+      ).ToUniversalTime()
+    }
+    if ($process.StartTime.ToUniversalTime().Ticks -ne $expectedStartUtc.Ticks) { return $false }
     $cim = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction Stop
     $commandLine = [string]$cim.CommandLine
     return $commandLine -match 'LocalQa\.Worker\.ps1' -and

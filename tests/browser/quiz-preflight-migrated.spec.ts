@@ -28,17 +28,29 @@ test('all migrated quizzes produce a private, bounded and sanitised readiness re
   let largestQuizQuestions = 0;
   let largestQuizValidationMs = 0;
   const issueCategories: Record<string, { blockers: number; warnings: number }> = {};
+  const quizReports: Array<{
+    quizRef: string;
+    rounds: number;
+    questions: number;
+    blockers: number;
+    warnings: number;
+    issueCategories: Record<string, { blockers: number; warnings: number }>;
+  }> = [];
 
   for (const quizPath of quizPaths) {
     await page.goto(`${baseURL}${quizPath}/readiness`);
     const panel = page.locator('[data-preflight-status]');
     await expect(panel).toBeVisible();
 
+    const currentRounds = Number(await panel.getAttribute('data-round-count'));
     const currentQuestions = Number(await panel.getAttribute('data-question-count'));
-    roundCount += Number(await panel.getAttribute('data-round-count'));
+    const currentBlockers = Number(await panel.getAttribute('data-blocker-count'));
+    const currentWarnings = Number(await panel.getAttribute('data-warning-count'));
+    const currentCategories: Record<string, { blockers: number; warnings: number }> = {};
+    roundCount += currentRounds;
     questionCount += currentQuestions;
-    blockerCount += Number(await panel.getAttribute('data-blocker-count'));
-    warningCount += Number(await panel.getAttribute('data-warning-count'));
+    blockerCount += currentBlockers;
+    warningCount += currentWarnings;
     if (currentQuestions > largestQuizQuestions) {
       largestQuizQuestions = currentQuestions;
       largestQuizValidationMs = Number(await panel.getAttribute('data-validation-duration-ms'));
@@ -50,6 +62,10 @@ test('all migrated quizzes produce a private, bounded and sanitised readiness re
       warnings: Number(item.getAttribute('data-category-warnings')),
     })))) {
       if (category.name === null) continue;
+      currentCategories[category.name] = {
+        blockers: category.blockers,
+        warnings: category.warnings,
+      };
       const current = issueCategories[category.name] ?? { blockers: 0, warnings: 0 };
       issueCategories[category.name] = {
         blockers: current.blockers + category.blockers,
@@ -60,6 +76,15 @@ test('all migrated quizzes produce a private, bounded and sanitised readiness re
     await expect(panel.locator('[data-legacy-raw]')).toHaveCount(0);
     await expect(panel.locator('[data-correct-answer]')).toHaveCount(0);
     await expect(panel.locator('[data-media-source]')).toHaveCount(0);
+
+    quizReports.push({
+      quizRef: quizPath.split('/')[3] ?? '<unknown>',
+      rounds: currentRounds,
+      questions: currentQuestions,
+      blockers: currentBlockers,
+      warnings: currentWarnings,
+      issueCategories: currentCategories,
+    });
   }
 
   expect(roundCount).toBe(23);
@@ -74,6 +99,7 @@ test('all migrated quizzes produce a private, bounded and sanitised readiness re
     blockerCount,
     warningCount,
     issueCategories,
+    quizReports,
     largestQuizQuestions,
     largestQuizValidationMs,
   }));

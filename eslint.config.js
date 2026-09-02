@@ -3,7 +3,19 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/lib/**', '**/node_modules/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/lib/**',
+      '**/node_modules/**',
+      '.tools/**',
+      '.local-data/**',
+      '.firebase/**',
+      'coverage/**',
+      'playwright-report/**',
+      'test-results/**',
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
@@ -52,6 +64,12 @@ export default tseslint.config(
   },
   {
     files: ['tools/**/*.mjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ['tests/**/*.mjs'],
     languageOptions: {
       globals: globals.node,
     },

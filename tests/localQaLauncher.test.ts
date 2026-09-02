@@ -35,6 +35,8 @@ describe('Windows local QA launcher contract', () => {
   test('uses identity-checked process tracking instead of broad termination', () => {
     expect(common).toContain('function Test-TrackedWorker');
     expect(common).toContain('startedAtUtc');
+    expect(common).toContain('[Globalization.DateTimeStyles]::RoundtripKind');
+    expect(common).toContain('StartTime.ToUniversalTime().Ticks');
     expect(common).toContain('ExpectedToken');
     expect(stop).toContain("Stop-TrackedWorker $state.vite 'vite'");
     expect(stop).toContain("Stop-TrackedWorker $state.emulators 'emulators'");
