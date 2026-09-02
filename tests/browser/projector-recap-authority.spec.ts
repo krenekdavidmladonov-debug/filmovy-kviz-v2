@@ -75,7 +75,7 @@ test('answer-bearing BroadcastChannel state renders zero times on two projectors
   await moderator.getByRole('button', { name: 'Přihlásit se' }).click();
   await expect(moderator).toHaveURL(/\/admin$/u);
 
-  await moderator.goto(`${baseURL}/admin/quizzes/live-session-e2e`);
+  await moderator.goto(`${baseURL}/admin/quizzes/projector-lifecycle-e2e`);
   await moderator.getByRole('button', { name: 'Spustit kvíz' }).click();
   await expect(moderator).toHaveURL(/\/admin\/live\/[^/]+$/u);
   const sessionId = new URL(moderator.url()).pathname.split('/').at(-1);
@@ -96,7 +96,7 @@ test('answer-bearing BroadcastChannel state renders zero times on two projectors
   const recap = await latestState(projectorA);
   const nextRevision = Number(recap.revision) + 1;
 
-  const safeQuestionState = {
+  const safeQuestionState: Record<string, unknown> = {
     ...recap,
     slidePosition: 2,
     slideKind: 'question',

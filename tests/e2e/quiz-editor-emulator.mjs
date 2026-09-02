@@ -47,7 +47,7 @@ connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
 connectFirestoreEmulator(db, '127.0.0.1', 8080);
 connectFunctionsEmulator(functions, '127.0.0.1', 5001);
 
-const quizId = 'live-session-e2e';
+const quizId = 'quiz-editor-e2e';
 const quizRef = doc(db, 'quizzes', quizId);
 const slideRef = (id) => doc(db, 'quizzes', quizId, 'slides', id);
 const invoke = async (name, data) => (await httpsCallable(functions, name)(data)).data;

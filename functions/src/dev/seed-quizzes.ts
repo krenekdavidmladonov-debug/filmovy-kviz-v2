@@ -186,9 +186,9 @@ function writeQuiz(batch: WriteBatch, quiz: SeedQuiz): void {
   }
 }
 
-function writeLiveFlowQuiz(batch: WriteBatch): void {
+function writeLiveFlowQuiz(batch: WriteBatch, quizId: string): void {
   const db = getFirestore();
-  const quizRef = db.collection('quizzes').doc('live-session-e2e');
+  const quizRef = db.collection('quizzes').doc(quizId);
   const timestamp = Timestamp.fromDate(new Date('2026-09-01T08:00:00.000Z'));
   const slides = [
     { kind: 'intro', isQuestion: false, title: 'Začínáme', text: 'Syntetický úvod', options: [], media: [], presentation: {} },
@@ -245,8 +245,8 @@ function writeLiveFlowQuiz(batch: WriteBatch): void {
   });
 }
 
-async function clearLiveFlowFixture(db: Firestore): Promise<void> {
-  const quizRef = db.collection('quizzes').doc('live-session-e2e');
+async function clearLiveFlowFixture(db: Firestore, quizId: string): Promise<void> {
+  const quizRef = db.collection('quizzes').doc(quizId);
   const [rounds, slides] = await Promise.all([
     quizRef.collection('rounds').get(),
     quizRef.collection('slides').get(),
@@ -264,14 +264,18 @@ async function seed(): Promise<void> {
 
   try {
     const db = getFirestore();
-    await clearLiveFlowFixture(db);
+    await clearLiveFlowFixture(db, 'live-session-e2e');
+    await clearLiveFlowFixture(db, 'quiz-editor-e2e');
+    await clearLiveFlowFixture(db, 'projector-lifecycle-e2e');
     const batch = db.batch();
     for (const quiz of quizzes) {
       writeQuiz(batch, quiz);
     }
-    writeLiveFlowQuiz(batch);
+    writeLiveFlowQuiz(batch, 'live-session-e2e');
+    writeLiveFlowQuiz(batch, 'quiz-editor-e2e');
+    writeLiveFlowQuiz(batch, 'projector-lifecycle-e2e');
     await batch.commit();
-    console.log(`Seeded ${quizzes.length + 1} emulator-only quizzes into ${projectId}.`);
+    console.log(`Seeded ${quizzes.length} library quizzes and 3 isolated E2E fixtures into ${projectId}.`);
   } finally {
     await deleteApp(app);
   }
