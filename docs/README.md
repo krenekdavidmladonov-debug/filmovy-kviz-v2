@@ -7,6 +7,9 @@ This directory is the source of truth for Filmovy Kviz V2 product, architecture,
 - [RELEASE_CANDIDATE_AUDIT.md](RELEASE_CANDIDATE_AUDIT.md) — sanitized integration, quality-gate, hygiene, and merge-readiness audit for core editor v0.2.
 - [QUIZ_PREFLIGHT.md](QUIZ_PREFLIGHT.md) — canonical blocker/warning, editor/live integration, media, and security contract for quiz readiness.
 - [QUIZ_PREFLIGHT_IMPLEMENTATION_REPORT.md](QUIZ_PREFLIGHT_IMPLEMENTATION_REPORT.md) — sanitized implementation and verification evidence for the preflight feature branch.
+- [EVENTS_ARCHITECTURE.md](EVENTS_ARCHITECTURE.md) — implemented event, immutable snapshot, preflight-lock, and public projection contract.
+- [EVENTS_SECURITY.md](EVENTS_SECURITY.md) — event/snapshot/public Rules and trusted Function boundary.
+- [EVENTS_FOUNDATION_IMPLEMENTATION_REPORT.md](EVENTS_FOUNDATION_IMPLEMENTATION_REPORT.md) — implementation and verification evidence for the first Events Foundation slice.
 - [QUIZ_EDITOR.md](QUIZ_EDITOR.md) — canonical product and persistence contract for the implemented editor.
 - [ROUND_FIRST_EDITOR_USER_GUIDE.md](ROUND_FIRST_EDITOR_USER_GUIDE.md) — moderator/admin workflow and field-level behavior.
 - [ROUND_FIRST_EDITOR_DEVELOPER_GUIDE.md](ROUND_FIRST_EDITOR_DEVELOPER_GUIDE.md) — code map, semantic facade, mutation boundary, lossless behavior, and extension rules.

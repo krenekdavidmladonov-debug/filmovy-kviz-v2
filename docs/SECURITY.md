@@ -37,7 +37,10 @@ Current Firestore access is intentionally narrow:
 - anonymous and ordinary authenticated users cannot read or write private collections;
 - moderators and admins can read private `quizzes` and their slide/round/question subcollections;
 - every direct client quiz write is denied to both roles; admin editor writes exist only as trusted callable Functions;
-- existing event/media policy remains staff-read and admin-write until those flows are revisited;
+- event roots are staff-readable, unknown event subpaths are denied, and every event write is denied to clients; admin-only callable Functions own event mutations;
+- immutable quiz snapshots are staff-readable private data and every direct client write is denied;
+- `publicEvents` is anonymously readable/queryable sanitized data with every client write denied;
+- existing media policy remains staff-read and admin-write until that flow is revisited;
 - staff profiles are self-readable, while all user management is admin-only;
 - staff may read private `sessions`, but all client writes are denied;
 - anyone may get one known `publicSessions` document, collection listing is denied, and every client write is denied;
@@ -52,6 +55,8 @@ Live callable Functions independently require an `admin` or `moderator` custom c
 Editor preview is not a publication operation. It renders the current unsaved, already-authorized private draft inside the admin route and may optionally show the answer there, but it never creates or mutates `publicSessions`. The anonymous projector still receives only the live allowlist projection. Unknown fields and `legacy.raw` never enter the editor mutation response or projector model. A separate projector window for unsaved drafts is intentionally absent until an isolated non-live transport is designed.
 
 Quiz preflight is also a private staff-only read operation. Its result contains codes, Czech human messages, aggregate counts, and semantic references, but never embeds correct-answer values, question copy, media URLs, moderator notes, or `legacy.raw`. Running readiness in the editor is local and running it before live start does not write `publicSessions`; only the existing explicit live-session callable may publish its independently sanitized allowlist. The preflight feature changes neither Rules nor projector/BroadcastChannel authority.
+
+Event lock uses that same shared quiz-domain/preflight implementation inside an admin-only transaction. It rereads the expected event and quiz revisions, rejects blockers, requires explicit warning acknowledgement, creates a complete private immutable snapshot, derives `ready`, and replaces the safe public event projection atomically. Browsers cannot submit readiness, assignment, snapshot data, scoring state, revisions, actors, timestamps, or public fields. Snapshot answers stay private and never enter `publicEvents`; existing `publicSessions` answer authority is unchanged.
 
 ## Public registration
 
