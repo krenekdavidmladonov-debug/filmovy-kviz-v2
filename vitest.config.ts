@@ -14,6 +14,7 @@ export default defineConfig({
       'tests/roundFirstEditor.test.tsx',
       'tests/quizPreflight.test.ts',
       'tests/localEmulatorEnvironment.test.ts',
+      'tests/localQaLauncher.test.ts',
       'tools/migration-v1/test/**/*.test.ts',
     ],
   },

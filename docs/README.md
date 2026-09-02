@@ -16,6 +16,7 @@ This directory is the source of truth for Filmovy Kviz V2 product, architecture,
 
 ## Platform foundations
 
+- [LOCAL_QA.md](LOCAL_QA.md) — one-click Windows launcher, bezpečnost, tool discovery, porty, PID tracking a troubleshooting.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — repository shape and trust boundaries.
 - [DATA_MODEL.md](DATA_MODEL.md) — private and public Firestore models.
 - [SECURITY.md](SECURITY.md) — authorization, answer secrecy, emulator safeguards, and Rules policy.

@@ -4,6 +4,17 @@
 
 Clean replacement for the Filmový Kvíz application. The current foundation includes a React web client, trusted Firebase Functions, emulator-only staff authentication, tested Firestore authorization rules, a live/projector foundation, and a lossless round-first quiz editor for migrated V1 content.
 
+## RYCHLÉ SPUŠTĚNÍ PRO HUMAN QA
+
+Windows:
+
+1. Dvakrát klikněte na `START_LOCAL_QA.cmd` v rootu projektu.
+2. Počkejte, až se automaticky otevře `http://localhost:5173/admin/login`.
+3. Přihlaste se jako `admin@example.test` s heslem `LocalQuiz123!`.
+4. Po testování dvakrát klikněte na `STOP_LOCAL_QA.cmd`.
+
+Launcher sám najde podporovaný Node.js, pnpm a Javu, ověří porty, spustí pouze projekt `demo-filmovy-kviz-v2`, počká na emulátory, provede idempotentní seed a spustí Vite. Nemění uživatelský ani systémový `PATH`. Pokud některý předpoklad nebo bezpečnostní kontrola selže, nic dalšího nespustí a zobrazí lidskou chybu. Podrobnosti a řešení problémů jsou v [lokálním QA návodu](docs/LOCAL_QA.md).
+
 ## Requirements
 
 - Node.js 22+
