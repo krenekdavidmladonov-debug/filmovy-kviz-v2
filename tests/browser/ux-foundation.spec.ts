@@ -40,7 +40,7 @@ test('admin and focused moderator shell remain usable at desktop, tablet, and mo
   await expect(moderator).toHaveURL(/\/admin$/u);
 
   const adminNav = moderator.getByRole('navigation', { name: 'Administrace' });
-  await expect(adminNav.getByRole('link')).toHaveText(['Přehled', 'Kvízy']);
+  await expect(adminNav.getByRole('link')).toHaveText(['Přehled', 'Kvízy', 'Akce']);
   await expect(moderator.getByRole('heading', { name: 'Přehled' })).toBeVisible();
   await attachScreenshot(moderator, testInfo, 'admin-overview-1280x720');
 

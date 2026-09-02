@@ -60,4 +60,4 @@ jobs:
           pnpm exec firebase emulators:exec
           --only auth,firestore,functions
           --project demo-filmovy-kviz-v2
-          "pnpm seed:auth && pnpm seed:quizzes && pnpm test:e2e:live && pnpm test:e2e:editor"
+          "pnpm seed:auth && pnpm seed:quizzes && pnpm test:e2e:live && pnpm test:e2e:editor && pnpm test:e2e:events"

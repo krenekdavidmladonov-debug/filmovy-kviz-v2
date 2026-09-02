@@ -13,6 +13,7 @@ export default defineConfig({
       'tests/uxFoundation.test.tsx',
       'tests/roundFirstEditor.test.tsx',
       'tests/quizPreflight.test.ts',
+      'tests/events.test.ts',
       'tests/localEmulatorEnvironment.test.ts',
       'tools/migration-v1/test/**/*.test.ts',
     ],
