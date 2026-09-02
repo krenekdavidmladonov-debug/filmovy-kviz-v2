@@ -82,6 +82,10 @@ async function run() {
   const quizDocuments = (await getDocs(collection(db, 'quizzes'))).docs;
   assert.equal(quizDocuments.length, 4);
   let totalSlides = 0;
+  let totalRounds = 0;
+  let totalQuestions = 0;
+  let legacyPlQuestions = 0;
+  let largestQuizSlides = 0;
   const representatives = new Map();
   const revisions = new Map();
 
@@ -100,9 +104,44 @@ async function run() {
       }
     });
     totalSlides += slideDocuments.length;
+    totalRounds += new Set(slideDocuments.map((slide) => slide.data().roundId).filter(Boolean)).size;
+    totalQuestions += slideDocuments.filter((slide) => slide.data().isQuestion === true).length;
+    legacyPlQuestions += slideDocuments.filter((slide) => slide.data().kind === 'pl').length;
+    largestQuizSlides = Math.max(largestQuizSlides, slideDocuments.length);
     revisions.set(quizDocument.id, Number.isInteger(quiz.revision) ? quiz.revision : 0);
   }
   assert.equal(totalSlides, 315);
+  assert.equal(totalRounds, 23);
+  assert.equal(totalQuestions, 263);
+  assert.equal(legacyPlQuestions, 11);
+  assert.equal(largestQuizSlides, 91);
+
+  for (const quizDocument of quizDocuments) {
+    const slideDocuments = (await getDocs(query(collection(quizDocument.ref, 'slides'), orderBy('position')))).docs;
+    const safeTarget = slideDocuments.find((slide) => slide.data().isQuestion === true);
+    assert.ok(safeTarget);
+    const before = safeTarget.data();
+    const editedPayload = { ...editorPayload(before), title: `${before.title} · local editor check` };
+    const edited = (await httpsCallable(functions, 'updateQuizSlide')({
+      quizId: quizDocument.id,
+      slideId: safeTarget.id,
+      expectedRevision: revisions.get(quizDocument.id),
+      slide: editedPayload,
+    })).data;
+    revisions.set(quizDocument.id, edited.revision);
+    const editedReload = (await getDoc(safeTarget.ref)).data();
+    assert.equal(editedReload.title.endsWith('· local editor check'), true);
+    assert.deepEqual(editedReload.legacy, before.legacy);
+
+    const restored = (await httpsCallable(functions, 'updateQuizSlide')({
+      quizId: quizDocument.id,
+      slideId: safeTarget.id,
+      expectedRevision: revisions.get(quizDocument.id),
+      slide: editorPayload(before),
+    })).data;
+    revisions.set(quizDocument.id, restored.revision);
+    assert.deepEqual((await getDoc(safeTarget.ref)).data(), before);
+  }
 
   for (const representative of representatives.values()) {
     const revision = revisions.get(representative.quizId);
@@ -120,9 +159,24 @@ async function run() {
   assert.deepEqual([...representatives.keys()].sort(), [
     'agenda', 'audio', 'end', 'free', 'image', 'intro', 'pl', 'question', 'recap', 'video',
   ]);
+  const largestQuiz = quizDocuments.find((document) => document.data().slideCount === largestQuizSlides);
+  assert.ok(largestQuiz);
+  const largestSlides = (await getDocs(query(collection(largestQuiz.ref, 'slides'), orderBy('position')))).docs;
+  const byId = new Map(largestSlides.map((slide) => [slide.id, slide]));
+  const firstId = largestSlides[0].id;
+  const lastId = largestSlides.at(-1).id;
+  const performanceStarted = globalThis.performance.now();
+  for (let index = 0; index < 10_000; index += 1) {
+    assert.ok(byId.get(index % 2 === 0 ? firstId : lastId));
+  }
+  const lookupDurationMs = globalThis.performance.now() - performanceStarted;
+  assert.equal(lookupDurationMs < 1_000, true);
   globalThis.console.log(JSON.stringify({
     status: 'PASS', quizzesOpened: quizDocuments.length, slidesOpened: totalSlides,
+    roundsRepresented: totalRounds, questionsAccessible: totalQuestions, legacyPlQuestions,
     slideKindsOpened: representatives.size, representativeRoundTrips: representatives.size,
+    safeEditSaveReloadRestorePerQuiz: quizDocuments.length,
+    largestQuizSlides, firstLastLookupIterations: 10_000,
     legacyRawPreserved: true, privateValuesPrinted: false,
   }, null, 2));
 }

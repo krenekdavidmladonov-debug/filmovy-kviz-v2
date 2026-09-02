@@ -191,16 +191,73 @@ async function run() {
   assert.equal(removedImplicitQuestion.revision, 8);
   assert.equal((await getDoc(doc(db, 'quizzes', quizId, 'rounds', implicitSlide.roundId))).exists(), false);
 
+  const renamedRound = await invoke('updateQuizRound', {
+    quizId, roundId: 'live-round', title: 'Přejmenované syntetické kolo', expectedRevision: 8,
+  });
+  assert.equal(renamedRound.revision, 9);
+  assert.equal((await getDoc(doc(db, 'quizzes', quizId, 'rounds', 'live-round'))).data().title, 'Přejmenované syntetické kolo');
+
+  const reorderedQuestion = await invoke('reorderQuizQuestion', {
+    quizId, slideId: 'slide-002', direction: 1, expectedRevision: 9,
+  });
+  assert.equal(reorderedQuestion.revision, 10);
+  const reorderedLiveQuestions = (await getDocs(query(collection(quizRef, 'slides'), orderBy('position')))).docs
+    .filter((item) => item.data().roundId === 'live-round' && item.data().isQuestion === true);
+  assert.equal(reorderedLiveQuestions[1].id, 'slide-002');
+
+  const movedQuestion = await invoke('moveQuizQuestionToRound', {
+    quizId, slideId: 'slide-002', targetRoundId: roundHeader.roundId, expectedRevision: 10,
+  });
+  assert.equal(movedQuestion.revision, 11);
+  assert.equal((await getDoc(slideRef('slide-002'))).data().roundId, roundHeader.roundId);
+  assert.equal((await getDoc(doc(db, 'quizzes', quizId, 'rounds', 'live-round', 'questions', 'slide-002'))).exists(), false);
+  assert.equal((await getDoc(doc(db, 'quizzes', quizId, 'rounds', roundHeader.roundId, 'questions', 'slide-002'))).exists(), true);
+
+  const duplicatedRound = await invoke('duplicateQuizRound', {
+    quizId, roundId: 'live-round', expectedRevision: 11,
+  });
+  assert.equal(duplicatedRound.revision, 12);
+  const duplicatedRoundId = (await getDoc(slideRef(duplicatedRound.selectedSlideId))).data().roundId;
+  assert.notEqual(duplicatedRoundId, 'live-round');
+  assert.notEqual(duplicatedRoundId, roundHeader.roundId);
+  const duplicatedRoundSlides = (await getDocs(query(collection(quizRef, 'slides'), orderBy('position')))).docs
+    .filter((item) => item.data().roundId === duplicatedRoundId);
+  assert.equal(duplicatedRoundSlides.length > 0, true);
+  assert.equal(duplicatedRoundSlides.every((item) => item.data().roundTitle.endsWith('– kopie')), true);
+
+  const movedRound = await invoke('moveQuizRound', {
+    quizId, roundId: duplicatedRoundId, direction: 1, expectedRevision: 12,
+  });
+  assert.equal(movedRound.revision, 13);
+  const roundOrderAfterMove = (await getDocs(query(collection(quizRef, 'rounds'), orderBy('position')))).docs.map((item) => item.id);
+  assert.deepEqual(roundOrderAfterMove, ['live-round', roundHeader.roundId, duplicatedRoundId]);
+
+  const deletedRound = await invoke('removeQuizRound', {
+    quizId, roundId: duplicatedRoundId, mode: 'delete', expectedRevision: 13,
+  });
+  assert.equal(deletedRound.revision, 14);
+  assert.equal((await getDoc(doc(db, 'quizzes', quizId, 'rounds', duplicatedRoundId))).exists(), false);
+
+  const removedRoundWithMove = await invoke('removeQuizRound', {
+    quizId, roundId: roundHeader.roundId, mode: 'move', targetRoundId: 'live-round', expectedRevision: 14,
+  });
+  assert.equal(removedRoundWithMove.revision, 15);
+  assert.equal((await getDoc(doc(db, 'quizzes', quizId, 'rounds', roundHeader.roundId))).exists(), false);
+  assert.equal((await getDoc(slideRef('slide-002'))).data().roundId, 'live-round');
+
   const finalQuiz = (await getDoc(quizRef)).data();
-  assert.equal(finalQuiz.slideCount, finalSlides.length);
-  assert.equal(finalQuiz.revision, 8);
+  const finalOrderedSlides = await orderedSlides();
+  assert.equal(finalQuiz.slideCount, finalOrderedSlides.length);
+  assert.deepEqual(finalOrderedSlides.map((slide) => slide.data().position), Array.from({ length: finalOrderedSlides.length }, (_, index) => index + 1));
+  assert.equal(finalQuiz.revision, 15);
   assert.equal((await getDoc(doc(db, 'publicSessions', 'quiz-editor-e2e'))).exists(), false);
 
   globalThis.console.log(JSON.stringify({
     status: 'PASS', adminMutations: true, moderatorReadOnly: true, normalUserDenied: true,
     directWritesDenied: true, staleAndConcurrentWritesVerified: true,
     legacyRoundTripPreserved: true, orderedCrudVerified: true,
-    implicitRoundCreatedAndCleaned: true, publicSessionUntouched: true,
+    implicitRoundCreatedAndCleaned: true, semanticRoundAndQuestionOperationsVerified: true,
+    safeRoundRemovalModesVerified: true, publicSessionUntouched: true,
   }, null, 2));
 }
 

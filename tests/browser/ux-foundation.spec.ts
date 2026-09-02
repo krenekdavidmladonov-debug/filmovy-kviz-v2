@@ -8,6 +8,7 @@ const iframeApiMock = `
     loadVideoById() {}
     pauseVideo() {}
     seekTo() {}
+    getCurrentTime() { return 6.5; }
     destroy() {}
   }
   window.YT = { Player, PlayerState: { ENDED: 0, PLAYING: 1 } };
