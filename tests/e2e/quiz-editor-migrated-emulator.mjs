@@ -9,15 +9,16 @@ import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/
 
 const projectId = globalThis.process.env.GCLOUD_PROJECT ?? globalThis.process.env.GOOGLE_CLOUD_PROJECT;
 if (!projectId?.startsWith('demo-')) throw new Error('Migrated editor E2E requires a demo-* project ID.');
-if (!['127.0.0.1:8080', 'localhost:8080'].includes(globalThis.process.env.FIRESTORE_EMULATOR_HOST)) {
-  throw new Error('Migrated editor E2E requires the local Firestore Emulator.');
+
+function localEndpoint(value, label) {
+  const match = /^(127\.0\.0\.1|localhost):(\d+)$/u.exec(value ?? '');
+  if (!match) throw new Error(`Migrated editor E2E requires the local ${label} Emulator.`);
+  return { host: match[1], port: Number(match[2]) };
 }
-if (!['127.0.0.1:9099', 'localhost:9099'].includes(globalThis.process.env.FIREBASE_AUTH_EMULATOR_HOST)) {
-  throw new Error('Migrated editor E2E requires the local Authentication Emulator.');
-}
-if (!['127.0.0.1:5001', 'localhost:5001'].includes(globalThis.process.env.FUNCTIONS_EMULATOR_HOST)) {
-  throw new Error('Migrated editor E2E requires the local Functions Emulator.');
-}
+
+const firestoreEndpoint = localEndpoint(globalThis.process.env.FIRESTORE_EMULATOR_HOST, 'Firestore');
+const authEndpoint = localEndpoint(globalThis.process.env.FIREBASE_AUTH_EMULATOR_HOST, 'Authentication');
+const functionsEndpoint = localEndpoint(globalThis.process.env.FUNCTIONS_EMULATOR_HOST, 'Functions');
 
 const app = initializeApp({
   apiKey: 'demo-api-key', authDomain: `${projectId}.firebaseapp.com`, projectId,
@@ -26,9 +27,9 @@ const app = initializeApp({
 const auth = getAuth(app);
 const db = getFirestore(app);
 const functions = getFunctions(app, 'europe-west1');
-connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-connectFirestoreEmulator(db, '127.0.0.1', 8080);
-connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+connectAuthEmulator(auth, `http://${authEndpoint.host}:${authEndpoint.port}`, { disableWarnings: true });
+connectFirestoreEmulator(db, firestoreEndpoint.host, firestoreEndpoint.port);
+connectFunctionsEmulator(functions, functionsEndpoint.host, functionsEndpoint.port);
 
 const supportedKinds = new Set([
   'intro', 'agenda', 'rules', 'recap', 'end', 'title', 'info', 'round', 'roundheader', 'round-header', 'section',

@@ -9,6 +9,7 @@ export default defineConfig({
       'tests/liveRepository.test.ts',
       'tests/quizEditor.test.ts',
       'tests/presentation.test.ts',
+      'tests/presentationComponents.test.tsx',
       'tools/migration-v1/test/**/*.test.ts',
     ],
   },

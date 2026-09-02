@@ -208,23 +208,54 @@ async function run() {
   foundationState = await publicState(adminSession.sessionId);
   assert.equal(foundationState.slideKind, 'audio');
   assert.equal(Object.hasOwn(foundationState, 'mediaSource'), false, 'Normal audio must not publish its source.');
-  assert.equal(JSON.stringify(foundationState.media).includes('synthetic-audio-id'), false);
+  assert.equal(JSON.stringify(foundationState.media).includes('erroraudio1'), false);
   foundationControl = await invoke('playMedia', {
     sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
   });
   assert.equal(foundationControl.mediaCommand, 'play');
+  assert.equal(foundationControl.mediaPlaybackState, 'preparing');
+  foundationControl = await invoke('reportMediaPlayback', {
+    sessionId: adminSession.sessionId, mediaGeneration: foundationControl.mediaGeneration, playbackState: 'ready',
+  });
+  assert.equal(foundationControl.mediaPlaybackState, 'ready');
+  foundationControl = await invoke('reportMediaPlayback', {
+    sessionId: adminSession.sessionId, mediaGeneration: foundationControl.mediaGeneration, playbackState: 'playing',
+  });
+  assert.equal(foundationControl.mediaPlaybackState, 'playing');
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.mediaPlaybackState, 'playing');
+  foundationControl = await invoke('reportMediaPlayback', {
+    sessionId: adminSession.sessionId, mediaGeneration: foundationControl.mediaGeneration, playbackState: 'error',
+  });
+  assert.equal(foundationControl.mediaCommand, 'error');
+  assert.equal(foundationControl.mediaPlaybackState, 'error');
+  foundationControl = await invoke('replayMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  assert.equal(foundationControl.mediaPlaybackState, 'preparing');
   foundationControl = await invoke('stopMedia', {
     sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
   });
   assert.equal(foundationControl.mediaCommand, 'stop');
+  assert.equal(foundationControl.mediaPlaybackState, 'idle');
 
   foundationControl = await invoke('goToSlide', {
     sessionId: adminSession.sessionId, position: 6, expectedRevision: foundationControl.revision,
   });
   foundationState = await publicState(adminSession.sessionId);
   assert.equal(foundationState.slideKind, 'video');
-  assert.equal(foundationState.mediaSource, 'https://example.test/video');
+  assert.equal(foundationState.mediaSource, 'errorvideo1');
   foundationControl = await invoke('playMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  assert.equal(foundationControl.mediaPlaybackState, 'preparing');
+  foundationControl = await invoke('reportMediaPlayback', {
+    sessionId: adminSession.sessionId, mediaGeneration: foundationControl.mediaGeneration, playbackState: 'error',
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.mediaCommand, 'error');
+  assert.equal(foundationState.mediaPlaybackState, 'error');
+  foundationControl = await invoke('replayMedia', {
     sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
   });
   foundationControl = await invoke('stopMedia', {
@@ -245,7 +276,7 @@ async function run() {
   foundationState = await publicState(adminSession.sessionId);
   assertPublicSafe(foundationState, true);
   assert.equal(foundationState.revealedAnswer, 'Video');
-  assert.equal(foundationState.mediaSource, 'https://example.test/video');
+  assert.equal(foundationState.mediaSource, 'errorvideo1');
   foundationControl = await invoke('playMedia', {
     sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
   });
@@ -286,6 +317,7 @@ async function run() {
     staleAndConcurrentOperationsVerified: true,
     normalAudioSourceWithheld: true,
     mediaGenerationVerified: true,
+    actualPlaybackStateVerified: true,
     recapArbitrarySelectionVerified: true,
     endedStateVerified: true,
   }, null, 2));

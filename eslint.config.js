@@ -41,13 +41,19 @@ export default tseslint.config(
     },
   },
   {
-    files: ['tests/**/*.ts', 'tools/migration-v1/test/**/*.ts', 'vitest.config.ts', 'vitest.rules.config.ts'],
+    files: ['tests/**/*.{ts,tsx}', 'tools/migration-v1/test/**/*.ts', 'playwright.config.ts', 'vitest.config.ts', 'vitest.rules.config.ts'],
     languageOptions: {
-      globals: globals.node,
+      globals: { ...globals.node, ...globals.browser },
       parserOptions: {
         project: './tsconfig.tests.json',
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+  },
+  {
+    files: ['tests/**/*.tsx'],
+    rules: {
+      '@typescript-eslint/require-await': 'off',
     },
   },
 );

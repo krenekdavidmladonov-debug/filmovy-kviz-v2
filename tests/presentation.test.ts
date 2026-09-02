@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'vitest';
 
-import { sanitizedChannelState } from '../apps/web/src/features/live/projectorChannel';
+import {
+  isProjectorChannelMessage,
+  parseProjectorChannelMessage,
+  sanitizedChannelState,
+  shouldAcceptProjectorFastPath,
+} from '../apps/web/src/features/live/projectorChannel';
 import type { PublicLiveState } from '../apps/web/src/features/live/types';
 import { initialMediaMachineState, reduceMediaMachine } from '../apps/web/src/features/presentation/mediaStateMachine';
 import { buildSlideRenderModel, formatPlAnswer, generatedAgendaOptions, projectorMediaPlan, youtubeVideoId } from '../apps/web/src/features/presentation/model';
@@ -11,6 +16,16 @@ function slide(overrides: Partial<SlideRenderInput> = {}): SlideRenderInput {
   return {
     kind: 'question', title: 'Syntetický titulek', text: 'Syntetické zadání',
     options: ['Jedna', 'Dvě', 'Tři', 'Čtyři'], media: [], questionNumber: 2, questionCount: 10,
+    ...overrides,
+  };
+}
+
+function publicState(overrides: Partial<PublicLiveState> = {}): PublicLiveState {
+  return {
+    sessionId: 'safe-session', quizTitle: 'Syntetický kvíz', status: 'active', slidePosition: 1,
+    slideKind: 'question', title: 'Titulek', text: 'Zadání', options: ['A'], media: [], presentation: {},
+    presentationMode: 'slide', renderMode: 'question', mediaCommand: 'idle', mediaPlaybackState: 'idle',
+    mediaGeneration: 1, introGeneration: 0, answerRevealed: false, revision: 4,
     ...overrides,
   };
 }
@@ -45,9 +60,11 @@ describe('unified slide render model', () => {
   test('AUDIO projector never mounts a player, retains the question, and mirrors playback in vinyl state', () => {
     const model = buildSlideRenderModel(slide({ kind: 'audio', mediaSource: 'abcdefghijk', clipStartSeconds: 5, clipEndSeconds: 20 }));
     expect(projectorMediaPlan(model, 'idle')).toMatchObject({ mountPlayer: false, showQuestion: true, vinylPlaying: false });
-    expect(projectorMediaPlan(model, 'play')).toMatchObject({ mountPlayer: false, showQuestion: true, vinylPlaying: true, startSeconds: 5, endSeconds: 20 });
-    expect(projectorMediaPlan(model, 'finished', true)).toMatchObject({ mountPlayer: false, showQuestion: true, vinylPlaying: false });
-    expect(projectorMediaPlan(model, 'replay')).toMatchObject({ startSeconds: 5, vinylPlaying: true });
+    expect(projectorMediaPlan(model, 'play', 'preparing')).toMatchObject({ mountPlayer: false, showQuestion: true, vinylPlaying: false, startSeconds: 5, endSeconds: 20 });
+    expect(projectorMediaPlan(model, 'play', 'playing')).toMatchObject({ vinylPlaying: true });
+    expect(projectorMediaPlan(model, 'play', 'error')).toMatchObject({ vinylPlaying: false });
+    expect(projectorMediaPlan(model, 'finished', 'finished', true)).toMatchObject({ mountPlayer: false, showQuestion: true, vinylPlaying: false });
+    expect(projectorMediaPlan(model, 'replay', 'playing')).toMatchObject({ startSeconds: 5, vinylPlaying: true });
   });
 
   test('VIDEO shows the question before play, uses one player while playing, and returns after stop or finish', () => {
@@ -56,7 +73,7 @@ describe('unified slide render model', () => {
     expect(projectorMediaPlan(model, 'play')).toMatchObject({ mountPlayer: true, showQuestion: false, startSeconds: 7, endSeconds: 24 });
     expect(projectorMediaPlan(model, 'stop')).toMatchObject({ mountPlayer: false, showQuestion: true });
     expect(projectorMediaPlan(model, 'replay')).toMatchObject({ mountPlayer: true, startSeconds: 7 });
-    expect(projectorMediaPlan(model, 'play', true)).toMatchObject({ mountPlayer: false, showQuestion: true });
+    expect(projectorMediaPlan(model, 'play', 'finished', true)).toMatchObject({ mountPlayer: false, showQuestion: true });
   });
 
   test('RECAP publishes a prominent selected answer and A/V starts at zero without a clip end', () => {
@@ -109,30 +126,56 @@ describe('media race and performance invariants', () => {
     }
   });
 
-  test('heavy-player instrumentation detects accumulation and returns to zero after cleanup', () => {
-    const diagnostics = { activePlayers: 0, peakPlayers: 0, createdPlayers: 0, destroyedPlayers: 0 };
-    recordPlayerLifecycle(diagnostics, 1);
-    recordPlayerLifecycle(diagnostics, -1);
-    recordPlayerLifecycle(diagnostics, 1);
-    recordPlayerLifecycle(diagnostics, -1);
-    expect(diagnostics).toEqual({ activePlayers: 0, peakPlayers: 1, createdPlayers: 2, destroyedPlayers: 2 });
-    const exceeded = { activePlayers: 1, peakPlayers: 1, createdPlayers: 1, destroyedPlayers: 0 };
-    expect(() => recordPlayerLifecycle(exceeded, 1)).toThrow('budget exceeded');
+  test('heavy-player instrumentation rejects a second concurrent player', () => {
+    const diagnostics = { activePlayers: 1, peakPlayers: 1, createdPlayers: 1, destroyedPlayers: 0 };
+    expect(() => recordPlayerLifecycle(diagnostics, 1)).toThrow('budget exceeded');
   });
 });
 
 describe('same-device public channel security', () => {
   test('rebuilds an allowlisted payload and drops private answer and legacy sentinels', () => {
-    const state: PublicLiveState = {
-      sessionId: 'safe-session', quizTitle: 'Syntetický kvíz', status: 'active', slidePosition: 1,
-      slideKind: 'question', title: 'Titulek', text: 'Zadání', options: ['A'], media: [], presentation: {},
-      presentationMode: 'slide', renderMode: 'question', mediaCommand: 'idle', mediaGeneration: 1, introGeneration: 0,
-      answerRevealed: false, revision: 4,
-    };
+    const state = publicState();
     const unsafe = { ...state, correctAnswer: 'SENTINEL-CORRECT', correct: 'SENTINEL-LEGACY', legacy: { raw: 'SENTINEL-RAW' } };
     const sanitized = sanitizedChannelState(unsafe);
     expect(JSON.stringify(sanitized)).not.toContain('SENTINEL');
     expect(sanitized).not.toHaveProperty('correctAnswer');
     expect(sanitized).not.toHaveProperty('legacy');
+  });
+
+  test('rejects a malformed public state instead of trusting sessionId and revision', () => {
+    expect(isProjectorChannelMessage({
+      type: 'public-state',
+      state: { sessionId: 'safe-session', revision: 999 },
+    })).toBe(false);
+  });
+
+  test('rejects a QUESTION payload carrying an answer before reveal', () => {
+    const unsafe = publicState({ revealedAnswer: 'SENTINEL-ANSWER' });
+    expect(() => sanitizedChannelState(unsafe)).toThrow();
+  });
+
+  test('accepts only a single selected RECAP answer with explicit selection', () => {
+    const recap = publicState({
+      presentationMode: 'recap', renderMode: 'recap', recapQuestionPosition: 7,
+      answerRevealed: true, revealedAnswer: 'Sanitizovaná odpověď', revision: 5,
+    });
+    expect(parseProjectorChannelMessage({ type: 'public-state', state: recap })).toEqual({ type: 'public-state', state: recap });
+    expect(parseProjectorChannelMessage({ type: 'public-state', state: { ...recap, answers: ['A', 'B'] } })).toBeUndefined();
+  });
+
+  test('rejects private extras, unknown message types, and malformed playback reports', () => {
+    expect(parseProjectorChannelMessage({ type: 'public-state', state: { ...publicState(), correctAnswer: 'SENTINEL' } })).toBeUndefined();
+    expect(parseProjectorChannelMessage({ type: 'unknown', state: publicState() })).toBeUndefined();
+    expect(parseProjectorChannelMessage({
+      type: 'playback-state', sessionId: 'safe-session', mediaGeneration: 1, playbackState: 'PLAYING', extra: true,
+    })).toBeUndefined();
+  });
+
+  test('fast path rejects stale, future, equal, and wrong-session revisions', () => {
+    expect(shouldAcceptProjectorFastPath('safe-session', 4, 4, publicState({ revision: 5 }))).toBe(true);
+    expect(shouldAcceptProjectorFastPath('safe-session', 4, 4, publicState({ revision: 3 }))).toBe(false);
+    expect(shouldAcceptProjectorFastPath('safe-session', 4, 4, publicState({ revision: 99 }))).toBe(false);
+    expect(shouldAcceptProjectorFastPath('safe-session', 4, 4, publicState({ revision: 4 }))).toBe(false);
+    expect(shouldAcceptProjectorFastPath('safe-session', 4, 4, publicState({ sessionId: 'wrong-session', revision: 5 }))).toBe(false);
   });
 });

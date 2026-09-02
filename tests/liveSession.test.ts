@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import { LiveSessionError } from '../functions/src/live/errors';
 import { buildPublicSessionState, displayAnswer } from '../functions/src/live/publication';
-import { applyLiveSessionAction } from '../functions/src/live/session-machine';
+import { applyLiveSessionAction, applyMediaPlaybackReport } from '../functions/src/live/session-machine';
 import type { PrivateLiveSession, PrivateSlide } from '../functions/src/live/types';
 
 const now = new Date('2026-09-01T10:00:00.000Z');
@@ -19,6 +19,7 @@ function session(overrides: Partial<PrivateLiveSession> = {}): PrivateLiveSessio
     answerRevealed: false,
     presentationMode: 'slide',
     mediaCommand: 'idle',
+    mediaPlaybackState: 'idle',
     mediaGeneration: 0,
     introGeneration: 0,
     revision: 1,
@@ -275,10 +276,23 @@ describe('live-session state machine', () => {
   test('media commands carry monotonic generations and stale slide callbacks cannot target a replaced slide', () => {
     const audio = { ...questionSlide(), kind: 'audio' };
     const playing = applyLiveSessionAction(session(), { type: 'play-media' }, 1, 'moderator', now, audio);
-    expect(playing).toMatchObject({ mediaCommand: 'play', mediaGeneration: 1, revision: 2 });
+    expect(playing).toMatchObject({ mediaCommand: 'play', mediaPlaybackState: 'preparing', mediaGeneration: 1, revision: 2 });
     expect(() => applyLiveSessionAction(playing, { type: 'finish-media' }, 2, 'moderator', now, questionSlide(2)))
       .toThrow(/active presentation slide/u);
     const stopped = applyLiveSessionAction(playing, { type: 'stop-media' }, 2, 'moderator', now, audio);
-    expect(stopped).toMatchObject({ mediaCommand: 'stop', mediaGeneration: 2, revision: 3 });
+    expect(stopped).toMatchObject({ mediaCommand: 'stop', mediaPlaybackState: 'idle', mediaGeneration: 2, revision: 3 });
+  });
+
+  test('trusted playback reports distinguish command from actual player state and reject stale order', () => {
+    const audio = { ...questionSlide(), kind: 'audio' };
+    const preparing = applyLiveSessionAction(session(), { type: 'play-media' }, 1, 'moderator', now, audio);
+    const ready = applyMediaPlaybackReport(preparing, 'ready', preparing.mediaGeneration, 'moderator', now);
+    expect(ready).toMatchObject({ mediaCommand: 'play', mediaPlaybackState: 'ready', revision: 3 });
+    const playing = applyMediaPlaybackReport(ready, 'playing', ready.mediaGeneration, 'moderator', now);
+    expect(playing).toMatchObject({ mediaCommand: 'play', mediaPlaybackState: 'playing', revision: 4 });
+    const failed = applyMediaPlaybackReport(playing, 'error', playing.mediaGeneration, 'moderator', now);
+    expect(failed).toMatchObject({ mediaCommand: 'error', mediaPlaybackState: 'error', revision: 5 });
+    expect(() => applyMediaPlaybackReport(failed, 'ready', failed.mediaGeneration, 'moderator', now)).toThrow(/out-of-order/u);
+    expect(() => applyMediaPlaybackReport(playing, 'finished', playing.mediaGeneration - 1, 'moderator', now)).toThrow(/stale/u);
   });
 });

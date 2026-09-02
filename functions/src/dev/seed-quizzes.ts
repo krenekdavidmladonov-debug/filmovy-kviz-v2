@@ -1,5 +1,5 @@
 import { deleteApp, initializeApp } from 'firebase-admin/app';
-import { getFirestore, Timestamp, type WriteBatch } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp, type Firestore, type WriteBatch } from 'firebase-admin/firestore';
 
 interface SeedQuestion {
   readonly id: string;
@@ -116,8 +116,9 @@ function assertSafeEmulatorEnvironment(): string {
   const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
   const projectId = process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT;
 
-  if (emulatorHost !== '127.0.0.1:8080' && emulatorHost !== 'localhost:8080') {
-    throw new Error('Refusing to seed: FIRESTORE_EMULATOR_HOST must point to local port 8080.');
+  const portMatch = /^(?:localhost|127\.0\.0\.1|\[::1\]):([1-9]\d{0,4})$/u.exec(emulatorHost ?? '');
+  if (portMatch === null || Number(portMatch[1]) > 65_535) {
+    throw new Error('Refusing to seed: FIRESTORE_EMULATOR_HOST must use localhost with an explicit port.');
   }
 
   if (!projectId?.startsWith('demo-')) {
@@ -203,8 +204,8 @@ function writeLiveFlowQuiz(batch: WriteBatch): void {
     },
     { kind: 'agenda', isQuestion: false, title: 'Program', text: 'Syntetická agenda', options: [], media: [], presentation: {} },
     { kind: 'image', isQuestion: true, title: 'Obrázek', text: 'Syntetická obrázková otázka', options: [], correctAnswer: 'Obrázek', media: [{ role: 'prompt', kind: 'image', value: 'https://example.test/image.jpg' }], presentation: {} },
-    { kind: 'audio', isQuestion: true, title: 'Audio', text: 'Syntetická audio otázka', options: [], correctAnswer: 'Audio', media: [{ role: 'prompt', kind: 'audio', value: 'synthetic-audio-id' }], presentation: { audioTrigger: 5 } },
-    { kind: 'video', isQuestion: true, title: 'Video', text: 'Syntetická video otázka', options: [], correctAnswer: 'Video', media: [{ role: 'prompt', kind: 'video', value: 'https://example.test/video' }], presentation: { videoStart: 2, videoEnd: 8 } },
+    { kind: 'audio', isQuestion: true, title: 'Audio', text: 'Syntetická audio otázka', options: [], correctAnswer: 'Audio', media: [{ role: 'prompt', kind: 'audio', value: 'erroraudio1' }], presentation: { audioTrigger: 5 } },
+    { kind: 'video', isQuestion: true, title: 'Video', text: 'Syntetická video otázka', options: [], correctAnswer: 'Video', media: [{ role: 'prompt', kind: 'video', value: 'errorvideo1' }], presentation: { videoStart: 2, videoEnd: 8 } },
     { kind: 'recap', isQuestion: false, title: 'Rekapitulace', text: 'Syntetický přehled', options: [], media: [], presentation: {} },
     { kind: 'pl', isQuestion: true, title: 'Legacy slide', text: 'Bezpečný fallback', options: [], correctAnswer: 'Legacy odpověď', media: [], presentation: {} },
     { kind: 'end', isQuestion: false, title: 'Konec', text: 'Děkujeme', options: [], media: [], presentation: {} },
@@ -244,12 +245,27 @@ function writeLiveFlowQuiz(batch: WriteBatch): void {
   });
 }
 
+async function clearLiveFlowFixture(db: Firestore): Promise<void> {
+  const quizRef = db.collection('quizzes').doc('live-session-e2e');
+  const [rounds, slides] = await Promise.all([
+    quizRef.collection('rounds').get(),
+    quizRef.collection('slides').get(),
+  ]);
+  const batch = db.batch();
+  rounds.docs.forEach((round) => batch.delete(round.ref));
+  slides.docs.forEach((slide) => batch.delete(slide.ref));
+  batch.delete(quizRef);
+  await batch.commit();
+}
+
 async function seed(): Promise<void> {
   const projectId = assertSafeEmulatorEnvironment();
   const app = initializeApp({ projectId });
 
   try {
-    const batch = getFirestore().batch();
+    const db = getFirestore();
+    await clearLiveFlowFixture(db);
+    const batch = db.batch();
     for (const quiz of quizzes) {
       writeQuiz(batch, quiz);
     }
