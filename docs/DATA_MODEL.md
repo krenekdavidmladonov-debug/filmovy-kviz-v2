@@ -38,7 +38,7 @@ V1-migrated rounds may contain private `legacy` source metadata. A generated imp
 
 ### `quizzes/{quizId}/rounds/{roundId}/questions/{questionId}`
 
-Private question source: `prompt`, `type` (`text`, `image`, `audio`, `video`, or migration-only `legacy`), `position`, and the private `correctAnswer`. V1-migrated drafts may also carry `sourceSlidePosition`, `options`, `moderatorNote`, classified external `media`, video ranges, an audio trigger, overlays, and private `legacy.raw`. The legacy representation is the minimum lossless extension for V1 slide types such as the observed but semantically unresolved `pl`. This collection is never readable by public/projector clients. The current admin view model selects only supported type, prompt, and position and does not expose the answer or migration metadata to list/detail components.
+Private question source: `prompt`, `type` (`text`, `image`, `audio`, `video`, or migration-only `legacy`), `position`, and the private `correctAnswer`. V1-migrated drafts may also carry `sourceSlidePosition`, `options`, `moderatorNote`, classified external `media`, video ranges, an audio trigger, overlays, and private `legacy.raw`. The legacy representation is the minimum lossless extension for V1 `pl`: the editor now presents its confirmed product meaning as locked **Pravda / Lež**, while its storage shape remains legacy-only and non-creatable. This collection is never readable by public/projector clients. The current admin view model selects only supported type, prompt, and position and does not expose the answer or migration metadata to list/detail components.
 
 The local seed uses stable quiz, round, and question IDs. It is development data only and is never copied from production.
 

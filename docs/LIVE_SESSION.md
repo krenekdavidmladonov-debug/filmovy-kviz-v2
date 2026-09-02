@@ -29,6 +29,12 @@ The first successful navigation sets `startedAt`. Navigation always sets `answer
 - `previousSlide({ sessionId, expectedRevision })`
 - `revealAnswer({ sessionId, expectedRevision })`
 - `hideAnswer({ sessionId, expectedRevision })`
+- `selectRecapQuestion({ sessionId, position, expectedRevision })`
+- `playMedia({ sessionId, expectedRevision })`
+- `stopMedia({ sessionId, expectedRevision })`
+- `replayMedia({ sessionId, expectedRevision })`
+- `finishMedia({ sessionId, mediaGeneration, expectedRevision })`
+- `startIntro({ sessionId, expectedRevision })`
 - `endLiveSession({ sessionId, expectedRevision })`
 
 Every callable requires Firebase Auth plus an `admin` or `moderator` custom claim. The server validates all string IDs, slide bounds, authoritative quiz/slide existence, and session state. It never accepts a quiz ID during mutation and never returns a private slide or answer.
@@ -49,6 +55,6 @@ Each private/public state carries a monotonic `revision`. A client must send the
 
 Staff start a quiz from its private detail page and are routed to `/admin/live/:sessionId`. The control subscribes to the private session/current slide, shows the current answer only to staff, and offers previous, next, reveal/hide, end, and a projector link.
 
-`/projector/:sessionId` requires no login and subscribes only to the public document. It renders waiting, active slide, revealed answer, ended, not-found, loading, and connection-safe states. Images have a minimal renderer; audio/video are displayed as sanitized source information or safe links. Full playback and a media ownership subsystem are intentionally deferred.
+`/projector/:sessionId` requires no login and subscribes only to the public document. It renders waiting, active slide, selected recap answer, ended, not-found, loading, and connection-safe states through the shared `SlideRenderer`. Normal AUDIO playback stays on the moderator device and publishes no source to the projector. VIDEO and recap media use the explicit revisioned PLAY/STOP/REPLAY lifecycle described in `MEDIA_ARCHITECTURE.md`. A media ownership/upload subsystem remains intentionally deferred.
 
-`pl` remains semantically unresolved and is displayed as “Legacy slide” without publishing its legacy metadata.
+Existing `pl` is presented to authorized editors as locked legacy **Pravda / Lež** content. Its storage shape and raw metadata remain private and are never published to the projector.

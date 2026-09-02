@@ -31,12 +31,12 @@ Anonymized per-quiz distributions were `88/6/74`, `91/6/79`, `63/5/50`, and `73/
 | `free` | 50 | KNOWN | text question |
 | `image` | 30 | KNOWN | image question |
 | `intro` | 25 | KNOWN | private content slide / round presentation |
-| `pl` | 11 | PARTIALLY MAPPED | private legacy question with full raw preservation |
+| `pl` | 11 | PARTIALLY MAPPED | private locked Pravda / Lež question with full raw preservation |
 | `question` | 74 | KNOWN | text question |
 | `recap` | 23 | KNOWN | private content slide |
 | `video` | 46 | KNOWN | video question |
 
-There were no UNKNOWN slide types. The semantic meaning of `pl` remains intentionally unresolved; no meaning was guessed.
+There were no UNKNOWN slide types. Migration originally kept `pl` unresolved and lossless rather than guessing. The later editor product contract confirmed **Pravda / Lež** presentation while retaining its legacy-only, non-creatable storage mapping.
 
 ### Observed fields
 
