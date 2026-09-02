@@ -186,15 +186,15 @@ function writeQuiz(batch: WriteBatch, quiz: SeedQuiz): void {
   }
 }
 
-function writeLiveFlowQuiz(batch: WriteBatch, quizId: string): void {
+function writeLiveFlowQuiz(batch: WriteBatch, quizId: string, firstQuestionType: 'choice' | 'free' = 'choice'): void {
   const db = getFirestore();
   const quizRef = db.collection('quizzes').doc(quizId);
   const timestamp = Timestamp.fromDate(new Date('2026-09-01T08:00:00.000Z'));
   const slides = [
     { kind: 'intro', isQuestion: false, title: 'Začínáme', text: 'Syntetický úvod', options: [], media: [], presentation: {} },
     {
-      kind: 'question', isQuestion: true, title: 'Otázka', text: 'Syntetický veřejný prompt',
-      options: ['A', 'B', 'C'], correctAnswer: 'Syntetická odpověď',
+      kind: firstQuestionType === 'free' ? 'free' : 'question', isQuestion: true, title: 'Otázka', text: 'Syntetický veřejný prompt',
+      options: firstQuestionType === 'free' ? [] : ['A', 'B', 'C'], correctAnswer: 'Syntetická odpověď',
       moderatorNote: 'Pouze moderátor',
       media: [
         { role: 'prompt', kind: 'image', value: 'https://example.test/prompt.jpg' },
@@ -204,10 +204,10 @@ function writeLiveFlowQuiz(batch: WriteBatch, quizId: string): void {
     },
     { kind: 'agenda', isQuestion: false, title: 'Program', text: 'Syntetická agenda', options: [], media: [], presentation: {} },
     { kind: 'image', isQuestion: true, title: 'Obrázek', text: 'Syntetická obrázková otázka', options: [], correctAnswer: 'Obrázek', media: [{ role: 'prompt', kind: 'image', value: 'https://example.test/image.jpg' }], presentation: {} },
-    { kind: 'audio', isQuestion: true, title: 'Audio', text: 'Syntetická audio otázka', options: [], correctAnswer: 'Audio', media: [{ role: 'prompt', kind: 'audio', value: 'erroraudio1' }], presentation: { audioTrigger: 5 } },
+    { kind: 'audio', isQuestion: true, title: 'Audio', text: 'Syntetická audio otázka', options: [], correctAnswer: 'Audio', media: [{ role: 'prompt', kind: 'audio', value: 'erroraudio1' }], presentation: { audioTrigger: 5 }, clipStartSeconds: 5, clipEndSeconds: 10 },
     { kind: 'video', isQuestion: true, title: 'Video', text: 'Syntetická video otázka', options: [], correctAnswer: 'Video', media: [{ role: 'prompt', kind: 'video', value: 'errorvideo1' }], presentation: { videoStart: 2, videoEnd: 8 } },
     { kind: 'recap', isQuestion: false, title: 'Rekapitulace', text: 'Syntetický přehled', options: [], media: [], presentation: {} },
-    { kind: 'pl', isQuestion: true, title: 'Legacy slide', text: 'Bezpečný fallback', options: [], correctAnswer: 'Legacy odpověď', media: [], presentation: {} },
+    { kind: 'pl', isQuestion: true, title: 'Legacy slide', text: 'Bezpečný fallback', options: [], correctAnswer: 'Pravda', media: [], presentation: {} },
     { kind: 'end', isQuestion: false, title: 'Konec', text: 'Děkujeme', options: [], media: [], presentation: {} },
   ] as const;
 
@@ -332,9 +332,9 @@ async function seed(): Promise<void> {
     for (const quiz of quizzes) {
       writeQuiz(batch, quiz);
     }
-    writeLiveFlowQuiz(batch, 'live-session-e2e');
+    writeLiveFlowQuiz(batch, 'live-session-e2e', 'free');
     writeLiveFlowQuiz(batch, 'quiz-editor-e2e');
-    writeLiveFlowQuiz(batch, 'projector-lifecycle-e2e');
+    writeLiveFlowQuiz(batch, 'projector-lifecycle-e2e', 'free');
     writeLiveFlowQuiz(batch, 'round-first-editor-browser-e2e');
     writePreflightQuiz(batch, 'preflight-ready-e2e', 'ready');
     writePreflightQuiz(batch, 'preflight-warning-e2e', 'warning');

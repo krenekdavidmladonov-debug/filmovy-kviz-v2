@@ -121,7 +121,7 @@ async function run() {
   control = await invoke('nextSlide', { sessionId, expectedRevision: control.revision });
   assert.equal(control.currentSlidePosition, 2);
   state = await publicState(sessionId);
-  assert.equal(state.slideKind, 'question');
+  assert.equal(state.slideKind, 'free');
   assertPublicSafe(state, false);
   assert.equal(JSON.stringify(state).includes('Syntetická odpověď'), false);
   assert.equal(JSON.stringify(state).includes('answer.jpg'), false);

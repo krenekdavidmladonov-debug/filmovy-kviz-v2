@@ -47,8 +47,10 @@ test('admin and focused moderator shell remain usable at desktop, tablet, and mo
   await adminNav.getByRole('link', { name: 'Kvízy' }).click();
   await expect(moderator.getByRole('heading', { name: 'Kvízy' })).toBeVisible();
   await moderator.locator('a.quiz-title-link[href="/admin/quizzes/projector-lifecycle-e2e"]').click();
-  await expect(moderator.getByRole('button', { name: 'Spustit kvíz' })).toBeVisible();
-  await moderator.getByRole('button', { name: 'Spustit kvíz' }).click();
+  await expect(moderator.getByRole('link', { name: 'Spustit kvíz' })).toBeVisible();
+  await moderator.getByRole('link', { name: 'Spustit kvíz' }).click();
+  await moderator.getByRole('button', { name: 'Spustit i tak' }).click();
+  await moderator.getByRole('button', { name: 'Potvrdit a spustit' }).click();
   await expect(moderator).toHaveURL(/\/admin\/live\/[^/]+$/u);
 
   await moderator.getByRole('button', { name: 'Další →' }).click();

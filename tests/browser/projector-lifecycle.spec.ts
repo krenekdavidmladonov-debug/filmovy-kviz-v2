@@ -59,7 +59,9 @@ test('audio error/retry, stale callback, video fallback and projector refresh', 
   await expect(moderator).toHaveURL(/\/admin$/u);
 
   await moderator.goto(`${baseURL}/admin/quizzes/projector-lifecycle-e2e`);
-  await moderator.getByRole('button', { name: 'Spustit kvíz' }).click();
+  await moderator.getByRole('link', { name: 'Spustit kvíz' }).click();
+  await moderator.getByRole('button', { name: 'Spustit i tak' }).click();
+  await moderator.getByRole('button', { name: 'Potvrdit a spustit' }).click();
   await expect(moderator).toHaveURL(/\/admin\/live\/[^/]+$/u);
   const sessionId = new URL(moderator.url()).pathname.split('/').at(-1);
   expect(sessionId).toBeTruthy();
