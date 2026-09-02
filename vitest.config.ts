@@ -15,6 +15,7 @@ export default defineConfig({
       'tests/quizPreflight.test.ts',
       'tests/localEmulatorEnvironment.test.ts',
       'tests/localQaLauncher.test.ts',
+      'tests/eventNightLauncher.test.ts',
       'tools/migration-v1/test/**/*.test.ts',
     ],
   },

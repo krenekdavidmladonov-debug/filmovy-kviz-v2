@@ -7,6 +7,10 @@
   "scripts": {
     "dev": "pnpm --filter @filmovy-kviz/web dev",
     "emulators": "firebase emulators:start --project demo-filmovy-kviz-v2",
+    "event-night:emulators": "firebase emulators:start --project demo-filmovy-kviz-v2 --import .local-data/event-night/emulator-data",
+    "event-night:emulators:fresh": "firebase emulators:start --project demo-filmovy-kviz-v2",
+    "event-night:export": "firebase emulators:export .local-data/event-night/export-staging --project demo-filmovy-kviz-v2",
+    "event-night:candidate": "vitest run --config tools/event-night/vitest.config.ts --disableConsoleIntercept",
     "seed:auth": "pnpm --filter @filmovy-kviz/functions build && node tools/local-emulator-environment.mjs auth functions/lib/dev/seed-auth.js",
     "seed:quizzes": "pnpm --filter @filmovy-kviz/functions build && node tools/local-emulator-environment.mjs firestore functions/lib/dev/seed-quizzes.js",
     "seed:emulators": "pnpm seed:auth && pnpm seed:quizzes",
@@ -18,6 +22,7 @@
     "test:e2e:editor": "node tools/local-emulator-environment.mjs full tests/e2e/quiz-editor-emulator.mjs",
     "test:e2e:editor-migrated": "node tools/local-emulator-environment.mjs full tests/e2e/quiz-editor-migrated-emulator.mjs",
     "test:e2e:production-preview": "node tests/e2e/production-preview-smoke.mjs",
+    "test:e2e:event-night-health": "node tools/event-night/health-check.mjs",
     "test:e2e:browser": "playwright test --config playwright.config.ts",
     "migration:v1:inspect": "pnpm --filter @filmovy-kviz/migration-v1 build && node tools/migration-v1/lib/cli.js inspect",
     "migration:v1:extract": "pnpm --filter @filmovy-kviz/migration-v1 build && node tools/migration-v1/lib/extract-library.js",
