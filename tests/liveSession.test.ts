@@ -178,6 +178,27 @@ describe('live-session publication security', () => {
 });
 
 describe('live-session state machine', () => {
+  test('500 alternating slide transitions remain bounded and never retain an answer', () => {
+    let current = session({ slideCount: 2, answerRevealed: true });
+    const durations: number[] = [];
+    for (let index = 0; index < 500; index += 1) {
+      const target = current.currentSlidePosition === 1 ? questionSlide(2) : questionSlide(1);
+      const action = current.currentSlidePosition === 1
+        ? { type: 'next-slide' as const, slideId: target.id }
+        : { type: 'previous-slide' as const, slideId: target.id };
+      const started = performance.now();
+      current = applyLiveSessionAction(current, action, current.revision, 'moderator', now, target);
+      durations.push(performance.now() - started);
+      const publicState = buildPublicSessionState(current, target);
+      expect(publicState.answerRevealed).toBe(false);
+      expect(publicState).not.toHaveProperty('revealedAnswer');
+      expectNoPrivateFields(publicState);
+    }
+    const mean = (values: readonly number[]) => values.reduce((total, value) => total + value, 0) / values.length;
+    expect(current.revision).toBe(501);
+    expect(mean(durations.slice(250))).toBeLessThan(mean(durations.slice(0, 250)) * 10 + 0.1);
+  });
+
   test('starts at position zero, then moves next and previous with monotonic revisions', () => {
     const waiting = session({
       status: 'waiting',

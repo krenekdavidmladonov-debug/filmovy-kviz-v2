@@ -199,7 +199,7 @@ describe('mounted media lifecycle regressions', () => {
     expect(window.__FILMOVY_KVIZ_MEDIA_DEBUG__).toEqual({ activePlayers: 0, peakPlayers: 1, createdPlayers: 2, destroyedPlayers: 2 });
   });
 
-  test('102 VIDEO PLAY/REPLAY/STOP operations keep at most one heavy player mounted', async () => {
+  test('153 VIDEO PLAY/REPLAY/STOP operations keep at most one heavy player mounted', async () => {
     const video = {
       kind: 'video', title: 'Video otázka', text: 'Syntetické zadání', options: [], media: [], mediaSource: 'abcdefghijk',
     } as const;
@@ -207,7 +207,7 @@ describe('mounted media lifecycle regressions', () => {
       <SlideRenderer quizTitle="Syntetický kvíz" mediaCommand="stop" mediaGeneration={0} slide={video} />,
     );
     let operations = 0;
-    for (let cycle = 1; cycle <= 34; cycle += 1) {
+    for (let cycle = 1; cycle <= 51; cycle += 1) {
       await act(async () => {
         view.root.render(
           <SlideRenderer quizTitle="Syntetický kvíz" mediaCommand="play" mediaGeneration={cycle * 3 - 2} slide={video} />,
@@ -231,9 +231,9 @@ describe('mounted media lifecycle regressions', () => {
       });
       operations += 1;
     }
-    expect(operations).toBe(102);
+    expect(operations).toBe(153);
     expect(window.__FILMOVY_KVIZ_MEDIA_DEBUG__).toEqual({
-      activePlayers: 0, peakPlayers: 1, createdPlayers: 68, destroyedPlayers: 68,
+      activePlayers: 0, peakPlayers: 1, createdPlayers: 102, destroyedPlayers: 102,
     });
     await act(async () => { view.root.unmount(); });
   });
@@ -253,6 +253,30 @@ describe('mounted media lifecycle regressions', () => {
       value instanceof HTMLScriptElement && value.dataset.filmovyKvizYoutubeApi === 'true'
     ));
     expect(scriptAttempts).toHaveLength(2);
+    await act(async () => { view.root.unmount(); });
+  });
+
+  test('a network-style player error during PLAYING recovers only after explicit REPLAY', async () => {
+    const failed = vi.fn();
+    const view = await mounted(
+      <YouTubePlayer source="abcdefghijk" command="play" generation={40} startSeconds={3} endSeconds={9} onError={failed} />,
+    );
+    const first = FakePlayer.instances[0]!;
+    await act(async () => { first.events.onReady(); first.events.onStateChange({ data: 1 }); });
+    await act(async () => { first.events.onError(); });
+    expect(failed).toHaveBeenCalledTimes(1);
+    expect(view.host.querySelector('[data-media-lifecycle]')?.getAttribute('data-media-lifecycle')).toBe('ERROR');
+
+    await act(async () => {
+      view.root.render(
+        <YouTubePlayer source="abcdefghijk" command="replay" generation={41} startSeconds={3} endSeconds={9} onError={failed} />,
+      );
+    });
+    const recovered = FakePlayer.instances.at(-1)!;
+    await act(async () => { recovered.events.onReady(); recovered.events.onStateChange({ data: 1 }); });
+    await act(async () => { first.events.onError(); });
+    expect(failed).toHaveBeenCalledTimes(1);
+    expect(view.host.querySelector('[data-media-lifecycle]')?.getAttribute('data-media-lifecycle')).toBe('PLAYING');
     await act(async () => { view.root.unmount(); });
   });
 
