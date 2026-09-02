@@ -21,7 +21,13 @@ export {
   createQuizSlide,
   deleteQuizSlide,
   duplicateQuizSlide,
+  duplicateQuizRound,
+  moveQuizQuestionToRound,
+  moveQuizRound,
   moveQuizSlide,
+  removeQuizRound,
+  reorderQuizQuestion,
+  updateQuizRound,
   updateQuizMetadata,
   updateQuizSlide,
 } from './editor/callables.js';

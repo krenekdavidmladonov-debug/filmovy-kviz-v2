@@ -107,6 +107,7 @@ export function mapEditorSlide(id: string, data: DocumentData): EditorSlide {
     kind: (kindSet.has(storedKind) ? storedKind : 'legacy') as EditableSlideKind,
     isQuestion: data.isQuestion === true,
     ...(typeof data.roundId === 'string' ? { roundId: data.roundId } : {}),
+    ...(typeof data.roundTitle === 'string' ? { roundTitle: data.roundTitle } : {}),
     title: optionalText(data.title),
     text: optionalText(data.text),
     moderatorNote: optionalText(data.moderatorNote),

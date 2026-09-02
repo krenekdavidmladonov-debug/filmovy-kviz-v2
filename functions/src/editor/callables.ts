@@ -26,6 +26,8 @@ import {
   isObject,
   requestedDirection,
   requestedPosition,
+  requestedRoundRemovalMode,
+  requestedRoundTitle,
   requestedSlide,
   requiredId,
   validateQuizMetadata,
@@ -460,6 +462,224 @@ export const moveQuizSlide = onCall(callableOptions, async (request): Promise<Ed
       const updated = orderedWithPositions(reordered);
       const result = writeQuizState(transaction, state, updated, actor);
       return { ...result, selectedSlideId: slideId };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const updateQuizRound = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const roundId = requiredId(request.data, 'roundId');
+    const title = requestedRoundTitle(request.data);
+    const revision = expectedRevision(request.data);
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      const members = state.slides.filter((slide) => slideRoundId(slide) === roundId);
+      if (members.length === 0) throw new QuizEditorError('not-found', 'Quiz round was not found.');
+      const updated = orderedWithPositions(state.slides.map((slide) => {
+        if (slideRoundId(slide) !== roundId) return slide;
+        const data: Record<string, unknown> = { ...slide.data, roundTitle: title };
+        if (isRoundKind(storedKind(slide))) data.title = title;
+        return { ...slide, data };
+      }));
+      const result = writeQuizState(transaction, state, updated, actor);
+      transaction.set(state.quizRef.collection('rounds').doc(roundId), { title }, { merge: true });
+      return { ...result, selectedSlideId: members[0]?.id };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const reorderQuizQuestion = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const slideId = requiredId(request.data, 'slideId');
+    const direction = requestedDirection(request.data);
+    const revision = expectedRevision(request.data);
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      const current = state.slides.find((slide) => slide.id === slideId);
+      const roundId = current === undefined ? undefined : slideRoundId(current);
+      if (current === undefined || current.data.isQuestion !== true) {
+        throw new QuizEditorError('not-found', 'Quiz question was not found.');
+      }
+      const questions = state.slides.filter((slide) => slideRoundId(slide) === roundId && slide.data.isQuestion === true);
+      const questionIndex = questions.findIndex((slide) => slide.id === slideId);
+      const target = questions[questionIndex + direction];
+      if (target === undefined) throw new QuizEditorError('invalid-argument', 'Question cannot move outside its round.');
+      const currentIndex = state.slides.findIndex((slide) => slide.id === current.id);
+      const targetIndex = state.slides.findIndex((slide) => slide.id === target.id);
+      const reordered = [...state.slides];
+      reordered[currentIndex] = target;
+      reordered[targetIndex] = current;
+      const updated = orderedWithPositions(reordered);
+      const result = writeQuizState(transaction, state, updated, actor);
+      return { ...result, selectedSlideId: slideId };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const moveQuizQuestionToRound = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const slideId = requiredId(request.data, 'slideId');
+    const targetRoundId = requiredId(request.data, 'targetRoundId');
+    const revision = expectedRevision(request.data);
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      const current = state.slides.find((slide) => slide.id === slideId);
+      const sourceRoundId = current === undefined ? undefined : slideRoundId(current);
+      if (current === undefined || current.data.isQuestion !== true) {
+        throw new QuizEditorError('not-found', 'Quiz question was not found.');
+      }
+      if (sourceRoundId !== undefined && sourceRoundId === targetRoundId) throw new QuizEditorError('invalid-argument', 'Question is already in this round.');
+      const targetMembers = state.slides.filter((slide) => slideRoundId(slide) === targetRoundId);
+      if (targetMembers.length === 0) throw new QuizEditorError('not-found', 'Target quiz round was not found.');
+      const targetTitle = targetMembers.find((slide) => typeof slide.data.roundTitle === 'string')?.data.roundTitle;
+      const moved: StoredEditorSlide = {
+        ...current,
+        data: {
+          ...current.data,
+          roundId: targetRoundId,
+          ...(typeof targetTitle === 'string' ? { roundTitle: targetTitle } : {}),
+        },
+      };
+      const without = state.slides.filter((slide) => slide.id !== slideId);
+      const recapIndex = without.findIndex((slide) => slideRoundId(slide) === targetRoundId && storedKind(slide) === 'recap');
+      const lastTargetIndex = without.reduce((found, slide, index) => slideRoundId(slide) === targetRoundId ? index : found, -1);
+      const insertIndex = recapIndex >= 0 ? recapIndex : lastTargetIndex + 1;
+      without.splice(insertIndex, 0, moved);
+      deleteOldDerivedQuestion(transaction, state, current);
+      const updated = orderedWithPositions(without);
+      if (sourceRoundId !== undefined && !updated.some((slide) => slideRoundId(slide) === sourceRoundId)) {
+        transaction.delete(state.quizRef.collection('rounds').doc(sourceRoundId));
+      }
+      const result = writeQuizState(transaction, state, updated, actor);
+      return { ...result, selectedSlideId: slideId };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const duplicateQuizRound = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const roundId = requiredId(request.data, 'roundId');
+    const revision = expectedRevision(request.data);
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      const source = state.slides.filter((slide) => slideRoundId(slide) === roundId);
+      if (source.length === 0) throw new QuizEditorError('not-found', 'Quiz round was not found.');
+      if (state.slides.length + source.length > maximumSlideCount) {
+        throw new QuizEditorError('failed-precondition', 'Duplicated round would make the quiz too large.');
+      }
+      const newRoundId = state.quizRef.collection('rounds').doc().id;
+      const currentTitle = source.find((slide) => typeof slide.data.roundTitle === 'string')?.data.roundTitle
+        ?? source.find((slide) => isRoundKind(storedKind(slide)) && typeof slide.data.title === 'string')?.data.title;
+      const copiedTitle = typeof currentTitle === 'string' && currentTitle.trim() !== '' ? `${currentTitle} – kopie` : 'Kopie kola';
+      const copies = source.map((slide) => ({
+        id: state.quizRef.collection('slides').doc().id,
+        data: {
+          ...slide.data,
+          roundId: newRoundId,
+          roundTitle: copiedTitle,
+          ...(isRoundKind(storedKind(slide)) ? { title: copiedTitle } : {}),
+        },
+      }));
+      const sourceLastIndex = state.slides.reduce((found, slide, index) => slideRoundId(slide) === roundId ? index : found, -1);
+      const combined = [...state.slides];
+      combined.splice(sourceLastIndex + 1, 0, ...copies);
+      const updated = orderedWithPositions(combined);
+      const result = writeQuizState(transaction, state, updated, actor);
+      return { ...result, selectedSlideId: copies[0]?.id };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const moveQuizRound = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const roundId = requiredId(request.data, 'roundId');
+    const direction = requestedDirection(request.data);
+    const revision = expectedRevision(request.data);
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      const roundIds = [...new Set(state.slides.map(slideRoundId).filter((value): value is string => value !== undefined))];
+      const roundIndex = roundIds.indexOf(roundId);
+      const targetRoundId = roundIds[roundIndex + direction];
+      if (roundIndex < 0 || targetRoundId === undefined) throw new QuizEditorError('invalid-argument', 'Round cannot move further.');
+      const selected = state.slides.filter((slide) => slideRoundId(slide) === roundId);
+      const target = state.slides.filter((slide) => slideRoundId(slide) === targetRoundId);
+      const replacement = direction === -1 ? [...selected, ...target] : [...target, ...selected];
+      const involvedIds = new Set(replacement.map((slide) => slide.id));
+      let replacementIndex = 0;
+      const reordered = state.slides.map((slide) => involvedIds.has(slide.id) ? replacement[replacementIndex++]! : slide);
+      const updated = orderedWithPositions(reordered);
+      const result = writeQuizState(transaction, state, updated, actor);
+      return { ...result, selectedSlideId: selected[0]?.id };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const removeQuizRound = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const roundId = requiredId(request.data, 'roundId');
+    const revision = expectedRevision(request.data);
+    const mode = requestedRoundRemovalMode(request.data);
+    const targetRoundId = mode === 'move' ? requiredId(request.data, 'targetRoundId') : undefined;
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      const source = state.slides.filter((slide) => slideRoundId(slide) === roundId);
+      if (source.length === 0) throw new QuizEditorError('not-found', 'Quiz round was not found.');
+      const questions = source.filter((slide) => slide.data.isQuestion === true);
+      if (targetRoundId === roundId) throw new QuizEditorError('invalid-argument', 'Target round must be different.');
+      const target = targetRoundId === undefined ? [] : state.slides.filter((slide) => slideRoundId(slide) === targetRoundId);
+      if (mode === 'move' && target.length === 0) throw new QuizEditorError('not-found', 'Target quiz round was not found.');
+      const movedTitle = target.find((slide) => typeof slide.data.roundTitle === 'string')?.data.roundTitle;
+      const sourceIds = new Set(source.map((slide) => slide.id));
+      const kept = state.slides.filter((slide) => !sourceIds.has(slide.id));
+      let movedQuestions: StoredEditorSlide[] = [];
+      if (mode === 'move' && targetRoundId !== undefined) {
+        movedQuestions = questions.map((slide) => ({
+          ...slide,
+          data: {
+            ...slide.data,
+            roundId: targetRoundId,
+            ...(typeof movedTitle === 'string' ? { roundTitle: movedTitle } : {}),
+          },
+        }));
+        const recapIndex = kept.findIndex((slide) => slideRoundId(slide) === targetRoundId && storedKind(slide) === 'recap');
+        const lastTargetIndex = kept.reduce((found, slide, index) => slideRoundId(slide) === targetRoundId ? index : found, -1);
+        kept.splice(recapIndex >= 0 ? recapIndex : lastTargetIndex + 1, 0, ...movedQuestions);
+      }
+      if (kept.length === 0) throw new QuizEditorError('failed-precondition', 'A quiz must keep at least one slide.');
+      for (const slide of source) {
+        deleteOldDerivedQuestion(transaction, state, slide);
+        if (!movedQuestions.some((moved) => moved.id === slide.id)) {
+          transaction.delete(state.quizRef.collection('slides').doc(slide.id));
+        }
+      }
+      transaction.delete(state.quizRef.collection('rounds').doc(roundId));
+      const updated = orderedWithPositions(kept);
+      const result = writeQuizState(transaction, state, updated, actor);
+      return { ...result, selectedSlideId: movedQuestions[0]?.id ?? updated[0]?.id };
     });
   } catch (error) {
     return mapError(error);

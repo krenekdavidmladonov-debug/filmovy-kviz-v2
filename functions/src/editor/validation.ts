@@ -51,6 +51,18 @@ export function requestedDirection(data: unknown): -1 | 1 {
   return data.direction;
 }
 
+export function requestedRoundTitle(data: unknown): string {
+  if (!isObject(data)) throw new HttpsError('invalid-argument', 'Request data is required.');
+  return boundedString(data.title, 'round title', 300, false);
+}
+
+export function requestedRoundRemovalMode(data: unknown): 'delete' | 'move' {
+  if (!isObject(data) || (data.mode !== 'delete' && data.mode !== 'move')) {
+    throw new HttpsError('invalid-argument', 'mode must be delete or move.');
+  }
+  return data.mode;
+}
+
 export function requestedSlide(data: unknown): EditorSlideInput {
   if (!isObject(data)) throw new HttpsError('invalid-argument', 'Request data is required.');
   return validateSlideInput(data.slide);

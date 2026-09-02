@@ -31,6 +31,7 @@ export interface EditorSlide {
   readonly kind: EditableSlideKind;
   readonly isQuestion: boolean;
   readonly roundId?: string;
+  readonly roundTitle?: string;
   readonly title: string;
   readonly text: string;
   readonly moderatorNote: string;
@@ -48,6 +49,15 @@ export interface EditorSlide {
   readonly clipStartSeconds: number | null;
   readonly clipEndSeconds: number | null;
   readonly hasLegacyData: boolean;
+}
+
+export type CreatableQuestionType = 'choice' | 'free' | 'image' | 'audio' | 'video';
+export type SemanticQuestionType = CreatableQuestionType | 'legacy-pl' | 'legacy';
+
+export interface EditorValidationIssue {
+  readonly field: string;
+  readonly message: string;
+  readonly severity: 'error' | 'warning';
 }
 
 export interface EditorQuiz {

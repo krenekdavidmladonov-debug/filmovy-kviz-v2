@@ -58,3 +58,25 @@ export const deleteQuizSlide = (quizId: string, revision: number, slideId: strin
 export const moveQuizSlide = (quizId: string, revision: number, slideId: string, direction: -1 | 1) => (
   invoke('moveQuizSlide', { quizId, slideId, direction, expectedRevision: revision })
 );
+export const updateQuizRound = (quizId: string, revision: number, roundId: string, title: string) => (
+  invoke('updateQuizRound', { quizId, roundId, title, expectedRevision: revision })
+);
+export const reorderQuizQuestion = (quizId: string, revision: number, slideId: string, direction: -1 | 1) => (
+  invoke('reorderQuizQuestion', { quizId, slideId, direction, expectedRevision: revision })
+);
+export const moveQuizQuestionToRound = (quizId: string, revision: number, slideId: string, targetRoundId: string) => (
+  invoke('moveQuizQuestionToRound', { quizId, slideId, targetRoundId, expectedRevision: revision })
+);
+export const duplicateQuizRound = (quizId: string, revision: number, roundId: string) => (
+  invoke('duplicateQuizRound', { quizId, roundId, expectedRevision: revision })
+);
+export const moveQuizRound = (quizId: string, revision: number, roundId: string, direction: -1 | 1) => (
+  invoke('moveQuizRound', { quizId, roundId, direction, expectedRevision: revision })
+);
+export const removeQuizRound = (
+  quizId: string,
+  revision: number,
+  roundId: string,
+  mode: 'delete' | 'move',
+  targetRoundId?: string,
+) => invoke('removeQuizRound', { quizId, roundId, mode, expectedRevision: revision, ...(targetRoundId ? { targetRoundId } : {}) });
