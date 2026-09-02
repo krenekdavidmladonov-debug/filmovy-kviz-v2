@@ -30,6 +30,20 @@ function Get-EventNightPaths {
   }
 }
 
+function Set-EventNightEmulatorEnvironment {
+  param([Parameter(Mandatory = $true)][string]$ProjectId)
+
+  if ($ProjectId -ne $script:EventNightProjectId -or -not $ProjectId.StartsWith('demo-')) {
+    Throw-QaError "Nepovolené event-night project ID '$ProjectId'." "Použijte pouze $script:EventNightProjectId."
+  }
+  $env:GCLOUD_PROJECT = $ProjectId
+  $env:GOOGLE_CLOUD_PROJECT = $ProjectId
+  $env:FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099'
+  $env:FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080'
+  $env:FUNCTIONS_EMULATOR_HOST = '127.0.0.1:5001'
+  $env:FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:9199'
+}
+
 function Assert-EventNightPath {
   param(
     [Parameter(Mandatory = $true)][string]$RepoRoot,

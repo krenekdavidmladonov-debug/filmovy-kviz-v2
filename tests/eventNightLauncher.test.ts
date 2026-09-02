@@ -37,6 +37,8 @@ describe('event-night launcher safety contract', () => {
     const implementation = `${common}\n${start}\n${stop}\n${prepare}\n${backup}\n${worker}`;
     expect(common).toContain("EventNightProjectId = 'demo-filmovy-kviz-v2'");
     expect(common).toContain("EventNightUrl = 'http://localhost:5000/admin/login'");
+    expect(common).toContain("FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080'");
+    expect(common).toContain("FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099'");
     expect(worker).toContain("$ProjectId -ne 'demo-filmovy-kviz-v2'");
     expect(worker).toContain("'GOOGLE_APPLICATION_CREDENTIALS', 'FIREBASE_CONFIG', 'FIREBASE_TOKEN'");
     expect(implementation).not.toMatch(/firebase\s+deploy/iu);

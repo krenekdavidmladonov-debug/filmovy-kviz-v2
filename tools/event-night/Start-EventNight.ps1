@@ -40,6 +40,7 @@ try {
     Throw-QaError 'Git nebyl nalezen; nelze ověřit release HEAD.' 'Nainstalujte Git nebo spusťte launcher z Codex prostředí.'
   }
   Set-SafeChildEnvironment $repoRoot $nodeTool $pnpmTool $javaTool $ProjectId
+  Set-EventNightEmulatorEnvironment $ProjectId
   $paths = Get-EventNightPaths $repoRoot
   New-Item -ItemType Directory -Path $paths.DataDirectory -Force | Out-Null
 

@@ -32,6 +32,7 @@ try {
   $javaTool = Resolve-JavaTool $repoRoot
   $pnpmTool = Resolve-PnpmTool $repoRoot $nodeTool
   Set-SafeChildEnvironment $repoRoot $nodeTool $pnpmTool $javaTool $script:EventNightProjectId
+  Set-EventNightEmulatorEnvironment $script:EventNightProjectId
   Remove-Item -LiteralPath $paths.HealthPath -Force -ErrorAction SilentlyContinue
   Write-QaInfo 'Aktualizuji preflight health a vytvářím checkpoint bez zastavení aplikace...'
   Invoke-EventNightHealth $repoRoot $nodeTool $paths | Out-Null

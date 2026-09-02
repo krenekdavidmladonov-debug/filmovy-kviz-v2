@@ -37,6 +37,7 @@ try {
   $javaTool = Resolve-JavaTool $repoRoot
   $pnpmTool = Resolve-PnpmTool $repoRoot $nodeTool
   Set-SafeChildEnvironment $repoRoot $nodeTool $pnpmTool $javaTool $script:EventNightProjectId
+  Set-EventNightEmulatorEnvironment $script:EventNightProjectId
 
   $healthFailed = $false
   Remove-Item -LiteralPath $paths.HealthPath -Force -ErrorAction SilentlyContinue
