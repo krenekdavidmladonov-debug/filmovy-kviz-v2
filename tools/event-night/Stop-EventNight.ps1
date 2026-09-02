@@ -1,4 +1,4 @@
-param([switch]$NonInteractive)
+﻿param([switch]$NonInteractive)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0

@@ -1,4 +1,4 @@
-Set-StrictMode -Version 2.0
+﻿Set-StrictMode -Version 2.0
 
 $script:EventNightProjectId = 'demo-filmovy-kviz-v2'
 $script:EventNightUrl = 'http://localhost:5000/admin/login'
@@ -64,13 +64,22 @@ function Get-EventNightFileRecords {
   )
 
   if (-not (Test-Path -LiteralPath $Root -PathType Container)) { return @() }
+  $normalizedRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd(
+    [System.IO.Path]::DirectorySeparatorChar,
+    [System.IO.Path]::AltDirectorySeparatorChar
+  )
+  $rootPrefix = $normalizedRoot + [System.IO.Path]::DirectorySeparatorChar
   return @(
     Get-ChildItem -LiteralPath $Root -File -Recurse |
       Where-Object { $_.Name -notin $ExcludedNames } |
       Sort-Object FullName |
       ForEach-Object {
+        $fullName = [System.IO.Path]::GetFullPath($_.FullName)
+        if (-not $fullName.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+          Throw-QaError "Soubor opustil kontrolovaný event-night adresář: $fullName" 'Nepokračujte a požádejte vývojáře o kontrolu launcheru.'
+        }
         [ordered]@{
-          path = [System.IO.Path]::GetRelativePath($Root, $_.FullName).Replace('\', '/')
+          path = $fullName.Substring($rootPrefix.Length).Replace('\', '/')
           bytes = $_.Length
           sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
         }

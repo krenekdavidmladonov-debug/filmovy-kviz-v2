@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$ProjectId = 'demo-filmovy-kviz-v2',
   [switch]$NonInteractive,
   [int]$StartupTimeoutSeconds = 180

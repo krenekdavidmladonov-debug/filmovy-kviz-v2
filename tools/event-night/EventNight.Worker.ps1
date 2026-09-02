@@ -1,4 +1,4 @@
-param(
+﻿param(
   [Parameter(Mandatory = $true)][ValidateSet('Fresh', 'Import')][string]$Mode,
   [Parameter(Mandatory = $true)][string]$RunToken,
   [Parameter(Mandatory = $true)][string]$RepoRoot,

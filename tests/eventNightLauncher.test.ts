@@ -8,6 +8,10 @@ const read = (file: string) => readFileSync(
   fileURLToPath(new URL(file, `file:///${root.replaceAll('\\', '/')}/`)),
   'utf8',
 );
+const hasUtf8Bom = (file: string) => {
+  const bytes = readFileSync(fileURLToPath(new URL(file, `file:///${root.replaceAll('\\', '/')}/`)));
+  return bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+};
 
 describe('event-night launcher safety contract', () => {
   const startCmd = read('START_EVENT_NIGHT.cmd');
@@ -31,6 +35,19 @@ describe('event-night launcher safety contract', () => {
       '@echo off',
       'start "" "https://filmovy-kviz.web.app/"',
     ]);
+  });
+
+  test('keeps PowerShell entrypoints UTF-8 compatible with Windows PowerShell 5', () => {
+    for (const file of [
+      'tools/event-night/Backup-EventNight.ps1',
+      'tools/event-night/EventNight.Common.ps1',
+      'tools/event-night/EventNight.Worker.ps1',
+      'tools/event-night/Prepare-EventNight.ps1',
+      'tools/event-night/Start-EventNight.ps1',
+      'tools/event-night/Stop-EventNight.ps1',
+    ]) {
+      expect(hasUtf8Bom(file), file).toBe(true);
+    }
   });
 
   test('pins localhost demo Firebase and clears credential variables', () => {
@@ -64,5 +81,6 @@ describe('event-night launcher safety contract', () => {
     expect(backup).toContain('Export-EventNightSnapshot');
     expect(common).toContain('Test-EventNightWorker');
     expect(common).not.toMatch(/taskkill(?:\.exe)?\s+\/IM/iu);
+    expect(common).not.toContain('[System.IO.Path]::GetRelativePath');
   });
 });
