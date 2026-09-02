@@ -56,6 +56,7 @@ export interface PreflightCategoryCount {
 export interface PreflightResult {
   readonly status: PreflightStatus;
   readonly source: PreflightSource;
+  readonly validationDurationMs: number;
   readonly roundCount: number;
   readonly questionCount: number;
   readonly validAnswerCount: number;

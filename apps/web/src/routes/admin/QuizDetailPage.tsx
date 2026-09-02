@@ -1,8 +1,6 @@
-import { FirebaseError } from 'firebase/app';
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
-import { createLiveSession } from '../../features/live/liveApi';
 import { QuizErrorState } from '../../features/quizzes/QuizErrorState';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
 import {
@@ -14,17 +12,13 @@ import {
 } from '../../features/quizzes/presentation';
 import { getQuizDetail } from '../../features/quizzes/quizRepository';
 import type { QuizDetail } from '../../features/quizzes/types';
-import { HumanError, type HumanErrorValue } from '../../ui/HumanError';
 
 export function QuizDetailPage() {
   const { quizId } = useParams<{ quizId: string }>();
-  const navigate = useNavigate();
   const [quiz, setQuiz] = useState<QuizDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState<HumanErrorValue | null>(null);
 
   const loadQuiz = useCallback(async () => {
     if (!quizId) {
@@ -51,26 +45,6 @@ export function QuizDetailPage() {
   useEffect(() => {
     void loadQuiz();
   }, [loadQuiz]);
-
-  async function startLiveQuiz() {
-    if (!quizId) return;
-    setStarting(true);
-    setStartError(null);
-    try {
-      const session = await createLiveSession(quizId);
-      void navigate(`/admin/live/${encodeURIComponent(session.sessionId)}`);
-    } catch (startFailure) {
-      setStartError({
-        title: 'Kvíz se nepodařilo spustit',
-        message: 'Kvíz zůstal beze změny. Zkontrolujte připojení a zkuste to znovu.',
-        technicalCode: startFailure instanceof FirebaseError
-          ? startFailure.code.toUpperCase().replaceAll('/', '_').replaceAll('-', '_')
-          : 'LIVE_SESSION_CREATE_FAILED',
-      });
-    } finally {
-      setStarting(false);
-    }
-  }
 
   if (loading) {
     return <QuizLoading label="Načítám detail kvízu…" />;
@@ -111,11 +85,9 @@ export function QuizDetailPage() {
             <div><dt>Kola</dt><dd>{quiz.roundCount}</dd></div>
             <div><dt>Otázky</dt><dd>{quiz.questionCount}</dd></div>
           </dl>
-          <button className="primary-button" disabled={starting} onClick={() => void startLiveQuiz()}>
-            {starting ? 'Spouštím…' : 'Spustit kvíz'}
-          </button>
+          <Link className="primary-button" to={`/admin/quizzes/${encodeURIComponent(quiz.id)}/readiness`}>Spustit kvíz</Link>
+          <Link className="secondary-link" to={`/admin/quizzes/${encodeURIComponent(quiz.id)}/readiness`}>Zkontrolovat připravenost</Link>
           <Link className="secondary-link" to={`/admin/quizzes/${encodeURIComponent(quiz.id)}/edit`}>Otevřít editor</Link>
-          {startError && <HumanError error={startError} onRetry={() => void startLiveQuiz()} />}
         </div>
       </header>
 

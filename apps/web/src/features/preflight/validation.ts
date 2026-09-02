@@ -36,6 +36,7 @@ export function runQuizPreflight(
   quiz: EditorQuiz,
   options: { readonly source?: PreflightSource; readonly hasUnsavedChanges?: boolean } = {},
 ): PreflightResult {
+  const validationStartedAt = performance.now();
   const model = buildSemanticQuizModel(quiz);
   const issues: PreflightIssue[] = [];
   const source = options.source ?? 'SAVED_QUIZ';
@@ -156,6 +157,7 @@ export function runQuizPreflight(
   return {
     status: blockerCount > 0 ? 'BLOCKED' : warningCount > 0 ? 'READY_WITH_WARNINGS' : 'READY',
     source,
+    validationDurationMs: performance.now() - validationStartedAt,
     roundCount: model.rounds.length,
     questionCount: model.rounds.reduce((total, round) => total + round.questions.length, 0),
     validAnswerCount,

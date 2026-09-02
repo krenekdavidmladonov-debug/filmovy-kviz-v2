@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useBlocker, useParams } from 'react-router-dom';
+import { Link, useBlocker, useParams, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
 import { RemoveRoundDialog, UnsavedChangesDialog } from '../../features/editor/EditorDialogs';
@@ -38,6 +38,9 @@ import { editorSaveLabels, editorSaveStatus, needsNavigationDecision } from '../
 import type { CreatableQuestionType, EditableSlideKind, EditorQuiz, EditorSlide } from '../../features/editor/types';
 import { hasBlockingIssues } from '../../features/editor/validation';
 import { defaultRules, generatedAgendaOptions } from '../../features/presentation/model';
+import { QuizPreflightPanel } from '../../features/preflight/QuizPreflightPanel';
+import type { PreflightFixTarget } from '../../features/preflight/types';
+import { quizWithDraft, runQuizPreflight } from '../../features/preflight/validation';
 import { QuizErrorState } from '../../features/quizzes/QuizErrorState';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
 import { HumanError } from '../../ui/HumanError';
@@ -48,6 +51,12 @@ type EditorPanel = 'structure' | 'content' | 'preview';
 interface PendingCreate {
   readonly position: number;
   readonly semanticKey: string;
+}
+
+interface PendingFixFocus {
+  readonly selectionKey: string;
+  readonly field: string;
+  readonly questionId?: string;
 }
 
 const questionKinds = new Set<EditableSlideKind>([
@@ -119,6 +128,7 @@ function safeErrorMessage(error: unknown): string {
 
 export function QuizEditorPage() {
   const { quizId } = useParams<{ quizId: string }>();
+  const [searchParams] = useSearchParams();
   const { role } = useAuth();
   const readOnly = role !== 'admin';
   const [quiz, setQuiz] = useState<EditorQuiz | null>(null);
@@ -137,15 +147,37 @@ export function QuizEditorPage() {
   const [activePanel, setActivePanel] = useState<EditorPanel>('content');
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [showReadiness, setShowReadiness] = useState(false);
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [preflightNonce, setPreflightNonce] = useState(0);
+  const [pendingFixFocus, setPendingFixFocus] = useState<PendingFixFocus | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  const deepLinkHandled = useRef(false);
   const dirty = dirtySlide || dirtyQuiz || dirtyRound;
   const blocker = useBlocker(dirty);
   const semantic = useMemo(() => quiz === null ? null : buildSemanticQuizModel(quiz), [quiz]);
+  const selectedRoundForDraft = semantic === null ? undefined : roundForSelection(selectedKey, semantic)
+    ?? (selectedKey === 'draft' ? semantic.rounds.find((round) => round.id === draft?.roundId) : undefined);
+  const preflightQuiz = useMemo(() => {
+    if (quiz === null) return null;
+    return quizWithDraft(quiz, {
+      title,
+      description,
+      draft,
+      ...(pendingCreate === null ? {} : { pendingPosition: pendingCreate.position }),
+      ...(dirtyRound && selectedRoundForDraft !== undefined
+        ? { roundId: selectedRoundForDraft.id, roundTitle }
+        : {}),
+    });
+  }, [description, dirtyRound, draft, pendingCreate, quiz, roundTitle, selectedRoundForDraft, title]);
+  const preflightResult = useMemo(() => preflightQuiz === null ? null : runQuizPreflight(preflightQuiz, {
+    source: dirty ? 'LOCAL_DRAFT' : 'SAVED_QUIZ',
+    hasUnsavedChanges: dirty,
+  }), [dirty, preflightNonce, preflightQuiz]);
 
   const reload = useCallback(async (preferredKey = 'quiz', preferredSlideId?: string): Promise<EditorQuiz | null> => {
     if (!quizId) {
@@ -170,6 +202,7 @@ export function QuizEditorPage() {
       setPendingCreate(null);
       setTouched(new Set());
       setShowReadiness(false);
+      setPreflightOpen(false);
       setSaveFailed(false);
       setError(null);
       return loaded;
@@ -182,6 +215,24 @@ export function QuizEditorPage() {
   }, [quizId]);
 
   useEffect(() => { void reload(); }, [reload]);
+
+  useEffect(() => {
+    if (semantic === null || deepLinkHandled.current) return;
+    const questionId = searchParams.get('questionId');
+    const roundId = searchParams.get('roundId');
+    const section = searchParams.get('section');
+    const field = searchParams.get('field');
+    let selectionKey: string | undefined;
+    if (questionId !== null && semantic.questionBySlideId.has(questionId)) selectionKey = `slide:${questionId}`;
+    else if (roundId !== null && semantic.rounds.some((round) => round.id === roundId)) selectionKey = `round:${roundId}`;
+    else if (section === 'agenda') selectionKey = 'system:agenda';
+    else if (field === 'quizTitle') selectionKey = 'quiz';
+    deepLinkHandled.current = true;
+    if (selectionKey === undefined) return;
+    setSelectedKey(selectionKey);
+    setActivePanel('content');
+    if (field !== null) setPendingFixFocus({ selectionKey, field, ...(questionId === null ? {} : { questionId }) });
+  }, [searchParams, semantic]);
 
   useEffect(() => {
     if (quiz === null || semantic === null || selectedKey === 'draft') return;
@@ -216,6 +267,22 @@ export function QuizEditorPage() {
     setDraft(semantic.slideById.get(slideId) ?? null);
     setRoundTitle('');
   }, [quiz, selectedKey, semantic]);
+
+  useEffect(() => {
+    if (pendingFixFocus === null || pendingFixFocus.selectionKey !== selectedKey) return;
+    if (pendingFixFocus.questionId !== undefined && draft?.id !== pendingFixFocus.questionId) return;
+    setShowReadiness(true);
+    const field = pendingFixFocus.field;
+    setPendingFixFocus(null);
+    requestAnimationFrame(() => {
+      const fieldElement = document.querySelector<HTMLElement>(`[data-preflight-field="${field}"]`);
+      const focusable = fieldElement?.matches('input, textarea, select, button')
+        ? fieldElement
+        : fieldElement?.querySelector<HTMLElement>('input, textarea, select, button');
+      focusable?.focus();
+      fieldElement?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }, [draft, pendingFixFocus, selectedKey]);
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -311,6 +378,27 @@ export function QuizEditorPage() {
     if (window.matchMedia('(max-width: 767px)').matches) setActivePanel('content');
   }
 
+  function openPreflightFix(target: PreflightFixTarget) {
+    let selectionKey = 'quiz';
+    if (target.kind === 'question' && target.questionId !== undefined) {
+      selectionKey = pendingCreate !== null && draft?.id === target.questionId ? 'draft' : `slide:${target.questionId}`;
+    } else if (target.kind === 'round' && target.roundId !== undefined) {
+      selectionKey = `round:${target.roundId}`;
+    } else if (target.kind === 'system' && target.systemKey !== undefined) {
+      selectionKey = `system:${target.systemKey}`;
+    }
+    setPreflightOpen(false);
+    setActivePanel('content');
+    if (target.field !== undefined) {
+      setPendingFixFocus({
+        selectionKey,
+        field: target.field,
+        ...(target.questionId === undefined ? {} : { questionId: target.questionId }),
+      });
+    }
+    select(selectionKey);
+  }
+
   async function mutate(action: (current: EditorQuiz) => Promise<{ readonly selectedSlideId?: string }>, preferredKey?: string): Promise<boolean> {
     if (quiz === null || readOnly || dirty) return false;
     setSaving(true);
@@ -384,13 +472,24 @@ export function QuizEditorPage() {
         <div className="round-editor-save">
           {readOnly && <span className="read-only-badge">Pouze pro čtení — moderátor</span>}
           <span className={`save-state ${dirty ? 'dirty' : ''} ${saveFailed ? 'failed' : ''}`} role="status" aria-live="polite">{saveLabel}</span>
-          <button type="button" className="secondary-button" disabled={draft?.isQuestion !== true} onClick={() => setShowReadiness(true)}>Zkontrolovat připravenost</button>
+          <button type="button" className="secondary-button preflight-header-button" onClick={() => setPreflightOpen((value) => !value)}>Připravenost</button>
           <button type="button" className="primary-button" disabled={readOnly || saving || !dirty} onClick={() => void saveAll()}>Uložit</button>
           <TechnicalDetails><code>Revize: {quiz.revision}<br />Výběr: {selectedKey}</code></TechnicalDetails>
         </div>
       </header>
 
       {error && <div ref={errorRef} tabIndex={-1} className="round-editor-error"><HumanError error={{ title: 'Změnu nelze dokončit', message: error, technicalCode: saveFailed ? 'EDITOR_SAVE_FAILED' : 'EDITOR_ACTION_FAILED' }} onRetry={saveFailed ? () => void saveAll() : undefined} /></div>}
+
+      {preflightOpen && preflightResult !== null && (
+        <div className="editor-preflight-shell">
+          <QuizPreflightPanel
+            quizId={quiz.id}
+            result={preflightResult}
+            onRecheck={() => setPreflightNonce((value) => value + 1)}
+            onFix={openPreflightFix}
+          />
+        </div>
+      )}
 
       <nav className="editor-panel-tabs" aria-label="Část editoru">
         <button type="button" className={activePanel === 'structure' ? 'active' : ''} onClick={() => setActivePanel('structure')}>Struktura</button>

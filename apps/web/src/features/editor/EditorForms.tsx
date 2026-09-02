@@ -53,7 +53,7 @@ export function QuizSettingsForm({
   return (
     <section className="editor-form-stack" aria-labelledby="quiz-settings-title">
       <header className="content-form-heading"><span>Kvíz</span><h2 id="quiz-settings-title">Základní údaje</h2><p>{quiz.roundCount} kol · {quiz.questionCount} otázek</p></header>
-      <label className="form-field">Název kvízu *<input disabled={disabled} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
+      <label className="form-field" data-preflight-field="quizTitle">Název kvízu *<input disabled={disabled} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
       <label className="form-field">Popis<textarea rows={5} disabled={disabled} value={description} onChange={(event) => onDescription(event.target.value)} /></label>
       <p className="field-help">Další nastavení upravíte v části Úvod kvízu. Změny se uloží až tlačítkem Uložit.</p>
     </section>
@@ -77,7 +77,7 @@ export function SystemSectionForm({
   if (section.key === 'agenda') {
     const items = generatedAgendaOptions(model.rounds);
     return (
-      <section className="editor-form-stack">
+      <section className="editor-form-stack" data-preflight-field="agenda">
         <header className="content-form-heading"><span>Úvod kvízu</span><h2>Harmonogram</h2><p>Automaticky podle pořadí a názvů kol</p></header>
         <ol className="generated-agenda">{items.map((item) => <li key={item}>{item}</li>)}</ol>
         <p className="field-help">Harmonogram je odvozený. Nevytváříte ani neřadíte technický slide.</p>
@@ -132,7 +132,7 @@ export function RoundSettingsForm({
   return (
     <section className="editor-form-stack">
       <header className="content-form-heading"><span>{round.position}. kolo</span><h2>Nastavení kola</h2><p>{round.questions.length} otázek</p></header>
-      <label className="form-field">Název kola *<input disabled={disabled || round.id === 'roundless'} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
+      <label className="form-field" data-preflight-field="roundTitle">Název kola *<input disabled={disabled || round.id === 'roundless'} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
       {slide && <VisualFields slide={slide} disabled={disabled} onChange={onChange} />}
       {!slide && <p className="field-help">Toto kolo nemá samostatnou úvodní obrazovku. Název kola lze přesto bezpečně upravit.</p>}
     </section>
@@ -144,7 +144,7 @@ function VisualFields({ slide, disabled, onChange }: { readonly slide: EditorSli
   return (
     <fieldset className="editor-fieldset visual-fields" disabled={disabled}>
       <legend>Vzhled</legend>
-      <label className="form-field">Pozadí<input value={slide.backgroundImage} placeholder="https://…" onChange={(event) => set('backgroundImage', event.target.value)} /></label>
+      <label className="form-field" data-preflight-field="backgroundImage">Pozadí<input value={slide.backgroundImage} placeholder="https://…" onChange={(event) => set('backgroundImage', event.target.value)} /></label>
       <label className="form-field">Ztmavení pozadí <span>{slide.backgroundOverlay ?? 0} %</span><input type="range" min="0" max="100" value={slide.backgroundOverlay ?? 0} onChange={(event) => set('backgroundOverlay', Number(event.target.value))} /></label>
     </fieldset>
   );
@@ -152,7 +152,7 @@ function VisualFields({ slide, disabled, onChange }: { readonly slide: EditorSli
 
 function PromptField({ slide, disabled, issues, showIssues, touch, onChange }: QuestionFormFieldProps) {
   return (
-    <label className="form-field">Otázka *
+    <label className="form-field" data-preflight-field="prompt">Otázka *
       <textarea rows={4} disabled={disabled} value={slide.text || slide.title} onBlur={() => touch('prompt')} onChange={(event) => onChange({
         ...slide,
         text: event.target.value,
@@ -184,11 +184,11 @@ function ChoiceFields(props: QuestionFormFieldProps) {
     onChange({ ...slide, options, ...(selectedIndex === index ? { correctAnswer: '' } : {}) });
   };
   return (
-    <fieldset className="editor-fieldset choice-editor" disabled={disabled} onBlur={() => touch('options')}>
+    <fieldset className="editor-fieldset choice-editor" data-preflight-field="options" disabled={disabled} onBlur={() => touch('options')}>
       <legend>Odpovědi</legend>
       {slide.options.map((option, index) => (
         <div className="choice-row" key={index}>
-          <input type="radio" name={`correct-${slide.id}`} aria-label={`Označit možnost ${String.fromCharCode(65 + index)} jako správnou`} checked={selectedIndex === index} onChange={() => onChange({ ...slide, correctAnswer: option })} />
+          <input type="radio" data-preflight-field={index === 0 ? 'correctAnswer' : undefined} name={`correct-${slide.id}`} aria-label={`Označit možnost ${String.fromCharCode(65 + index)} jako správnou`} checked={selectedIndex === index} onChange={() => onChange({ ...slide, correctAnswer: option })} />
           <span>{String.fromCharCode(65 + index)}</span>
           <input aria-label={`Možnost ${String.fromCharCode(65 + index)}`} value={option} onChange={(event) => updateOption(index, event.target.value)} />
           <button type="button" className="icon-button" aria-label={`Odstranit možnost ${String.fromCharCode(65 + index)}`} onClick={() => remove(index)}>×</button>
@@ -204,7 +204,7 @@ function ChoiceFields(props: QuestionFormFieldProps) {
 function FreeAnswerField(props: QuestionFormFieldProps) {
   const { slide, disabled, issues, showIssues, touch, onChange } = props;
   return (
-    <label className="form-field private-field">Správná odpověď *
+    <label className="form-field private-field" data-preflight-field="correctAnswer">Správná odpověď *
       <textarea rows={2} disabled={disabled} value={slide.correctAnswer} onBlur={() => touch('correctAnswer')} onChange={(event) => onChange({ ...slide, correctAnswer: event.target.value })} />
       <FieldIssues field="correctAnswer" issues={issues} visible={showIssues('correctAnswer')} />
     </label>
@@ -217,7 +217,7 @@ function PlAnswerField(props: QuestionFormFieldProps) {
   const truthy = ['pravda', 'true', 'ano', '1'].includes(normalized);
   const falsy = ['lež', 'lez', 'false', 'ne', '0'].includes(normalized);
   return (
-    <fieldset className="editor-fieldset private-field" disabled={disabled} onBlur={() => touch('correctAnswer')}>
+    <fieldset className="editor-fieldset private-field" data-preflight-field="correctAnswer" disabled={disabled} onBlur={() => touch('correctAnswer')}>
       <legend>Správná odpověď</legend>
       <label className="binary-answer"><input type="radio" name={`pl-${slide.id}`} checked={truthy} onChange={() => onChange({ ...slide, correctAnswer: 'Pravda' })} /> Pravda</label>
       <label className="binary-answer"><input type="radio" name={`pl-${slide.id}`} checked={falsy} onChange={() => onChange({ ...slide, correctAnswer: 'Lež' })} /> Lež</label>
@@ -249,7 +249,7 @@ function TimeField({ label, field, value, disabled, issues, showIssue, touch, on
     setInvalid(false);
   }, [value]);
   return (
-    <label className="form-field">{label} *
+    <label className="form-field" data-preflight-field={field}>{label} *
       <input value={text} disabled={disabled} inputMode="decimal" placeholder="mm:ss nebo mm:ss.s" onChange={(event) => {
         const next = event.target.value;
         setText(next);
@@ -288,7 +288,7 @@ function MediaTimingFields(props: QuestionFormFieldProps) {
   return (
     <fieldset className="editor-fieldset media-timing-editor" disabled={disabled}>
       <legend>Ukázka z YouTube</legend>
-      <label className="form-field">Zdroj z YouTube *
+      <label className="form-field" data-preflight-field="mediaSource">Zdroj z YouTube *
         <input value={slide.mediaSource} placeholder="YouTube URL nebo video ID" onBlur={() => touch('mediaSource')} onChange={(event) => onChange({ ...slide, mediaSource: event.target.value })} />
         <FieldIssues field="mediaSource" issues={issues} visible={showIssues('mediaSource')} />
       </label>
@@ -350,7 +350,7 @@ export function QuestionForm({
   };
   const imageChoices = type === 'image' && slide.options.length > 0;
   return (
-    <section className="editor-form-stack question-form" data-question-type={type}>
+    <section className="editor-form-stack question-form" data-question-type={type} data-preflight-field={type === 'legacy' || type === 'legacy-pl' ? 'legacy' : undefined}>
       <header className="content-form-heading"><span>Otázka {number}</span><h2>{questionTypeLabels[type]}</h2></header>
       {type === 'legacy-pl' && <div className="legacy-notice"><strong>Starší typ Pravda / Lež</strong><p>Typ je uzamčený, ale obsah a odpověď můžete upravit bez ztráty původních dat.</p></div>}
       {type === 'legacy' && <div className="legacy-notice"><strong>Obsah obsahuje starší nastavení.</strong><p>Neznámé části zůstanou při uložení beze změny.</p></div>}
@@ -361,13 +361,13 @@ export function QuestionForm({
       {type === 'legacy' && <FreeAnswerField {...props} />}
       {type === 'image' && (
         <>
-          <label className="form-field">Obrázek otázky *
+          <label className="form-field" data-preflight-field="questionImage">Obrázek otázky *
             <input disabled={disabled} value={slide.questionImage} placeholder="https://…" onBlur={() => onTouch('questionImage')} onChange={(event) => onChange({ ...slide, questionImage: event.target.value })} />
             <FieldIssues field="questionImage" issues={issues} visible={showAllIssues || touched.has('questionImage')} />
           </label>
           <label className="toggle-field"><input type="checkbox" disabled={disabled} checked={imageChoices} onChange={(event) => onChange({ ...slide, options: event.target.checked ? ['', '', '', ''] : [], correctAnswer: '' })} /> Výběr z možností</label>
           {imageChoices ? <ChoiceFields {...props} /> : <FreeAnswerField {...props} />}
-          <label className="form-field">Obrázek ke správné odpovědi<input disabled={disabled} value={slide.answerImage} placeholder="https://…" onChange={(event) => onChange({ ...slide, answerImage: event.target.value })} /></label>
+          <label className="form-field" data-preflight-field="answerImage">Obrázek ke správné odpovědi<input disabled={disabled} value={slide.answerImage} placeholder="https://…" onChange={(event) => onChange({ ...slide, answerImage: event.target.value })} /></label>
         </>
       )}
       {(type === 'audio' || type === 'video') && <><FreeAnswerField {...props} /><MediaTimingFields {...props} /></>}

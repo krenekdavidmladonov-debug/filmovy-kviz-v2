@@ -725,6 +725,50 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
 .readiness-summary li { padding: 7px 10px; display: flex; align-items: center; gap: 6px; border-radius: var(--radius-pill); color: var(--color-text-muted); background: var(--color-surface-subtle); font-size: .76rem; font-weight: 800; }
 .readiness-summary li.ready span { color: var(--color-success); }
 .readiness-summary li.issue span { color: var(--color-warning); }
+.quiz-preflight-page { display: grid; gap: var(--space-5); }
+.quiz-preflight-panel { padding: clamp(20px, 3vw, 36px); display: grid; gap: var(--space-5); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface-subtle); box-shadow: var(--shadow-sm); }
+.preflight-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.preflight-heading > div { display: grid; gap: var(--space-2); }
+.preflight-heading span,
+.preflight-check small { color: var(--color-text-subtle); font-size: .68rem; font-weight: 900; letter-spacing: .09em; }
+.preflight-heading h1 { margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); letter-spacing: -.04em; }
+.preflight-heading p,
+.preflight-check p,
+.preflight-result p,
+.preflight-start-card p { margin: 0; color: var(--color-text-muted); line-height: 1.5; }
+.preflight-status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.preflight-check { min-height: 108px; padding: var(--space-4); display: flex; align-items: flex-start; gap: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.preflight-check > span { width: 32px; height: 32px; flex: 0 0 auto; display: grid; place-items: center; border-radius: var(--radius-pill); font-weight: 950; }
+.preflight-check > div { display: grid; gap: 4px; }
+.preflight-check.ready > span { color: #061b10; background: var(--color-success); }
+.preflight-check.blocked > span { color: #26080d; background: var(--color-error); }
+.preflight-check.neutral > span { color: var(--color-text); background: var(--color-border-strong); }
+.preflight-check strong { font-size: 1.05rem; }
+.preflight-check p { margin-top: 3px; font-size: .76rem; }
+.preflight-metrics { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.preflight-metrics > div { padding: var(--space-3); display: grid; gap: 5px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
+.preflight-metrics dt { color: var(--color-text-subtle); font-size: .68rem; font-weight: 850; text-transform: uppercase; }
+.preflight-metrics dd { margin: 0; font-size: 1rem; font-weight: 850; }
+.preflight-category-list { margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); list-style: none; }
+.preflight-category-list li { padding: 12px 14px; display: flex; justify-content: space-between; gap: var(--space-3); border-radius: var(--radius-sm); background: var(--color-surface); }
+.preflight-category-list span { color: var(--color-text-muted); font-size: .78rem; }
+.preflight-issues { margin: 0; padding: 0; display: grid; gap: var(--space-3); list-style: none; }
+.preflight-issue { padding: var(--space-4); display: grid; grid-template-columns: 1fr auto; gap: 6px var(--space-4); border: 1px solid var(--color-border); border-left-width: 4px; border-radius: var(--radius-md); background: var(--color-surface); }
+.preflight-issue.severity-blocker { border-left-color: var(--color-error); }
+.preflight-issue.severity-warning { border-left-color: var(--color-warning); }
+.preflight-issue .preflight-severity { grid-column: 1; width: fit-content; color: var(--color-text-subtle); font-size: .66rem; font-weight: 900; letter-spacing: .08em; }
+.preflight-issue > strong,
+.preflight-issue > p { grid-column: 1; }
+.preflight-issue > p { margin: 0; color: var(--color-text-muted); }
+.preflight-issue > :is(button, a) { grid-column: 2; grid-row: 1 / 4; align-self: center; }
+.preflight-result { padding: var(--space-4); display: grid; gap: var(--space-2); border-radius: var(--radius-md); background: rgba(102, 204, 145, .08); }
+.status-blocked .preflight-result { background: rgba(242, 112, 129, .08); }
+.status-ready_with_warnings .preflight-result { background: rgba(246, 202, 117, .08); }
+.preflight-start-card { padding: var(--space-5); display: grid; justify-items: start; gap: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
+.warning-confirmation { display: grid; gap: var(--space-3); }
+.warning-confirmation > div { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.editor-preflight-shell { padding: var(--space-4); border-bottom: 1px solid var(--color-border); background: var(--color-bg); }
+.editor-preflight-shell .quiz-preflight-panel { max-width: 1180px; margin: 0 auto; }
 .media-time-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .clip-duration { margin: 0; color: var(--color-text-muted); }
 .editor-test-player { aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--radius-md); background: #050607; }
@@ -770,7 +814,7 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
   .round-editor-title { max-width: 42%; }
   .round-editor-save { flex-wrap: wrap; gap: var(--space-2); }
   .round-editor-save .technical-details,
-  .round-editor-save .secondary-button { display: none; }
+  .round-editor-save .secondary-button:not(.preflight-header-button) { display: none; }
   .round-editor-save .primary-button { min-height: 44px; }
   .save-state { width: 100%; text-align: right; font-size: .72rem; }
   .round-editor-error { margin-inline: var(--space-3); }
@@ -796,6 +840,14 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
   .semantic-actions > button,
   .move-to-round { width: 100%; }
   .editor-dialog-actions { display: grid; }
+  .preflight-heading { display: grid; }
+  .preflight-heading .secondary-button { width: 100%; }
+  .preflight-status-grid,
+  .preflight-category-list { grid-template-columns: 1fr; }
+  .preflight-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .preflight-issue { grid-template-columns: 1fr; }
+  .preflight-issue > :is(button, a) { grid-column: 1; grid-row: auto; width: 100%; }
+  .editor-preflight-shell { padding: var(--space-2); }
 }
 
 /* Focused moderator mode keeps critical actions and the private answer above the fold. */
