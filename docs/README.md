@@ -22,6 +22,10 @@ This directory is the source of truth for Filmovy Kviz V2 product, architecture,
 - [ARCHITECTURE.md](ARCHITECTURE.md) — repository shape and trust boundaries.
 - [DATA_MODEL.md](DATA_MODEL.md) — private and public Firestore models.
 - [SECURITY.md](SECURITY.md) — authorization, answer secrecy, emulator safeguards, and Rules policy.
+- [TOMORROW_5_MINUTE_GO_NO_GO.md](TOMORROW_5_MINUTE_GO_NO_GO.md) — the morning operator decision in ten steps.
+- [TOMORROW_MANUAL_ACTIONS.md](TOMORROW_MANUAL_ACTIONS.md) — sanitised candidate content blockers requiring human decisions.
+- [TOMORROW_FALLBACK_PLAN.md](TOMORROW_FALLBACK_PLAN.md) — explicit V2 go/no-go conditions and the untouched V1 fallback.
+- [EVENT_NIGHT_LOCAL.md](EVENT_NIGHT_LOCAL.md) — checksummed production-build launcher, persistence, backup, and recovery contract.
 - [LIVE_SESSION.md](LIVE_SESSION.md) — trusted live-session lifecycle.
 - [PROJECTOR_ARCHITECTURE.md](PROJECTOR_ARCHITECTURE.md) — projector renderer and public-state authority.
 - [MEDIA_ARCHITECTURE.md](MEDIA_ARCHITECTURE.md) — audio/video commands and player lifecycle.
