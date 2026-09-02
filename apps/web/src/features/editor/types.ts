@@ -54,7 +54,32 @@ export interface EditorSlide {
 export type CreatableQuestionType = 'choice' | 'free' | 'image' | 'audio' | 'video';
 export type SemanticQuestionType = CreatableQuestionType | 'legacy-pl' | 'legacy';
 
+export type EditorValidationCategory = 'STRUCTURE' | 'ANSWER' | 'MEDIA' | 'TIMING' | 'IMAGE' | 'LEGACY';
+
+export type EditorValidationCode =
+  | 'QUESTION_PROMPT_MISSING'
+  | 'QUESTION_RENDERER_UNSUPPORTED'
+  | 'ANSWER_MISSING'
+  | 'CHOICE_OPTIONS_TOO_FEW'
+  | 'CHOICE_CORRECT_MISSING'
+  | 'CHOICE_CORRECT_INVALID'
+  | 'PL_ANSWER_INVALID'
+  | 'IMAGE_SOURCE_MISSING'
+  | 'IMAGE_SOURCE_INVALID'
+  | 'ANSWER_IMAGE_INVALID'
+  | 'BACKGROUND_IMAGE_INVALID'
+  | 'MEDIA_SOURCE_MISSING'
+  | 'MEDIA_SOURCE_INVALID'
+  | 'CLIP_START_MISSING'
+  | 'CLIP_START_INVALID'
+  | 'CLIP_END_MISSING'
+  | 'CLIP_END_INVALID'
+  | 'CLIP_RANGE_INVALID'
+  | 'LEGACY_LIMITED';
+
 export interface EditorValidationIssue {
+  readonly code: EditorValidationCode;
+  readonly category: EditorValidationCategory;
   readonly field: string;
   readonly message: string;
   readonly severity: 'error' | 'warning';

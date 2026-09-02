@@ -12,6 +12,7 @@ export default defineConfig({
       'tests/presentationComponents.test.tsx',
       'tests/uxFoundation.test.tsx',
       'tests/roundFirstEditor.test.tsx',
+      'tests/quizPreflight.test.ts',
       'tests/localEmulatorEnvironment.test.ts',
       'tools/migration-v1/test/**/*.test.ts',
     ],
