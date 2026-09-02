@@ -10,6 +10,7 @@ interface YouTubePlayerInstance {
   loadVideoById(options: { videoId: string; startSeconds?: number; endSeconds?: number }): void;
   pauseVideo(): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
+  getCurrentTime(): number;
   destroy(): void;
 }
 
@@ -97,6 +98,8 @@ export function YouTubePlayer({
   onFinished,
   onError,
   onPlaybackState,
+  currentTimeRequest,
+  onCurrentTime,
 }: {
   readonly source: string;
   readonly command: MediaPlaybackCommand;
@@ -107,6 +110,8 @@ export function YouTubePlayer({
   readonly onFinished?: (generation: number) => void;
   readonly onError?: (generation: number, message: string) => void;
   readonly onPlaybackState?: (generation: number, state: Extract<MediaPlaybackState, 'ready' | 'playing'>) => void;
+  readonly currentTimeRequest?: number;
+  readonly onCurrentTime?: (seconds: number) => void;
 }) {
   const reactId = useId();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -116,6 +121,7 @@ export function YouTubePlayer({
   const onFinishedRef = useRef(onFinished);
   const onErrorRef = useRef(onError);
   const onPlaybackStateRef = useRef(onPlaybackState);
+  const onCurrentTimeRef = useRef(onCurrentTime);
   const [machine, dispatch] = useReducer(reduceMediaMachine, initialMediaMachineState);
   const [visibleError, setVisibleError] = useState<string>();
   const videoId = youtubeVideoId(source);
@@ -124,6 +130,16 @@ export function YouTubePlayer({
   useEffect(() => { onFinishedRef.current = onFinished; }, [onFinished]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
   useEffect(() => { onPlaybackStateRef.current = onPlaybackState; }, [onPlaybackState]);
+  useEffect(() => { onCurrentTimeRef.current = onCurrentTime; }, [onCurrentTime]);
+  useEffect(() => {
+    if (currentTimeRequest === undefined || playerRef.current === undefined) return;
+    try {
+      const seconds = playerRef.current.getCurrentTime();
+      if (Number.isFinite(seconds) && seconds >= 0) onCurrentTimeRef.current?.(seconds);
+    } catch {
+      // The iframe API can briefly reject reads while a newly mounted player is still preparing.
+    }
+  }, [currentTimeRequest]);
 
   useEffect(() => {
     const epoch = epochSequenceRef.current + 1;

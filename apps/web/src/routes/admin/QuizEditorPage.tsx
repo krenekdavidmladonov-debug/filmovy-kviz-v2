@@ -1,46 +1,61 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useBlocker, useParams } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
+import { RemoveRoundDialog, UnsavedChangesDialog } from '../../features/editor/EditorDialogs';
+import {
+  EditorPreview,
+  QuestionForm,
+  QuizSettingsForm,
+  ReadinessSummary,
+  RoundSettingsForm,
+  SystemContentForm,
+  SystemSectionForm,
+} from '../../features/editor/EditorForms';
+import { EditorOutline } from '../../features/editor/EditorOutline';
 import {
   createQuizSlide,
   deleteQuizSlide,
+  duplicateQuizRound,
   duplicateQuizSlide,
-  moveQuizSlide,
+  moveQuizQuestionToRound,
+  moveQuizRound,
+  removeQuizRound,
+  reorderQuizQuestion,
   updateQuizMetadata,
+  updateQuizRound,
   updateQuizSlide,
 } from '../../features/editor/editorApi';
 import { getEditorQuiz } from '../../features/editor/editorRepository';
 import {
-  editableSlideKinds,
-  type EditableSlideKind,
-  type EditorMedia,
-  type EditorPresentation,
-  type EditorQuiz,
-  type EditorSlide,
-} from '../../features/editor/types';
-import { SlidePreview } from '../../features/presentation/SlidePreview';
-import { generatedAgendaOptions } from '../../features/presentation/model';
+  buildSemanticQuizModel,
+  insertionPositionForRound,
+  storageKindForQuestion,
+  type SemanticQuizModel,
+  type SemanticRound,
+} from '../../features/editor/semanticModel';
+import { editorSaveLabels, editorSaveStatus, needsNavigationDecision } from '../../features/editor/sessionState';
+import type { CreatableQuestionType, EditableSlideKind, EditorQuiz, EditorSlide } from '../../features/editor/types';
+import { hasBlockingIssues } from '../../features/editor/validation';
+import { defaultRules, generatedAgendaOptions } from '../../features/presentation/model';
 import { QuizErrorState } from '../../features/quizzes/QuizErrorState';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
+import { HumanError } from '../../ui/HumanError';
 import { TechnicalDetails } from '../../ui/TechnicalDetails';
 
-const kindLabels: Record<EditableSlideKind, string> = {
-  intro: 'Intro', agenda: 'Agenda', rules: 'Pravidla', recap: 'Rekapitulace', end: 'Konec', title: 'Titulek', info: 'Informace',
-  round: 'Úvod kola', roundheader: 'Úvod kola (původní)', 'round-header': 'Úvod kola (původní)', section: 'Část kvízu',
-  question: 'Otázka', text: 'Textová otázka', classic: 'Klasická otázka', free: 'Volná odpověď',
-  image: 'Obrázková otázka', picture: 'Obrázková otázka (původní)', photo: 'Foto otázka',
-  audio: 'Audio otázka', music: 'Hudební otázka', video: 'Video otázka', youtube: 'YouTube otázka',
-  pl: 'Pravda / lež (původní)', legacy: 'Původní obsah',
-};
+type EditorPanel = 'structure' | 'content' | 'preview';
 
-const creatableKinds: readonly EditableSlideKind[] = [
-  'intro', 'agenda', 'rules', 'recap', 'end', 'title', 'info', 'round',
-  'question', 'text', 'free', 'image', 'audio', 'video',
-];
+interface PendingCreate {
+  readonly position: number;
+  readonly semanticKey: string;
+}
 
-const newSlideDefaults: Omit<EditorSlide, 'id' | 'position' | 'kind' | 'storedKind' | 'isQuestion'> = {
-  title: '', text: '', moderatorNote: '', options: [], correctAnswer: '', media: [],
+const questionKinds = new Set<EditableSlideKind>([
+  'question', 'text', 'classic', 'free', 'image', 'picture', 'photo', 'audio', 'music', 'video', 'youtube', 'pl', 'legacy',
+]);
+
+const emptyFields = {
+  title: '', text: '', moderatorNote: '', options: [] as readonly string[], correctAnswer: '', media: [] as const,
   presentation: {
     videoStart: null, videoEnd: null, audioTrigger: null,
     backgroundOverlay: null, answerOverlay: null, sourceQuestionNumber: null,
@@ -50,205 +65,56 @@ const newSlideDefaults: Omit<EditorSlide, 'id' | 'position' | 'kind' | 'storedKi
   hasLegacyData: false,
 };
 
-function draftSlide(kind: EditableSlideKind, position: number, agendaOptions: readonly string[] = []): EditorSlide {
+function localDraft(kind: EditableSlideKind, position: number, values: Partial<EditorSlide> = {}): EditorSlide {
   return {
-    ...newSlideDefaults,
-    ...(kind === 'rules' ? { options: [
-      'Hrajte fér.',
-      'Během otázek nepoužívejte mobil ani internet.',
-      'Respektujte organizátory a ostatní týmy.',
-      'Užijte si kvízový večer.',
-    ] } : {}),
-    ...(kind === 'agenda' ? { options: agendaOptions } : {}),
-    id: 'new-slide', position, kind, storedKind: kind,
-    isQuestion: ['question', 'text', 'classic', 'free', 'image', 'picture', 'photo', 'audio', 'music', 'video', 'youtube', 'pl', 'legacy'].includes(kind),
+    ...emptyFields,
+    id: `local-${kind}`,
+    position,
+    storedKind: kind,
+    kind,
+    isQuestion: questionKinds.has(kind),
+    ...values,
   };
 }
 
-function formatTime(seconds: number | null): string {
-  if (seconds === null) return '';
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remaining = seconds % 60;
-  const secondText = Number.isInteger(remaining) ? String(remaining).padStart(2, '0') : remaining.toFixed(1).padStart(4, '0');
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, '0')}:${secondText}`
-    : `${minutes}:${secondText}`;
+function newQuestionDraft(type: CreatableQuestionType, round: SemanticRound): EditorSlide {
+  const kind = storageKindForQuestion(type);
+  const position = insertionPositionForRound(round);
+  const questionNumber = round.questions.filter((question) => question.slide.position < position).length + 1;
+  return localDraft(kind, position, {
+    id: `local-question-${type}`,
+    roundId: round.id,
+    roundTitle: round.title,
+    questionNumber,
+    questionCount: round.questions.length + 1,
+    options: type === 'choice' ? ['', '', '', ''] : [],
+    clipStartSeconds: type === 'audio' || type === 'video' ? 0 : null,
+  });
 }
 
-function parseTime(value: string): number | null | undefined {
-  if (value.trim() === '') return null;
-  if (/^\d+(?:\.\d)?$/u.test(value.trim())) return Number(value);
-  const parts = value.trim().split(':');
-  if (parts.length < 2 || parts.length > 3 || parts.some((part) => !/^\d+(?:\.\d)?$/u.test(part))) return undefined;
-  const numbers = parts.map(Number);
-  const seconds = numbers.at(-1)!;
-  const minutes = numbers.at(-2)!;
-  const hours = numbers.length === 3 ? numbers[0]! : 0;
-  if (minutes >= 60 || seconds >= 60) return undefined;
-  return hours * 3600 + minutes * 60 + seconds;
+function systemDraft(key: string, model: SemanticQuizModel, position: number): EditorSlide {
+  if (key === 'rules') return localDraft('rules', position, { options: [...defaultRules] });
+  if (key === 'agenda') return localDraft('agenda', position, { options: generatedAgendaOptions(model.rounds) });
+  return localDraft('intro', position);
 }
 
-function TimeField({ label, value, disabled, onChange }: {
-  readonly label: string;
-  readonly value: number | null;
-  readonly disabled: boolean;
-  readonly onChange: (value: number | null) => void;
-}) {
-  const [text, setText] = useState(() => formatTime(value));
-  useEffect(() => setText(formatTime(value)), [value]);
-  return (
-    <label>{label}
-      <input
-        value={text}
-        disabled={disabled}
-        placeholder="mm:ss nebo hh:mm:ss"
-        onChange={(event) => {
-          setText(event.target.value);
-          const parsed = parseTime(event.target.value);
-          if (parsed !== undefined) onChange(parsed);
-        }}
-        onBlur={() => setText(formatTime(value))}
-      />
-    </label>
-  );
+function roundForSelection(key: string, model: SemanticQuizModel): SemanticRound | undefined {
+  if (key.startsWith('round:')) return model.rounds.find((round) => round.id === key.slice('round:'.length));
+  const slideId = key.startsWith('slide:') ? key.slice('slide:'.length) : undefined;
+  return slideId === undefined ? undefined : model.rounds.find((round) => round.slides.some((slide) => slide.id === slideId));
 }
 
-function errorMessage(error: unknown): string {
+function selectionForSlide(slideId: string | undefined, model: SemanticQuizModel, fallback = 'quiz'): string {
+  if (slideId === undefined) return fallback;
+  const round = model.rounds.find((item) => item.settingsSlide?.id === slideId);
+  return round === undefined ? `slide:${slideId}` : `round:${round.id}`;
+}
+
+function safeErrorMessage(error: unknown): string {
   if (error instanceof Error && /aborted|revision|newer|stale/iu.test(error.message)) {
     return 'Kvíz mezitím upravil někdo jiný. Načtěte aktuální verzi a změnu proveďte znovu.';
   }
-  return 'Změnu se nepodařilo uložit. Vaše rozepsané hodnoty zůstaly v editoru.';
-}
-
-function numberValue(value: string): number | null {
-  if (value === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function SlideFields({
-  slide,
-  disabled,
-  onChange,
-}: {
-  readonly slide: EditorSlide;
-  readonly disabled: boolean;
-  readonly onChange: (slide: EditorSlide) => void;
-}) {
-  const set = <K extends keyof EditorSlide>(field: K, value: EditorSlide[K]) => onChange({ ...slide, [field]: value });
-  const setPresentation = (field: keyof EditorPresentation, value: number | string | null) => (
-    set('presentation', { ...slide.presentation, [field]: value })
-  );
-  const setMedia = (index: number, patch: Partial<EditorMedia>) => set('media', slide.media.map((media, itemIndex) => (
-    itemIndex === index ? { ...media, ...patch } : media
-  )));
-  const roundLocked = ['round', 'roundheader', 'round-header', 'section'].includes(slide.storedKind);
-  const unknownLocked = slide.kind === 'legacy' && slide.storedKind !== 'legacy';
-  const normalizedKind = slide.kind.toLowerCase();
-  const supportsBackground = ['question', 'text', 'classic', 'free', 'intro', 'round', 'roundheader', 'round-header', 'section', 'end'].includes(normalizedKind);
-  const imageQuestion = ['image', 'picture', 'photo'].includes(normalizedKind);
-  const timedMedia = ['audio', 'music', 'video', 'youtube'].includes(normalizedKind);
-
-  return (
-    <div className="editor-form-stack">
-      <label className="form-field">Typ obsahu
-        <select value={slide.kind} disabled={disabled || roundLocked || unknownLocked} onChange={(event) => set('kind', event.target.value as EditableSlideKind)}>
-          {editableSlideKinds.map((kind) => <option key={kind} value={kind}>{kindLabels[kind]}</option>)}
-        </select>
-      </label>
-      {(unknownLocked || slide.hasLegacyData) && (
-        <div className="legacy-notice">
-          <p>Původní data jsou soukromá a při uložení zůstanou beze změny.</p>
-          <TechnicalDetails><code>Původní typ: {slide.storedKind}</code></TechnicalDetails>
-        </div>
-      )}
-      <label className="form-field">Titulek
-        <input value={slide.title} disabled={disabled} onChange={(event) => set('title', event.target.value)} />
-      </label>
-      <label className="form-field">Text / zadání
-        <textarea rows={5} value={slide.text} disabled={disabled} onChange={(event) => set('text', event.target.value)} />
-      </label>
-      <label className="form-field">Poznámka moderátora (soukromá)
-        <textarea rows={3} value={slide.moderatorNote} disabled={disabled} onChange={(event) => set('moderatorNote', event.target.value)} />
-      </label>
-
-      <fieldset className="editor-fieldset" disabled={disabled}>
-        <legend>Možnosti odpovědí</legend>
-        {slide.options.map((option, index) => (
-          <div className="inline-editor-row" key={index}>
-            <span>{index + 1}.</span>
-            <input aria-label={`Možnost ${index + 1}`} value={option} onChange={(event) => set('options', slide.options.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} />
-            <button type="button" className="icon-button" aria-label={`Odstranit možnost ${index + 1}`} onClick={() => set('options', slide.options.filter((_, itemIndex) => itemIndex !== index))}>×</button>
-          </div>
-        ))}
-        <button type="button" className="secondary-button compact-button" onClick={() => set('options', [...slide.options, ''])}>+ Přidat možnost</button>
-      </fieldset>
-
-      <label className="form-field private-field">Správná odpověď (soukromá)
-        <textarea rows={2} value={slide.correctAnswer} disabled={disabled} onChange={(event) => set('correctAnswer', event.target.value)} />
-      </label>
-
-      {(supportsBackground || imageQuestion || timedMedia) && (
-        <fieldset className="editor-fieldset" disabled={disabled}>
-          <legend>Vzhled a média</legend>
-          {supportsBackground && <label className="form-field">Obrázek pozadí
-            <input value={slide.backgroundImage} placeholder="https://…" onChange={(event) => set('backgroundImage', event.target.value)} />
-          </label>}
-          {imageQuestion && <label className="form-field">Obrázek otázky (samostatná plocha, contain)
-            <input value={slide.questionImage} placeholder="https://…" onChange={(event) => set('questionImage', event.target.value)} />
-          </label>}
-          {imageQuestion && <label className="form-field">Obrázek odpovědi (primárně recap)
-            <input value={slide.answerImage} placeholder="https://…" onChange={(event) => set('answerImage', event.target.value)} />
-          </label>}
-          {(supportsBackground || imageQuestion) && <label className="form-field">Ztmavení / overlay 0–100
-            <input type="number" min="0" max="100" value={slide.backgroundOverlay ?? ''} onChange={(event) => set('backgroundOverlay', numberValue(event.target.value))} />
-          </label>}
-          {timedMedia && <label className="form-field">Zdroj média (YouTube URL nebo ID)
-            <input value={slide.mediaSource} placeholder="https://youtube.com/watch?v=…" onChange={(event) => set('mediaSource', event.target.value)} />
-          </label>}
-          {timedMedia && <div className="normalized-timing-row">
-            <TimeField label="Začátek segmentu" value={slide.clipStartSeconds} disabled={disabled} onChange={(value) => set('clipStartSeconds', value)} />
-            <TimeField label="Konec segmentu" value={slide.clipEndSeconds} disabled={disabled} onChange={(value) => set('clipEndSeconds', value)} />
-          </div>}
-          {timedMedia && <p className="field-help">Konec musí být později než začátek. Prázdný konec znamená přehrávání bez nastaveného omezení.</p>}
-        </fieldset>
-      )}
-
-      <fieldset className="editor-fieldset" disabled={disabled}>
-        <legend>Připojená média</legend>
-        {slide.media.map((media, index) => (
-          <div className="media-editor-row" key={`${media.sourceIndex ?? 'new'}-${index}`}>
-            <select aria-label={`Role média ${index + 1}`} value={media.role} onChange={(event) => setMedia(index, { role: event.target.value as EditorMedia['role'] })}>
-              <option value="prompt">zadání</option><option value="background">pozadí</option><option value="answer">odpověď</option><option value="unknown">původní</option>
-            </select>
-            <select aria-label={`Typ média ${index + 1}`} value={media.kind} onChange={(event) => setMedia(index, { kind: event.target.value as EditorMedia['kind'] })}>
-              <option value="image">obrázek</option><option value="audio">audio</option><option value="video">video</option><option value="unknown">jiné</option>
-            </select>
-            <input aria-label={`Zdroj média ${index + 1}`} value={media.source} placeholder="https://…" onChange={(event) => setMedia(index, { source: event.target.value })} />
-            <button type="button" className="icon-button" aria-label={`Odstranit médium ${index + 1}`} onClick={() => setMedia(index, { source: '' })}>×</button>
-          </div>
-        ))}
-        <button type="button" className="secondary-button compact-button" onClick={() => set('media', [...slide.media, { role: 'prompt', kind: 'image', source: '' }])}>+ Přidat médium</button>
-        <p className="field-help">Médium zatím přidejte pomocí odkazu.</p>
-      </fieldset>
-
-      <details className="editor-advanced-settings">
-        <summary>Rozšířené nastavení prezentace</summary>
-        <fieldset className="editor-fieldset timing-grid" disabled={disabled}>
-          <legend className="visually-hidden">Rozšířené nastavení prezentace</legend>
-          {(['audioTrigger', 'answerOverlay'] as const).map((field) => (
-            <label key={field}>{field === 'audioTrigger' ? 'Čas spuštění zvuku' : 'Ztmavení obrázku odpovědi'}
-              <input type="number" min="0" value={slide.presentation[field] ?? ''} onChange={(event) => setPresentation(field, numberValue(event.target.value))} />
-            </label>
-          ))}
-          <label>Původní číslo otázky
-            <input value={slide.presentation.sourceQuestionNumber ?? ''} onChange={(event) => setPresentation('sourceQuestionNumber', event.target.value || null)} />
-          </label>
-        </fieldset>
-      </details>
-    </div>
-  );
+  return 'Změnu se nepodařilo uložit. Rozepsané hodnoty zůstaly v editoru.';
 }
 
 export function QuizEditorPage() {
@@ -256,52 +122,101 @@ export function QuizEditorPage() {
   const { role } = useAuth();
   const readOnly = role !== 'admin';
   const [quiz, setQuiz] = useState<EditorQuiz | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState('quiz');
   const [draft, setDraft] = useState<EditorSlide | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [roundTitle, setRoundTitle] = useState('');
   const [dirtySlide, setDirtySlide] = useState(false);
   const [dirtyQuiz, setDirtyQuiz] = useState(false);
-  const [quizDraftRevision, setQuizDraftRevision] = useState<number | null>(null);
+  const [dirtyRound, setDirtyRound] = useState(false);
+  const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null);
+  const [pendingSelection, setPendingSelection] = useState<string | null>(null);
+  const [removeRound, setRemoveRound] = useState<SemanticRound | null>(null);
+  const [pickerRoundId, setPickerRoundId] = useState<string | null>(null);
+  const [activePanel, setActivePanel] = useState<EditorPanel>('content');
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  const [showReadiness, setShowReadiness] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAnswer, setShowAnswer] = useState(false);
-  const dirty = dirtySlide || dirtyQuiz;
+  const errorRef = useRef<HTMLDivElement>(null);
+  const dirty = dirtySlide || dirtyQuiz || dirtyRound;
   const blocker = useBlocker(dirty);
+  const semantic = useMemo(() => quiz === null ? null : buildSemanticQuizModel(quiz), [quiz]);
 
-  const load = useCallback(async (preferredId?: string) => {
+  const reload = useCallback(async (preferredKey = 'quiz', preferredSlideId?: string): Promise<EditorQuiz | null> => {
     if (!quizId) {
-      setError('Chybí ID kvízu.');
+      setError('Kvíz nelze otevřít, protože chybí jeho identifikátor.');
       setLoading(false);
-      return;
+      return null;
     }
-    setLoading(true);
-    setError(null);
     try {
       const loaded = await getEditorQuiz(quizId);
       if (loaded === null) {
         setError('Kvíz nebyl nalezen.');
-        return;
+        return null;
       }
+      const model = buildSemanticQuizModel(loaded);
       setQuiz(loaded);
       setTitle(loaded.title);
       setDescription(loaded.description);
-      const next = loaded.slides.find((slide) => slide.id === preferredId) ?? loaded.slides[0] ?? null;
-      setSelectedId(next?.id ?? null);
-      setDraft(next);
+      setSelectedKey(preferredSlideId === undefined ? preferredKey : selectionForSlide(preferredSlideId, model, preferredKey));
       setDirtySlide(false);
       setDirtyQuiz(false);
-      setQuizDraftRevision(null);
+      setDirtyRound(false);
+      setPendingCreate(null);
+      setTouched(new Set());
+      setShowReadiness(false);
+      setSaveFailed(false);
+      setError(null);
       return loaded;
     } catch (loadError) {
-      setError(errorMessage(loadError));
+      setError(safeErrorMessage(loadError));
+      return null;
     } finally {
       setLoading(false);
     }
   }, [quizId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void reload(); }, [reload]);
+
+  useEffect(() => {
+    if (quiz === null || semantic === null || selectedKey === 'draft') return;
+    setShowAnswer(false);
+    setTouched(new Set());
+    setShowReadiness(false);
+    setPendingCreate(null);
+    if (selectedKey === 'quiz') {
+      setDraft(null);
+      setRoundTitle('');
+      return;
+    }
+    if (selectedKey.startsWith('system:')) {
+      const key = selectedKey.slice('system:'.length) as 'opening' | 'agenda' | 'rules';
+      const section = semantic.introduction.find((item) => item.key === key);
+      if (section?.slide !== undefined) setDraft(section.slide);
+      else {
+        const position = semantic.rounds[0]?.firstPosition ?? Math.max(1, quiz.slideCount);
+        setDraft(systemDraft(key, semantic, position));
+        if (key !== 'agenda') setPendingCreate({ position, semanticKey: selectedKey });
+      }
+      setRoundTitle('');
+      return;
+    }
+    if (selectedKey.startsWith('round:')) {
+      const round = roundForSelection(selectedKey, semantic);
+      setDraft(round?.settingsSlide ?? null);
+      setRoundTitle(round?.title ?? '');
+      return;
+    }
+    const slideId = selectedKey.startsWith('slide:') ? selectedKey.slice('slide:'.length) : '';
+    setDraft(semantic.slideById.get(slideId) ?? null);
+    setRoundTitle('');
+  }, [quiz, selectedKey, semantic]);
+
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       if (!dirty) return;
@@ -311,157 +226,266 @@ export function QuizEditorPage() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
 
-  const selectedStored = useMemo(() => quiz?.slides.find((slide) => slide.id === selectedId), [quiz, selectedId]);
-
-  function selectSlide(slide: EditorSlide) {
-    if (dirtySlide && !window.confirm('Zahodit neuložené změny aktuálního obsahu?')) return;
-    setSelectedId(slide.id);
-    setDraft(slide);
-    setDirtySlide(false);
-    setError(null);
-  }
-
-  async function mutate(action: () => Promise<{ readonly selectedSlideId?: string }>) {
-    if (readOnly || !quiz) return;
-    if (dirty && !window.confirm('Tato operace znovu načte editor. Zahodit neuložené změny?')) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const result = await action();
-      await load(result.selectedSlideId);
-    } catch (mutationError) {
-      setError(errorMessage(mutationError));
-    } finally {
-      setSaving(false);
+  const saveAll = useCallback(async (afterKey = selectedKey): Promise<EditorQuiz | null> => {
+    if (quiz === null || readOnly || semantic === null) return null;
+    if (draft?.isQuestion && hasBlockingIssues(draft)) {
+      setShowReadiness(true);
+      setTouched(new Set(['prompt', 'options', 'correctAnswer', 'questionImage', 'mediaSource', 'clipStartSeconds', 'clipEndSeconds']));
+      setError('Před uložením opravte označené údaje.');
+      requestAnimationFrame(() => errorRef.current?.focus());
+      return null;
     }
-  }
-
-  async function saveSlide() {
-    if (!quiz || !draft || readOnly) return;
+    if (dirtyQuiz && title.trim() === '') {
+      setError('Název kvízu nesmí být prázdný.');
+      requestAnimationFrame(() => errorRef.current?.focus());
+      return null;
+    }
+    const currentRound = roundForSelection(selectedKey, semantic);
+    if (dirtyRound && roundTitle.trim() === '') {
+      setError('Název kola nesmí být prázdný.');
+      requestAnimationFrame(() => errorRef.current?.focus());
+      return null;
+    }
     setSaving(true);
     setError(null);
+    setSaveFailed(false);
     try {
-      const pendingQuizDraft = dirtyQuiz ? { title, description } : null;
-      const result = await updateQuizSlide(quiz.id, quiz.revision, draft);
-      await load(result.selectedSlideId);
-      if (pendingQuizDraft !== null) {
-        setTitle(pendingQuizDraft.title);
-        setDescription(pendingQuizDraft.description);
-        setDirtyQuiz(true);
-        setQuizDraftRevision(result.revision);
+      let revision = quiz.revision;
+      let createdSlideId: string | undefined;
+      if (dirtySlide && draft !== null) {
+        const result = pendingCreate === null
+          ? await updateQuizSlide(quiz.id, revision, draft)
+          : await createQuizSlide(quiz.id, revision, pendingCreate.position, draft);
+        revision = result.revision;
+        createdSlideId = result.selectedSlideId;
       }
+      if (dirtyRound && currentRound !== undefined) {
+        const result = await updateQuizRound(quiz.id, revision, currentRound.id, roundTitle.trim());
+        revision = result.revision;
+      }
+      if (dirtyQuiz) {
+        await updateQuizMetadata(quiz.id, revision, title.trim(), description);
+      }
+      const key = pendingCreate?.semanticKey ?? afterKey;
+      return await reload(key, pendingCreate?.semanticKey.startsWith('system:') ? undefined : createdSlideId);
     } catch (saveError) {
-      setError(errorMessage(saveError));
+      setSaveFailed(true);
+      setError(safeErrorMessage(saveError));
+      requestAnimationFrame(() => errorRef.current?.focus());
+      return null;
     } finally {
       setSaving(false);
     }
+  }, [description, dirtyQuiz, dirtyRound, dirtySlide, draft, pendingCreate, quiz, readOnly, reload, roundTitle, selectedKey, semantic, title]);
+
+  useEffect(() => {
+    const keyboardSave = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        if (dirty && !saving && !readOnly) void saveAll();
+      }
+    };
+    window.addEventListener('keydown', keyboardSave);
+    return () => window.removeEventListener('keydown', keyboardSave);
+  }, [dirty, readOnly, saveAll, saving]);
+
+  function discardDraft() {
+    if (quiz === null) return;
+    setTitle(quiz.title);
+    setDescription(quiz.description);
+    setDirtySlide(false);
+    setDirtyQuiz(false);
+    setDirtyRound(false);
+    setPendingCreate(null);
+    setError(null);
   }
 
-  async function saveQuiz() {
-    if (!quiz || readOnly) return;
+  function select(key: string) {
+    if (key === selectedKey) return;
+    setPickerRoundId(null);
+    if (needsNavigationDecision(dirty, selectedKey, key)) {
+      setPendingSelection(key);
+      return;
+    }
+    setSelectedKey(key);
+    if (window.matchMedia('(max-width: 767px)').matches) setActivePanel('content');
+  }
+
+  async function mutate(action: (current: EditorQuiz) => Promise<{ readonly selectedSlideId?: string }>, preferredKey?: string): Promise<boolean> {
+    if (quiz === null || readOnly || dirty) return false;
     setSaving(true);
     setError(null);
     try {
-      const result = await updateQuizMetadata(quiz.id, quizDraftRevision ?? quiz.revision, title, description);
-      setQuiz({
-        ...quiz,
-        title,
-        description,
-        revision: result.revision,
-        slideCount: result.slideCount,
-        questionCount: result.questionCount,
-        roundCount: result.roundCount,
-      });
-      setDirtyQuiz(false);
-      setQuizDraftRevision(null);
-    } catch (saveError) {
-      setError(errorMessage(saveError));
+      const result = await action(quiz);
+      return await reload(preferredKey ?? selectedKey, result.selectedSlideId) !== null;
+    } catch (mutationError) {
+      setError(safeErrorMessage(mutationError));
+      requestAnimationFrame(() => errorRef.current?.focus());
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading && !quiz) return <QuizLoading label="Načítám editor kvízu…" />;
-  if (!quiz || !draft) return <QuizErrorState message={error ?? 'Kvíz nemá žádný upravitelný obsah.'} onRetry={() => void load()} />;
+  if (loading && quiz === null) return <QuizLoading label="Načítám editor kvízu…" />;
+  if (quiz === null || semantic === null) return <QuizErrorState message={error ?? 'Kvíz se nepodařilo otevřít.'} onRetry={() => void reload()} />;
+
+  const selectedRound = roundForSelection(selectedKey, semantic)
+    ?? (selectedKey === 'draft' ? semantic.rounds.find((round) => round.id === draft?.roundId) : undefined);
+  const selectedQuestion = draft === null ? undefined : semantic.questionBySlideId.get(draft.id);
+  const isLocalQuestion = selectedKey === 'draft' && draft?.isQuestion === true;
+  const questionNumber = selectedQuestion?.number ?? draft?.questionNumber ?? 1;
+  const selectedSection = selectedKey.startsWith('system:')
+    ? semantic.introduction.find((item) => item.key === selectedKey.slice('system:'.length))
+    : undefined;
+  const previewBase = draft ?? selectedRound?.settingsSlide ?? semantic.introduction.find((item) => item.slide)?.slide ?? quiz.slides[0]!;
+  const previewSlide = selectedSection?.key === 'agenda'
+    ? { ...previewBase, kind: 'agenda' as const, storedKind: 'agenda', options: generatedAgendaOptions(semantic.rounds) }
+    : previewBase;
+  const saveLabel = editorSaveLabels[editorSaveStatus(dirty, saving, saveFailed)];
+  const structuralDisabled = readOnly || saving || dirty;
 
   return (
-    <article className="quiz-editor">
-      {blocker.state === 'blocked' && (
-        <div className="navigation-warning" role="alertdialog" aria-label="Neuložené změny">
-          <strong>Máte neuložené změny.</strong>
-          <span>Opravdu chcete editor opustit?</span>
-          <button className="secondary-button" onClick={() => blocker.reset()}>Zůstat</button>
-          <button className="danger-button" onClick={() => blocker.proceed()}>Odejít bez uložení</button>
-        </div>
+    <article className="round-first-editor">
+      {(pendingSelection !== null || blocker.state === 'blocked') && (
+        <UnsavedChangesDialog
+          busy={saving}
+          onSave={() => void saveAll(pendingSelection ?? selectedKey).then((loaded) => {
+            if (loaded === null) return;
+            if (blocker.state === 'blocked') blocker.proceed();
+            else if (pendingSelection !== null) setSelectedKey(pendingSelection);
+            setPendingSelection(null);
+          })}
+          onDiscard={() => {
+            discardDraft();
+            if (blocker.state === 'blocked') blocker.proceed();
+            else if (pendingSelection !== null) setSelectedKey(pendingSelection);
+            setPendingSelection(null);
+          }}
+          onCancel={() => { if (blocker.state === 'blocked') blocker.reset(); setPendingSelection(null); }}
+        />
       )}
-      <header className="editor-toolbar">
-        <div>
+      {removeRound !== null && (
+        <RemoveRoundDialog
+          round={removeRound}
+          rounds={semantic.rounds}
+          busy={saving}
+          onMove={(targetRoundId) => void mutate((current) => removeQuizRound(current.id, current.revision, removeRound.id, 'move', targetRoundId), 'quiz').then((success) => { if (success) setRemoveRound(null); })}
+          onDelete={() => void mutate((current) => removeQuizRound(current.id, current.revision, removeRound.id, 'delete'), 'quiz').then((success) => { if (success) setRemoveRound(null); })}
+          onCancel={() => setRemoveRound(null)}
+        />
+      )}
+
+      <header className="round-editor-header">
+        <div className="round-editor-title">
           <Link className="back-link" to={`/admin/quizzes/${encodeURIComponent(quiz.id)}`}>← Detail kvízu</Link>
-          <h1>Editor kvízu</h1>
+          <strong>{title || quiz.title}</strong>
         </div>
-        <div className="editor-status">
+        <div className="round-editor-save">
           {readOnly && <span className="read-only-badge">Pouze pro čtení — moderátor</span>}
-          <span className={dirty ? 'save-state dirty' : 'save-state'} role="status" aria-live="polite">{saving ? 'Ukládám…' : dirty ? 'Neuložené změny' : 'Uloženo'}</span>
-          <TechnicalDetails><code>Verze kvízu: {quiz.revision}</code></TechnicalDetails>
-          <button className="primary-button" disabled={readOnly || saving || !dirtySlide} onClick={() => void saveSlide()}>Uložit obsah</button>
+          <span className={`save-state ${dirty ? 'dirty' : ''} ${saveFailed ? 'failed' : ''}`} role="status" aria-live="polite">{saveLabel}</span>
+          <button type="button" className="secondary-button" disabled={draft?.isQuestion !== true} onClick={() => setShowReadiness(true)}>Zkontrolovat připravenost</button>
+          <button type="button" className="primary-button" disabled={readOnly || saving || !dirty} onClick={() => void saveAll()}>Uložit</button>
+          <TechnicalDetails><code>Revize: {quiz.revision}<br />Výběr: {selectedKey}</code></TechnicalDetails>
         </div>
       </header>
 
-      {error && <p className="form-error editor-error" role="alert">{error}</p>}
-      <section className="quiz-metadata-editor">
-        <label className="form-field">Název kvízu<input disabled={readOnly} value={title} onChange={(event) => { setTitle(event.target.value); if (!dirtyQuiz) setQuizDraftRevision(quiz.revision); setDirtyQuiz(true); }} /></label>
-        <label className="form-field">Popis<input disabled={readOnly} value={description} onChange={(event) => { setDescription(event.target.value); if (!dirtyQuiz) setQuizDraftRevision(quiz.revision); setDirtyQuiz(true); }} /></label>
-        <button className="secondary-button" disabled={readOnly || saving || !dirtyQuiz} onClick={() => void saveQuiz()}>Uložit údaje</button>
-      </section>
+      {error && <div ref={errorRef} tabIndex={-1} className="round-editor-error"><HumanError error={{ title: 'Změnu nelze dokončit', message: error, technicalCode: saveFailed ? 'EDITOR_SAVE_FAILED' : 'EDITOR_ACTION_FAILED' }} onRetry={saveFailed ? () => void saveAll() : undefined} /></div>}
 
-      <section className="editor-grid">
-        <aside className="slide-navigator">
-          <header><strong>{quiz.slideCount} položek obsahu</strong><span>{quiz.roundCount} kol · {quiz.questionCount} otázek</span></header>
-          <div className="slide-actions">
-            <select aria-label="Typ nového obsahu" id="new-slide-kind" defaultValue="question" disabled={readOnly || saving}>
-              {creatableKinds.map((kind) => <option key={kind} value={kind}>{kindLabels[kind]}</option>)}
-            </select>
-            <button className="secondary-button compact-button" disabled={readOnly || saving} onClick={() => {
-              const element = document.querySelector<HTMLSelectElement>('#new-slide-kind');
-              const kind = (element?.value ?? 'question') as EditableSlideKind;
-              const position = (selectedStored?.position ?? quiz.slideCount) + 1;
-              const roundSlides = quiz.slides.filter((slide) => ['round', 'roundheader', 'round-header', 'section'].includes(slide.kind));
-              void mutate(() => createQuizSlide(quiz.id, quiz.revision, position, draftSlide(kind, position, generatedAgendaOptions(roundSlides))));
-            }}>+ Přidat</button>
-          </div>
-          <ol className="editor-slide-list">
-            {quiz.slides.map((slide) => (
-              <li key={slide.id}>
-                <button className={slide.id === selectedId ? 'selected' : ''} onClick={() => selectSlide(slide)}>
-                  <span>{slide.position}</span>
-                  <div><strong>{slide.title || kindLabels[slide.kind]}</strong><small>{kindLabels[slide.kind]}{slide.roundId ? ' · součást kola' : ''}</small></div>
-                </button>
-              </li>
-            ))}
-          </ol>
-        </aside>
+      <nav className="editor-panel-tabs" aria-label="Část editoru">
+        <button type="button" className={activePanel === 'structure' ? 'active' : ''} onClick={() => setActivePanel('structure')}>Struktura</button>
+        <button type="button" className={activePanel === 'content' ? 'active' : ''} onClick={() => setActivePanel('content')}>Obsah</button>
+        <button type="button" className={activePanel === 'preview' ? 'active' : ''} onClick={() => setActivePanel('preview')}>Náhled</button>
+      </nav>
 
-        <main className="slide-editor-panel">
-          <header className="panel-heading">
-            <div><span>Obsah {draft.position}</span><h2>{draft.title || kindLabels[draft.kind]}</h2></div>
-            <div className="slide-structure-actions">
-              <button className="icon-button" title="Posunout nahoru" aria-label={`Posunout obsah ${draft.position} nahoru`} disabled={readOnly || saving || draft.position === 1} onClick={() => void mutate(() => moveQuizSlide(quiz.id, quiz.revision, draft.id, -1))}>↑</button>
-              <button className="icon-button" title="Posunout dolů" aria-label={`Posunout obsah ${draft.position} dolů`} disabled={readOnly || saving || draft.position === quiz.slideCount} onClick={() => void mutate(() => moveQuizSlide(quiz.id, quiz.revision, draft.id, 1))}>↓</button>
-              <button className="secondary-button compact-button" disabled={readOnly || saving} onClick={() => void mutate(() => duplicateQuizSlide(quiz.id, quiz.revision, draft.id))}>Duplikovat</button>
-              <button className="danger-button compact-button" disabled={readOnly || saving || quiz.slideCount <= 1} onClick={() => {
-                if (window.confirm('Opravdu smazat tento obsah?')) void mutate(() => deleteQuizSlide(quiz.id, quiz.revision, draft.id));
-              }}>Smazat</button>
-            </div>
-          </header>
-          <SlideFields slide={draft} disabled={readOnly || saving} onChange={(value) => { setDraft(value); setDirtySlide(true); }} />
+      <section className="round-editor-workspace" data-active-panel={activePanel}>
+        <EditorOutline
+          model={semantic}
+          selectedKey={selectedKey}
+          activeDraft={draft}
+          disabled={structuralDisabled}
+          pickerRoundId={pickerRoundId}
+          onSelect={select}
+          onOpenPicker={setPickerRoundId}
+          onClosePicker={() => setPickerRoundId(null)}
+          onCreateQuestion={(round, type) => {
+            const next = newQuestionDraft(type, round);
+            setDraft(next);
+            setPendingCreate({ position: next.position, semanticKey: 'draft' });
+            setSelectedKey('draft');
+            setDirtySlide(true);
+            setPickerRoundId(null);
+            setTouched(new Set());
+            setShowAnswer(false);
+            setShowReadiness(false);
+            setActivePanel('content');
+          }}
+          onAddRound={() => {
+            const position = semantic.closing[0]?.position ?? quiz.slideCount + 1;
+            const slide = localDraft('round', position, { title: `Nové ${semantic.rounds.length + 1}. kolo` });
+            void mutate((current) => createQuizSlide(current.id, current.revision, position, slide));
+          }}
+        />
+
+        <main className="round-editor-content editor-panel-content">
+          {selectedKey === 'quiz' && (
+            <QuizSettingsForm quiz={quiz} title={title} description={description} disabled={readOnly || saving}
+              onTitle={(value) => { setTitle(value); setDirtyQuiz(true); }}
+              onDescription={(value) => { setDescription(value); setDirtyQuiz(true); }} />
+          )}
+          {selectedSection !== undefined && draft !== null && (
+            <SystemSectionForm section={selectedSection} slide={draft} model={semantic} disabled={readOnly || saving}
+              onChange={(value) => { setDraft(value); setDirtySlide(true); }} />
+          )}
+          {selectedKey.startsWith('round:') && selectedRound !== undefined && (
+            <>
+              <RoundSettingsForm round={selectedRound} title={roundTitle} slide={draft ?? undefined} disabled={readOnly || saving}
+                onTitle={(value) => { setRoundTitle(value); setDirtyRound(true); }}
+                onChange={(value) => { setDraft(value); setDirtySlide(true); }} />
+              {selectedRound.id !== 'roundless' ? <div className="semantic-actions round-actions">
+                <button type="button" className="secondary-button" disabled={structuralDisabled || selectedRound.position === 1} onClick={() => void mutate((current) => moveQuizRound(current.id, current.revision, selectedRound.id, -1), `round:${selectedRound.id}`)}>Přesunout nahoru</button>
+                <button type="button" className="secondary-button" disabled={structuralDisabled || selectedRound.position === semantic.rounds.length} onClick={() => void mutate((current) => moveQuizRound(current.id, current.revision, selectedRound.id, 1), `round:${selectedRound.id}`)}>Přesunout dolů</button>
+                <button type="button" className="secondary-button" disabled={structuralDisabled} onClick={() => void mutate((current) => duplicateQuizRound(current.id, current.revision, selectedRound.id))}>Duplikovat včetně otázek</button>
+                <button type="button" className="danger-button" disabled={structuralDisabled} onClick={() => setRemoveRound(selectedRound)}>Odstranit kolo…</button>
+              </div> : <p className="field-help">Toto je bezpečný přehled starších otázek bez přiřazeného kola. Otázky můžete jednotlivě přesunout.</p>}
+            </>
+          )}
+          {draft?.isQuestion && (
+            <>
+              <QuestionForm slide={draft} number={questionNumber} disabled={readOnly || saving} showAllIssues={showReadiness} touched={touched}
+                onTouch={(field) => setTouched((current) => new Set(current).add(field))}
+                onChange={(value) => { setDraft(value); setDirtySlide(true); setSaveFailed(false); }} />
+              {!isLocalQuestion && selectedRound !== undefined && (
+                <div className="semantic-actions question-actions">
+                  <button type="button" className="secondary-button" disabled={structuralDisabled || questionNumber === 1} onClick={() => void mutate((current) => reorderQuizQuestion(current.id, current.revision, draft.id, -1))}>Posunout nahoru</button>
+                  <button type="button" className="secondary-button" disabled={structuralDisabled || questionNumber === selectedRound.questions.length} onClick={() => void mutate((current) => reorderQuizQuestion(current.id, current.revision, draft.id, 1))}>Posunout dolů</button>
+                  <button type="button" className="secondary-button" disabled={structuralDisabled} onClick={() => void mutate((current) => duplicateQuizSlide(current.id, current.revision, draft.id))}>Duplikovat</button>
+                  {semantic.rounds.filter((round) => round.id !== selectedRound.id && round.id !== 'roundless').length > 0 && (
+                    <label className="move-to-round">Přesunout do kola
+                      <select disabled={structuralDisabled} defaultValue="" onChange={(event) => {
+                        if (event.target.value !== '') void mutate((current) => moveQuizQuestionToRound(current.id, current.revision, draft.id, event.target.value));
+                      }}>
+                        <option value="" disabled>Vyberte…</option>
+                        {semantic.rounds.filter((round) => round.id !== selectedRound.id && round.id !== 'roundless').map((round) => <option key={round.id} value={round.id}>{round.position}. kolo – {round.title}</option>)}
+                      </select>
+                    </label>
+                  )}
+                  <button type="button" className="danger-button" disabled={structuralDisabled || quiz.slideCount <= 1} onClick={() => {
+                    if (window.confirm('Opravdu odstranit tuto otázku?')) void mutate((current) => deleteQuizSlide(current.id, current.revision, draft.id));
+                  }}>Odstranit otázku</button>
+                </div>
+              )}
+              {isLocalQuestion && <button type="button" className="text-button" onClick={() => { discardDraft(); setSelectedKey(`round:${selectedRound?.id ?? ''}`); }}>Zrušit novou otázku</button>}
+            </>
+          )}
+          {draft !== null && !draft.isQuestion && !selectedKey.startsWith('system:') && !selectedKey.startsWith('round:') && (
+            <SystemContentForm slide={draft} disabled={readOnly || saving} onChange={(value) => { setDraft(value); setDirtySlide(true); }} />
+          )}
+          {showReadiness && draft?.isQuestion && <ReadinessSummary slide={draft} />}
+          {dirty && <p className="structure-save-hint">Strukturální operace budou dostupné po uložení nebo zahození rozepsaných změn.</p>}
         </main>
 
-        <aside className="editor-preview-panel">
-          <header className="panel-heading"><div><span>Projektor</span><h2>Náhled projektoru</h2></div></header>
-          <SlidePreview slide={draft} quizTitle={title || quiz.title} position={draft.position} showAnswer={showAnswer} />
-          <label className="answer-preview-toggle"><input type="checkbox" checked={showAnswer} onChange={(event) => setShowAnswer(event.target.checked)} /> Zobrazit správnou odpověď pouze v admin náhledu</label>
-          <p className="field-help">Náhled ukazuje rozepsané změny pouze v tomto editoru. Na živý projektor je neposílá.</p>
-        </aside>
+        <EditorPreview slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer} onShowAnswer={setShowAnswer} />
       </section>
     </article>
   );

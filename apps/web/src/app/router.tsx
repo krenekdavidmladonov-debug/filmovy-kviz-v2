@@ -52,13 +52,13 @@ export const router = createBrowserRouter([
     element: <RequireStaff />,
     children: [
       { path: 'live/:sessionId', element: <LazyAdminRoute><LiveControlPage /></LazyAdminRoute> },
+      { path: 'quizzes/:quizId/edit', element: <LazyAdminRoute><QuizEditorPage /></LazyAdminRoute> },
       {
         element: <AdminShell />,
         children: [
           { index: true, element: <AdminPage /> },
           { path: 'quizzes', element: <LazyAdminRoute><QuizLibraryPage /></LazyAdminRoute> },
           { path: 'quizzes/:quizId', element: <LazyAdminRoute><QuizDetailPage /></LazyAdminRoute> },
-          { path: 'quizzes/:quizId/edit', element: <LazyAdminRoute><QuizEditorPage /></LazyAdminRoute> },
         ],
       },
       { path: '*', element: <NotFoundPage /> },

@@ -18,7 +18,7 @@ export const defaultRules = [
   'Hrajte fér.',
   'Během otázek nepoužívejte mobil ani internet.',
   'Respektujte organizátory a ostatní týmy.',
-  'Užijte si filmový večer.',
+  'Užijte si kvízový večer.',
 ] as const;
 
 export function generatedAgendaOptions(rounds: readonly { readonly title: string }[]): readonly string[] {
