@@ -1,4 +1,4 @@
-import type { MediaPlaybackCommand, SlidePresentationInput } from '../presentation/types';
+import type { MediaPlaybackCommand, MediaPlaybackState, SlidePresentationInput } from '../presentation/types';
 
 export type LiveSessionStatus = 'waiting' | 'active' | 'ended';
 export type LivePresentationMode = 'slide' | 'recap';
@@ -17,6 +17,7 @@ export interface LiveControlState {
   readonly recapQuestionPosition?: number;
   readonly recapQuestionId?: string;
   readonly mediaCommand: MediaPlaybackCommand;
+  readonly mediaPlaybackState: MediaPlaybackState;
   readonly mediaGeneration: number;
   readonly introGeneration: number;
   readonly revision: number;
@@ -73,6 +74,7 @@ export interface PublicLiveState {
   readonly presentationMode: LivePresentationMode;
   readonly renderMode: LiveRenderMode;
   readonly mediaCommand: MediaPlaybackCommand;
+  readonly mediaPlaybackState: MediaPlaybackState;
   readonly mediaGeneration: number;
   readonly introGeneration: number;
   readonly questionNumber?: number;
@@ -86,6 +88,7 @@ export interface PublicLiveState {
   readonly answerRevealed: boolean;
   readonly revealedAnswer?: string;
   readonly answerImage?: string;
+  readonly recapQuestionPosition?: number;
   readonly revision: number;
 }
 
@@ -96,6 +99,7 @@ export interface LiveActionResponse {
   readonly answerRevealed: boolean;
   readonly presentationMode: LivePresentationMode;
   readonly mediaCommand: MediaPlaybackCommand;
+  readonly mediaPlaybackState: MediaPlaybackState;
   readonly mediaGeneration: number;
   readonly revision: number;
 }

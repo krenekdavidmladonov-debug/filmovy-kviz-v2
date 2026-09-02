@@ -1,5 +1,8 @@
 const projectorWindowName = 'filmovy-kviz-projector';
 
+export const projectorPopupBlockedMessage = 'Prohlížeč zablokoval otevření projektoru. Povolte vyskakovací okna a zkuste to znovu.';
+export const projectorFullscreenFailureMessage = 'Celá obrazovka se nepodařila spustit. Použijte fullscreen prohlížeče.';
+
 let projectorWindow: Window | null = null;
 let projectorUrl: string | null = null;
 

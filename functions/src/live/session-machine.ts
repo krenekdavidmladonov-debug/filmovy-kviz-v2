@@ -1,6 +1,15 @@
 import { LiveSessionError } from './errors.js';
 import { displayAnswer } from './publication.js';
-import type { LiveSessionAction, PrivateLiveSession, PrivateSlide } from './types.js';
+import type { LiveMediaPlaybackState, LiveSessionAction, PrivateLiveSession, PrivateSlide } from './types.js';
+
+const playbackTransitions: Readonly<Record<LiveMediaPlaybackState, readonly LiveMediaPlaybackState[]>> = {
+  idle: [],
+  preparing: ['ready', 'playing', 'error', 'finished'],
+  ready: ['playing', 'error', 'finished'],
+  playing: ['error', 'finished'],
+  finished: [],
+  error: [],
+};
 
 function assertExpectedRevision(session: PrivateLiveSession, expectedRevision: number): void {
   if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
@@ -46,7 +55,7 @@ export function applyLiveSessionAction(
   if (action.type === 'end-session') {
     return {
       ...withoutRecapSelection(session), ...common, status: 'ended', answerRevealed: false, presentationMode: 'slide',
-      mediaCommand: 'idle', mediaGeneration: session.mediaGeneration + 1, endedAt: now,
+      mediaCommand: 'idle', mediaPlaybackState: 'idle', mediaGeneration: session.mediaGeneration + 1, endedAt: now,
     };
   }
   if (action.type === 'go-to-slide' || action.type === 'next-slide' || action.type === 'previous-slide') {
@@ -69,6 +78,7 @@ export function applyLiveSessionAction(
       answerRevealed: false,
       presentationMode: recap ? 'recap' : 'slide',
       mediaCommand: 'idle',
+      mediaPlaybackState: 'idle',
       mediaGeneration: session.mediaGeneration + 1,
       startedAt: session.startedAt ?? now,
     };
@@ -84,7 +94,7 @@ export function applyLiveSessionAction(
     return {
       ...session, ...common, answerRevealed: true,
       recapQuestionPosition: slide.position, recapQuestionId: slide.id,
-      mediaCommand: 'idle', mediaGeneration: session.mediaGeneration + 1,
+      mediaCommand: 'idle', mediaPlaybackState: 'idle', mediaGeneration: session.mediaGeneration + 1,
     };
   }
   const expectedPosition = session.presentationMode === 'recap'
@@ -114,5 +124,33 @@ export function applyLiveSessionAction(
         : action.type === 'finish-media' ? 'finished'
           : undefined;
   if (command === undefined) throw new LiveSessionError('invalid-argument', 'Unsupported live action.');
-  return { ...session, ...common, mediaCommand: command, mediaGeneration: session.mediaGeneration + 1 };
+  const mediaPlaybackState = command === 'play' || command === 'replay' ? 'preparing'
+    : command === 'finished' ? 'finished' : 'idle';
+  return { ...session, ...common, mediaCommand: command, mediaPlaybackState, mediaGeneration: session.mediaGeneration + 1 };
+}
+
+export function applyMediaPlaybackReport(
+  session: PrivateLiveSession,
+  playbackState: Extract<LiveMediaPlaybackState, 'ready' | 'playing' | 'error' | 'finished'>,
+  mediaGeneration: number,
+  actorUid: string,
+  now: unknown,
+): PrivateLiveSession {
+  assertMutable(session);
+  if (session.status !== 'active' || mediaGeneration !== session.mediaGeneration) {
+    throw new LiveSessionError('aborted', 'A stale media callback was ignored.');
+  }
+  if (session.mediaPlaybackState === playbackState) return session;
+  if (!playbackTransitions[session.mediaPlaybackState].includes(playbackState)) {
+    throw new LiveSessionError('aborted', 'An out-of-order media callback was ignored.');
+  }
+  return {
+    ...session,
+    mediaPlaybackState: playbackState,
+    mediaCommand: playbackState === 'error' ? 'error'
+      : playbackState === 'finished' ? 'finished' : session.mediaCommand,
+    revision: session.revision + 1,
+    updatedBy: actorUid,
+    updatedAt: now,
+  };
 }

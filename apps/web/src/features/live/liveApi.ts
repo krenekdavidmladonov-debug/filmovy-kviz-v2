@@ -1,6 +1,7 @@
 import { httpsCallable } from 'firebase/functions';
 
 import { getFirebaseServices } from '../../services/firebase/client';
+import type { MediaPlaybackState } from '../presentation/types';
 import type { LiveActionResponse } from './types';
 
 async function invoke(name: string, data: Record<string, unknown>): Promise<LiveActionResponse> {
@@ -40,4 +41,12 @@ export function finishMedia(
   mediaGeneration: number,
 ): Promise<LiveActionResponse> {
   return invoke('finishMedia', { sessionId, expectedRevision, mediaGeneration });
+}
+
+export function reportMediaPlayback(
+  sessionId: string,
+  mediaGeneration: number,
+  playbackState: Extract<MediaPlaybackState, 'ready' | 'playing' | 'error' | 'finished'>,
+): Promise<LiveActionResponse> {
+  return invoke('reportMediaPlayback', { sessionId, mediaGeneration, playbackState });
 }

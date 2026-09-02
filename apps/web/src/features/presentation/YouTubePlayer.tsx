@@ -3,7 +3,7 @@ import { useEffect, useId, useReducer, useRef, useState } from 'react';
 import { initialMediaMachineState, reduceMediaMachine } from './mediaStateMachine';
 import { youtubeVideoId } from './model';
 import { recordPlayerLifecycle } from './performance';
-import type { MediaPlaybackCommand } from './types';
+import type { MediaPlaybackCommand, MediaPlaybackState } from './types';
 
 interface YouTubePlayerInstance {
   cueVideoById(options: { videoId: string; startSeconds?: number; endSeconds?: number }): void;
@@ -59,22 +59,31 @@ function mediaDebug(delta: 1 | -1): void {
 function loadYouTubeApi(): Promise<YouTubeNamespace> {
   if (window.YT?.Player) return Promise.resolve(window.YT);
   if (apiPromise !== undefined) return apiPromise;
-  apiPromise = new Promise((resolve, reject) => {
+  const pending = new Promise<YouTubeNamespace>((resolve, reject) => {
     const prior = window.onYouTubeIframeAPIReady;
+    const staleScript = document.querySelector<HTMLScriptElement>('script[data-filmovy-kviz-youtube-api]');
+    staleScript?.remove();
+    const script = document.createElement('script');
+    const fail = (error: Error) => {
+      script.remove();
+      reject(error);
+    };
     window.onYouTubeIframeAPIReady = () => {
       prior?.();
       if (window.YT?.Player) resolve(window.YT);
-      else reject(new Error('YouTube API is unavailable.'));
+      else fail(new Error('YouTube API is unavailable.'));
     };
-    const existing = document.querySelector<HTMLScriptElement>('script[data-filmovy-kviz-youtube-api]');
-    if (existing) return;
-    const script = document.createElement('script');
     script.src = 'https://www.youtube.com/iframe_api';
     script.async = true;
     script.dataset.filmovyKvizYoutubeApi = 'true';
-    script.onerror = () => reject(new Error('YouTube API could not be loaded.'));
+    script.onerror = () => fail(new Error('YouTube API could not be loaded.'));
     document.head.append(script);
   });
+  const retryable = pending.catch((error: unknown) => {
+    if (apiPromise === retryable) apiPromise = undefined;
+    throw error;
+  });
+  apiPromise = retryable;
   return apiPromise;
 }
 
@@ -87,6 +96,7 @@ export function YouTubePlayer({
   className,
   onFinished,
   onError,
+  onPlaybackState,
 }: {
   readonly source: string;
   readonly command: MediaPlaybackCommand;
@@ -95,115 +105,125 @@ export function YouTubePlayer({
   readonly endSeconds?: number;
   readonly className?: string;
   readonly onFinished?: (generation: number) => void;
-  readonly onError?: (message: string) => void;
+  readonly onError?: (generation: number, message: string) => void;
+  readonly onPlaybackState?: (generation: number, state: Extract<MediaPlaybackState, 'ready' | 'playing'>) => void;
 }) {
   const reactId = useId();
   const hostRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YouTubePlayerInstance | undefined>(undefined);
-  const readyRef = useRef(false);
-  const commandRef = useRef({ command, generation, startSeconds, endSeconds });
+  const epochSequenceRef = useRef(0);
+  const activeEpochRef = useRef<number | undefined>(undefined);
   const onFinishedRef = useRef(onFinished);
   const onErrorRef = useRef(onError);
+  const onPlaybackStateRef = useRef(onPlaybackState);
   const [machine, dispatch] = useReducer(reduceMediaMachine, initialMediaMachineState);
   const [visibleError, setVisibleError] = useState<string>();
   const videoId = youtubeVideoId(source);
+  const hostKey = `${videoId ?? source}:${command}:${generation}:${startSeconds}:${endSeconds ?? ''}`;
 
   useEffect(() => { onFinishedRef.current = onFinished; }, [onFinished]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
+  useEffect(() => { onPlaybackStateRef.current = onPlaybackState; }, [onPlaybackState]);
 
   useEffect(() => {
-    commandRef.current = { command, generation, startSeconds, endSeconds };
-    const player = playerRef.current;
-    if (!readyRef.current || player === undefined) return;
-    if (command === 'play' || command === 'replay') {
-      dispatch({ type: 'play', generation });
-      player.loadVideoById({ videoId: videoId ?? '', startSeconds, ...(endSeconds === undefined ? {} : { endSeconds }) });
-    } else if (command === 'stop' || command === 'finished') {
-      dispatch({ type: command === 'stop' ? 'stop' : 'finished', generation });
-      player.pauseVideo();
-      player.seekTo(startSeconds, true);
-    } else if (command === 'idle') {
-      dispatch({ type: 'reset', generation });
-      player.pauseVideo();
-      player.seekTo(startSeconds, true);
-    }
-  }, [command, endSeconds, generation, startSeconds, videoId]);
-
-  useEffect(() => {
+    const epoch = epochSequenceRef.current + 1;
+    epochSequenceRef.current = epoch;
+    activeEpochRef.current = epoch;
     let cancelled = false;
+    const active = () => !cancelled && activeEpochRef.current === epoch;
+    setVisibleError(undefined);
     if (videoId === undefined || hostRef.current === null) {
-      setVisibleError('Zdroj není podporovaný YouTube odkaz ani video ID.');
-      return;
+      const message = 'Zdroj není podporovaný YouTube odkaz ani video ID.';
+      dispatch({ type: 'error', generation, message });
+      setVisibleError(message);
+      onErrorRef.current?.(generation, message);
+      return () => { cancelled = true; if (activeEpochRef.current === epoch) activeEpochRef.current = undefined; };
     }
-    dispatch({ type: 'prepare', generation: commandRef.current.generation });
+    if (command === 'error') {
+      const message = 'Médium je ve stavu chyby. Použijte REPLAY pro nový pokus.';
+      dispatch({ type: 'error', generation, message });
+      setVisibleError(message);
+      return () => { cancelled = true; if (activeEpochRef.current === epoch) activeEpochRef.current = undefined; };
+    }
+    if (command === 'play' || command === 'replay') dispatch({ type: 'play', generation });
+    else if (command === 'stop') dispatch({ type: 'stop', generation });
+    else if (command === 'finished') dispatch({ type: 'finished', generation });
+    else dispatch({ type: 'reset', generation });
     void loadYouTubeApi().then((YT) => {
-      if (cancelled || hostRef.current === null) return;
+      if (!active() || hostRef.current === null) return;
       const player = new YT.Player(hostRef.current, {
         videoId,
         playerVars: { controls: 1, rel: 0, playsinline: 1, origin: window.location.origin },
         events: {
           onReady: () => {
-            if (cancelled) return;
-            readyRef.current = true;
-            const latest = commandRef.current;
-            player.cueVideoById({
-              videoId,
-              startSeconds: latest.startSeconds,
-              ...(latest.endSeconds === undefined ? {} : { endSeconds: latest.endSeconds }),
-            });
-            dispatch({ type: 'ready', generation: latest.generation });
-            if (latest.command === 'play' || latest.command === 'replay') {
+            if (!active()) return;
+            setVisibleError(undefined);
+            if (command === 'play' || command === 'replay') {
+              dispatch({ type: 'ready', generation });
+              onPlaybackStateRef.current?.(generation, 'ready');
               player.loadVideoById({
                 videoId,
-                startSeconds: latest.startSeconds,
-                ...(latest.endSeconds === undefined ? {} : { endSeconds: latest.endSeconds }),
+                startSeconds,
+                ...(endSeconds === undefined ? {} : { endSeconds }),
               });
+            } else {
+              player.cueVideoById({ videoId, startSeconds, ...(endSeconds === undefined ? {} : { endSeconds }) });
+              if (command === 'stop') dispatch({ type: 'stop', generation });
+              else if (command === 'finished') dispatch({ type: 'finished', generation });
+              else dispatch({ type: 'ready', generation });
             }
           },
           onStateChange: (event) => {
-            const latest = commandRef.current;
-            if (event.data === YT.PlayerState.PLAYING) dispatch({ type: 'playing', generation: latest.generation });
+            if (!active()) return;
+            if (event.data === YT.PlayerState.PLAYING) {
+              setVisibleError(undefined);
+              dispatch({ type: 'playing', generation });
+              onPlaybackStateRef.current?.(generation, 'playing');
+            }
             if (event.data === YT.PlayerState.ENDED) {
-              dispatch({ type: 'finished', generation: latest.generation });
-              onFinishedRef.current?.(latest.generation);
+              dispatch({ type: 'finished', generation });
+              onFinishedRef.current?.(generation);
             }
           },
           onError: () => {
+            if (!active()) return;
             const message = 'YouTube médium se nepodařilo přehrát.';
-            const latest = commandRef.current;
-            dispatch({ type: 'error', generation: latest.generation, message });
+            dispatch({ type: 'error', generation, message });
             setVisibleError(message);
-            onErrorRef.current?.(message);
+            onErrorRef.current?.(generation, message);
           },
           onAutoplayBlocked: () => {
+            if (!active()) return;
             const message = 'Prohlížeč zablokoval přehrání. Spusťte médium znovu ručně.';
+            dispatch({ type: 'error', generation, message });
             setVisibleError(message);
-            onErrorRef.current?.(message);
+            onErrorRef.current?.(generation, message);
           },
         },
       });
       playerRef.current = player;
       mediaDebug(1);
     }).catch(() => {
-      if (cancelled) return;
+      if (!active()) return;
       const message = 'YouTube přehrávač se nepodařilo načíst.';
+      dispatch({ type: 'error', generation, message });
       setVisibleError(message);
-      onErrorRef.current?.(message);
+      onErrorRef.current?.(generation, message);
     });
     return () => {
       cancelled = true;
-      readyRef.current = false;
+      if (activeEpochRef.current === epoch) activeEpochRef.current = undefined;
       if (playerRef.current !== undefined) {
         playerRef.current.destroy();
         playerRef.current = undefined;
         mediaDebug(-1);
       }
     };
-  }, [videoId]);
+  }, [command, endSeconds, generation, startSeconds, videoId]);
 
   return (
     <div className={className ?? 'youtube-player-shell'} data-media-lifecycle={machine.lifecycle} data-player-id={reactId}>
-      <div ref={hostRef} className="youtube-player-host" />
+      <div key={hostKey} ref={hostRef} className="youtube-player-host" />
       {visibleError && <p className="projector-media-error" role="status">Médium není dostupné. Moderátor může pokračovat textovou otázkou.</p>}
     </div>
   );

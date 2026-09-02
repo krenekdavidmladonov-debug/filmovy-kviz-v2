@@ -152,13 +152,14 @@ export function buildPublicSessionState(session: PrivateLiveSession, slide?: Pri
     presentationMode: session.presentationMode,
     renderMode: renderMode(slide, session.presentationMode === 'recap'),
     mediaCommand: session.mediaCommand,
+    mediaPlaybackState: session.mediaPlaybackState,
     mediaGeneration: session.mediaGeneration,
     introGeneration: session.introGeneration,
     revision: session.revision,
     updatedAt: session.updatedAt,
   };
   if (session.status !== 'active') {
-    return { ...base, answerRevealed: false, presentationMode: 'slide', renderMode: 'question', mediaCommand: 'idle' };
+    return { ...base, answerRevealed: false, presentationMode: 'slide', renderMode: 'question', mediaCommand: 'idle', mediaPlaybackState: 'idle' };
   }
   const expectedPosition = session.presentationMode === 'recap'
     ? session.recapQuestionPosition ?? session.currentSlidePosition
@@ -192,6 +193,8 @@ export function buildPublicSessionState(session: PrivateLiveSession, slide?: Pri
     ...(backgroundOverlay === undefined ? {} : { backgroundOverlay: Math.min(100, backgroundOverlay) }),
     clipStartSeconds,
     ...(clipEndSeconds !== undefined && clipEndSeconds > clipStartSeconds ? { clipEndSeconds } : {}),
+    ...(session.presentationMode === 'recap' && session.recapQuestionPosition !== undefined
+      ? { recapQuestionPosition: session.recapQuestionPosition } : {}),
   };
   if (session.presentationMode === 'recap' && session.recapQuestionPosition === undefined) return result;
   if (session.presentationMode !== 'recap' && !session.answerRevealed) return result;

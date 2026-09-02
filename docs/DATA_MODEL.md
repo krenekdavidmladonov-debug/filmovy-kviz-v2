@@ -56,7 +56,7 @@ Operational team: display name, check-in state, seat count, scoring state, and p
 
 ### `sessions/{sessionId}`
 
-Private live-control state. Required fields are `quizId`, safe display copy `quizTitle`, `slideCount`, `status` (`waiting`, `active`, `ended`), `currentSlidePosition`, optional `currentSlideId`, `answerRevealed`, monotonic `revision`, `createdBy`, `updatedBy`, and lifecycle timestamps. Correct answers and raw slides are not duplicated into this document; trusted Functions load the current private ordered slide server-side. Staff may read sessions for control UI, but all direct client writes are denied.
+Private live-control state. Required fields are `quizId`, safe display copy `quizTitle`, `slideCount`, `status` (`waiting`, `active`, `ended`), `currentSlidePosition`, optional `currentSlideId`, `answerRevealed`, moderator `mediaCommand`, confirmed `mediaPlaybackState`, monotonic `mediaGeneration`, monotonic `revision`, `createdBy`, `updatedBy`, and lifecycle timestamps. Correct answers and raw slides are not duplicated into this document; trusted Functions load the current private ordered slide server-side. Staff may read sessions for control UI, but all direct client writes are denied.
 
 ### `events/{eventId}/sessions/{sessionId}/scores/{teamId}`
 
@@ -74,7 +74,7 @@ Safe listing data: title, venue display name, start time, public capacity state 
 
 ### `publicSessions/{sessionId}`
 
-Server-generated projector snapshot: `sessionId`, `status`, `quizTitle`, `slidePosition`, `presentationMode`, `renderMode`, `mediaCommand`, monotonic `mediaGeneration`, `introGeneration`, `answerRevealed`, `revision`, and `updatedAt`. An active snapshot may add allowlisted `slideKind`, title, text, primitive options, normalized media roles, question numbering, overlay, and clip controls. In normal AUDIO mode its source is deliberately omitted. `revealedAnswer` and optional answer image exist only for the single selected recap question or the retained compatibility reveal operation. Correct-answer source fields, moderator notes, `legacy`, `raw`, recap overrides, private references, and complete slide/question objects are forbidden.
+Server-generated projector snapshot: `sessionId`, `status`, `quizTitle`, `slidePosition`, `presentationMode`, `renderMode`, moderator `mediaCommand`, confirmed `mediaPlaybackState`, monotonic `mediaGeneration`, `introGeneration`, `answerRevealed`, `revision`, and `updatedAt`. An active snapshot may add allowlisted `slideKind`, title, text, primitive options, normalized media roles, question numbering, overlay, and clip controls. A selected recap also publishes its non-sensitive `recapQuestionPosition` so transport validation can prove the answer belongs to an explicit selection. In normal AUDIO mode its source is deliberately omitted. `revealedAnswer` and optional answer image exist only for the single selected recap question or the retained compatibility reveal operation. Correct-answer source fields, moderator notes, `legacy`, `raw`, recap overrides, private references, and complete slide/question objects are forbidden.
 
 Anonymous clients may get one document when they already know its random session ID, but cannot list the collection or write any public state. Every state change replaces the whole public document in the same transaction as the private session update, removing stale reveal fields.
 

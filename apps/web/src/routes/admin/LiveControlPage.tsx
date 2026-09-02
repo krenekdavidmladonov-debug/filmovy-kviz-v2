@@ -4,19 +4,19 @@ import { Link, useParams } from 'react-router-dom';
 
 import {
   endLiveSession,
-  finishMedia,
   nextSlide,
   playMedia,
   previousSlide,
+  reportMediaPlayback,
   replayMedia,
   selectRecapQuestion,
   startIntro,
   stopMedia,
 } from '../../features/live/liveApi';
-import { broadcastPublicState, isProjectorChannelMessage, openProjectorChannel, type ProjectorChannel } from '../../features/live/projectorChannel';
-import { openOrFocusProjector } from '../../features/live/projectorWindow';
+import { broadcastPublicState, openProjectorChannel, parseProjectorChannelMessage, type ProjectorChannel } from '../../features/live/projectorChannel';
+import { openOrFocusProjector, projectorPopupBlockedMessage } from '../../features/live/projectorWindow';
 import { subscribeLiveControl, subscribeLiveControlSlides, subscribePublicLiveState } from '../../features/live/liveRepository';
-import type { LiveControlSlide, LiveControlState } from '../../features/live/types';
+import type { LiveActionResponse, LiveControlSlide, LiveControlState } from '../../features/live/types';
 import { SlideRenderer } from '../../features/presentation/SlideRenderer';
 import { YouTubePlayer } from '../../features/presentation/YouTubePlayer';
 import { indexSlidesByPosition } from '../../features/presentation/performance';
@@ -70,11 +70,20 @@ export function LiveControlPage() {
   const [error, setError] = useState<string | null>(null);
   const sessionRef = useRef<LiveControlState | null>(null);
   const channelRef = useRef<ProjectorChannel | undefined>(undefined);
+  const operationIdRef = useRef(0);
+  const confirmedRevisionRef = useRef(-1);
+  const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    confirmedRevisionRef.current = -1;
+    mutationQueueRef.current = Promise.resolve();
+  }, [sessionId]);
 
   useEffect(() => {
     if (!sessionId) { setLoading(false); return; }
     return subscribeLiveControl(sessionId, (value) => {
       sessionRef.current = value;
+      if (value) confirmedRevisionRef.current = Math.max(confirmedRevisionRef.current, value.revision);
       setSession(value);
       setLoading(false);
     }, () => { setError('Privátní live session se nepodařilo načíst.'); setLoading(false); });
@@ -91,11 +100,19 @@ export function LiveControlPage() {
     channelRef.current = channel;
     if (channel) {
       channel.setMessageHandler((data) => {
-        if (!isProjectorChannelMessage(data) || data.type !== 'playback-finished') return;
+        const message = parseProjectorChannelMessage(data);
+        if (message?.type !== 'playback-state') return;
         const current = sessionRef.current;
-        if (!current || data.sessionId !== current.sessionId
-          || data.mediaGeneration !== current.mediaGeneration) return;
-        void finishMedia(current.sessionId, current.revision, current.mediaGeneration).catch(() => undefined);
+        if (!current || message.sessionId !== current.sessionId
+          || message.mediaGeneration !== current.mediaGeneration) return;
+        if (message.playbackState === 'error') {
+          setError('Projektor médium nepřehrál. Otázka zůstala zobrazená; použijte REPLAY pro nový pokus.');
+        }
+        void enqueueMutation((latest) => latest.mediaGeneration === message.mediaGeneration
+          ? reportMediaPlayback(latest.sessionId, message.mediaGeneration, message.playbackState)
+          : Promise.resolve(undefined)).catch((playbackError) => {
+          if (message.playbackState === 'error') setError(operationError(playbackError));
+        });
       });
     }
     const unsubscribe = subscribePublicLiveState(sessionId, (value) => {
@@ -115,20 +132,62 @@ export function LiveControlPage() {
     ? recapQuestions(currentSlide, slides) : [], [currentSlide, slides]);
   const projectorUrl = useMemo(() => sessionId ? `${window.location.origin}/projector/${encodeURIComponent(sessionId)}` : '', [sessionId]);
 
-  async function run(action: (id: string, revision: number) => Promise<unknown>) {
-    const current = sessionRef.current;
-    if (!sessionId || !current) return;
-    setPending(true);
-    setError(null);
-    try { await action(sessionId, current.revision); }
-    catch (actionError) { setError(operationError(actionError)); }
-    finally { setPending(false); }
+  function enqueueMutation(
+    action: (current: LiveControlState) => Promise<LiveActionResponse | undefined>,
+  ): Promise<void> {
+    const execute = mutationQueueRef.current.catch(() => undefined).then(async () => {
+      const current = sessionRef.current;
+      if (!current) return;
+      const result = await action(current);
+      if (result) confirmedRevisionRef.current = Math.max(confirmedRevisionRef.current, result.revision);
+    });
+    mutationQueueRef.current = execute.catch(() => undefined);
+    return execute;
   }
 
-  async function markMediaFinished(generation: number) {
+  async function run(action: (id: string, revision: number) => Promise<LiveActionResponse>) {
+    const current = sessionRef.current;
+    if (!sessionId || !current) return;
+    const operationId = operationIdRef.current + 1;
+    operationIdRef.current = operationId;
+    setPending(true);
+    setError(null);
+    try {
+      await enqueueMutation((latest) => action(
+        sessionId,
+        Math.max(latest.revision, confirmedRevisionRef.current),
+      ));
+    }
+    catch (actionError) {
+      if (operationIdRef.current === operationId) setError(operationError(actionError));
+    } finally {
+      if (operationIdRef.current === operationId) setPending(false);
+    }
+  }
+
+  async function reportPlayback(
+    generation: number,
+    playbackState: 'ready' | 'playing' | 'error' | 'finished',
+    message?: string,
+  ) {
     const current = sessionRef.current;
     if (!current || current.mediaGeneration !== generation) return;
-    await run((id, revision) => finishMedia(id, revision, generation));
+    if (playbackState === 'error') {
+      setError(message ?? 'Médium se nepodařilo přehrát. Použijte REPLAY pro nový pokus.');
+    }
+    try {
+      await enqueueMutation((latest) => latest.mediaGeneration === generation
+        ? reportMediaPlayback(latest.sessionId, generation, playbackState)
+        : Promise.resolve(undefined));
+    } catch (playbackError) {
+      if (playbackState === 'error') setError(operationError(playbackError));
+    }
+  }
+
+  function openProjector() {
+    if (openOrFocusProjector(projectorUrl) === null) {
+      setError(projectorPopupBlockedMessage);
+    }
   }
 
   if (loading) return <QuizLoading label="Načítám live session…" />;
@@ -142,7 +201,7 @@ export function LiveControlPage() {
     <article className="live-control">
       <header className="live-heading">
         <div><p className="eyebrow">Moderátorský live control</p><h1>{session.quizTitle}</h1><p className="lead">Stav: {session.status} · revize {session.revision}</p></div>
-        <button className="secondary-button" onClick={() => openOrFocusProjector(projectorUrl)}>Otevřít / aktivovat projektor ↗</button>
+        <button className="secondary-button" onClick={openProjector}>Otevřít / aktivovat projektor ↗</button>
       </header>
       {error && <p className="form-error" role="alert">{error}</p>}
 
@@ -168,7 +227,7 @@ export function LiveControlPage() {
         </div>
 
         <aside className="live-actions">
-          <button className="projector-url projector-link-button" onClick={() => openOrFocusProjector(projectorUrl)}>{projectorUrl}</button>
+          <button className="projector-url projector-link-button" onClick={openProjector}>{projectorUrl}</button>
           <div className="live-button-row">
             <button className="secondary-button" disabled={pending || ended || session.currentSlidePosition <= 1} onClick={() => void run(previousSlide)}>← Předchozí</button>
             <button className="primary-button" disabled={pending || ended || session.currentSlidePosition >= session.slideCount} onClick={() => void run(nextSlide)}>Další →</button>
@@ -212,7 +271,9 @@ export function LiveControlPage() {
                   startSeconds={presentedSlide.clipStartSeconds ?? presentedSlide.presentation.videoStart ?? 0}
                   endSeconds={presentedSlide.clipEndSeconds ?? presentedSlide.presentation.videoEnd ?? undefined}
                   className="youtube-player-shell moderator-audio-player"
-                  onFinished={(generation) => void markMediaFinished(generation)}
+                  onFinished={(generation) => void reportPlayback(generation, 'finished')}
+                  onError={(generation, message) => void reportPlayback(generation, 'error', message)}
+                  onPlaybackState={(generation, playbackState) => void reportPlayback(generation, playbackState)}
                 />
               )}
             </section>

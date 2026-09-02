@@ -25,6 +25,8 @@ export type SlideRenderMode =
 
 export type MediaPlaybackCommand = 'idle' | 'play' | 'stop' | 'replay' | 'finished' | 'error';
 
+export type MediaPlaybackState = 'idle' | 'preparing' | 'ready' | 'playing' | 'finished' | 'error';
+
 export interface SlideMediaReference {
   readonly role: string;
   readonly kind: string;

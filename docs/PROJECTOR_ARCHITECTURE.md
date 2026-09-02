@@ -2,7 +2,7 @@
 
 ## Window and rendering boundary
 
-`/projector/:sessionId` is routed outside `AppLayout`. Its first paint, viewport outside the canvas, error state, and fullscreen state are black and contain no admin navigation. The presentation is one centered 16:9 canvas sized by the smaller viewport dimension; it scales as a unit instead of reflowing like a mobile page. Fullscreen is requested only after the user's button click or `F` key press. `Esc` remains the browser default.
+`/projector/:sessionId` is routed outside `AppLayout`. Its first paint, viewport outside the canvas, error state, and fullscreen state are black and contain no admin navigation. The presentation is one centered 16:9 canvas sized by the smaller viewport dimension; it scales as a unit instead of reflowing like a mobile page. Fullscreen is requested only after the user's button click or `F` key press. `Esc` remains the browser default. A rejected or unsupported request leaves the projector functional and displays a small browser-fullscreen fallback message. A blocked popup is reported in the moderator panel rather than silently ignored.
 
 The moderator opens a named browser window from an explicit click. Repeated clicks reuse and focus it. The Window Management API is not required; where multi-screen placement is unavailable, the supported fallback is to drag the dedicated window to the projector and then enter fullscreen.
 
@@ -22,9 +22,13 @@ The normalized roles are distinct:
 
 Firestore `publicSessions/{sessionId}` remains authoritative. A callable transaction replaces the complete document whenever slide, recap selection, media command, intro command, reveal compatibility state, or lifecycle state changes.
 
-`BroadcastChannel` is a same-origin latency optimization only. The moderator subscribes to the public Firestore document and rebuilds an allowlisted channel object from that already-sanitized model. It never broadcasts a private slide, correct answer before recap, moderator note, `legacy.raw`, URL state, or localStorage state. The projector rejects a wrong session, an older revision, cached Firestore snapshots, and all state after the browser reports offline.
+`BroadcastChannel` is a same-origin latency optimization only. The moderator subscribes to the public Firestore document and rebuilds an allowlisted channel object from that already-sanitized model. A strict runtime parser validates every key, nested media/presentation value, command/playback pairing, recap selection, and answer semantic; unknown or malformed receiver fields reject the whole message.
 
-Projector playback completion is a non-sensitive channel event containing only session ID and media generation. An authenticated moderator tab validates it against current state and invokes the trusted Function. On different devices, the moderator retains explicit STOP/next controls.
+The fast path is accepted only after an authoritative Firestore snapshot, only for the same session, and only for exactly the next revision. Equal, stale, and future revisions are rejected. A fast-path state has a 1.5-second confirmation window; if Firestore does not publish that revision, the projector rolls back to its last authoritative state. Any Firestore snapshot or connection failure cancels the speculative state immediately. Firestore therefore remains authoritative after reconnect and cannot be permanently outranked by a channel message.
+
+Projector playback reports are non-sensitive channel events containing only session ID, media generation, and an allowlisted lifecycle value. An authenticated moderator tab validates them against current state and invokes the trusted Function. On different devices, local VIDEO error fallback still protects the audience view, while the moderator retains explicit REPLAY/STOP/next controls.
+
+The moderator serializes command mutations and player-state reports per live session. Each queued mutation advances from the newest server-confirmed revision, so an immediate REPLAY cannot race the preceding error report or erase its user-visible failure.
 
 ## Recap security invariant
 

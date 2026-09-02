@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { buildSlideRenderModel, defaultRules, formatPlAnswer, isSafeHttpUrl, projectorMediaPlan } from './model';
-import type { MediaPlaybackCommand, SlideRenderInput, SlideRenderMode } from './types';
+import type { MediaPlaybackCommand, MediaPlaybackState, SlideRenderInput, SlideRenderMode } from './types';
 import { YouTubePlayer } from './YouTubePlayer';
 
 function QuestionHeader({ number, count, legacyPl }: { readonly number?: number; readonly count?: number; readonly legacyPl: boolean }) {
@@ -55,25 +55,35 @@ export function SlideRenderer({
   quizTitle,
   mode,
   mediaCommand = 'idle',
+  mediaPlaybackState = 'idle',
   mediaGeneration = 0,
   introGeneration = 0,
   compact = false,
   onMediaFinished,
+  onMediaPlaybackState,
 }: {
   readonly slide: SlideRenderInput;
   readonly quizTitle: string;
   readonly mode?: SlideRenderMode;
   readonly mediaCommand?: MediaPlaybackCommand;
+  readonly mediaPlaybackState?: MediaPlaybackState;
   readonly mediaGeneration?: number;
   readonly introGeneration?: number;
   readonly compact?: boolean;
   readonly onMediaFinished?: (generation: number) => void;
+  readonly onMediaPlaybackState?: (
+    generation: number,
+    state: Extract<MediaPlaybackState, 'ready' | 'playing' | 'error'>,
+    message?: string,
+  ) => void;
 }) {
   const model = useMemo(() => buildSlideRenderModel(slide, mode), [mode, slide]);
   const [locallyFinishedGeneration, setLocallyFinishedGeneration] = useState<number>();
-  useEffect(() => setLocallyFinishedGeneration(undefined), [mediaGeneration, slide.kind, slide.title]);
+  const [locallyFailed, setLocallyFailed] = useState<{ readonly generation: number; readonly source?: string }>();
   const mediaFinished = mediaCommand === 'finished' || locallyFinishedGeneration === mediaGeneration;
-  const mediaPlan = projectorMediaPlan(model, mediaCommand, mediaFinished);
+  const mediaFailed = mediaCommand === 'error'
+    || (locallyFailed?.generation === mediaGeneration && locallyFailed.source === model.mediaSource);
+  const mediaPlan = projectorMediaPlan(model, mediaCommand, mediaPlaybackState, mediaFinished, mediaFailed);
   const backgroundStyle = model.backgroundImage && isSafeHttpUrl(model.backgroundImage)
     ? { backgroundImage: `url("${model.backgroundImage.replaceAll('"', '%22')}")` }
     : undefined;
@@ -86,6 +96,15 @@ export function SlideRenderer({
     if (generation !== mediaGeneration) return;
     setLocallyFinishedGeneration(generation);
     onMediaFinished?.(generation);
+  };
+  const fail = (generation: number, message: string) => {
+    if (generation !== mediaGeneration) return;
+    setLocallyFailed({ generation, ...(model.mediaSource === undefined ? {} : { source: model.mediaSource }) });
+    onMediaPlaybackState?.(generation, 'error', message);
+  };
+  const playback = (generation: number, state: Extract<MediaPlaybackState, 'ready' | 'playing'>) => {
+    if (generation !== mediaGeneration) return;
+    onMediaPlaybackState?.(generation, state);
   };
 
   let content;
@@ -108,6 +127,8 @@ export function SlideRenderer({
             startSeconds={mediaPlan.startSeconds}
             className="youtube-player-shell recap-player"
             onFinished={finish}
+            onError={fail}
+            onPlaybackState={playback}
           />
         )}
         {showAnswer && (
@@ -149,6 +170,8 @@ export function SlideRenderer({
           endSeconds={mediaPlan.endSeconds}
           className="youtube-player-shell projector-video-player"
           onFinished={finish}
+          onError={fail}
+          onPlaybackState={playback}
         />
       </div>
     );

@@ -9,6 +9,7 @@ export {
   nextSlide,
   playMedia,
   previousSlide,
+  reportMediaPlayback,
   replayMedia,
   revealAnswer,
   selectRecapQuestion,

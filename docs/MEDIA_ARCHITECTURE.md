@@ -2,7 +2,7 @@
 
 ## Guarantees
 
-Media control is explicit and revisioned. Navigation resets media to `idle` and advances `mediaGeneration`; every play, stop, replay, finish, or recap selection advances it again. Client callbacks carry their generation and stale callbacks are ignored before any trusted mutation.
+Media control is explicit and revisioned. Navigation resets media to `idle` and advances `mediaGeneration`; every play, stop, replay, finish, or recap selection advances it again. `mediaCommand` records moderator intent, while `mediaPlaybackState` records confirmed lifecycle (`idle`, `preparing`, `ready`, `playing`, `finished`, or `error`). Player reports are accepted only for the current generation and a valid forward transition.
 
 The local player lifecycle is:
 
@@ -14,15 +14,17 @@ IDLE → PREPARING → READY → PLAYING → STOPPING → READY
 
 Only one heavy player may exist in a projector window. No previous-slide players, hidden players, background players, timers, or subscriptions survive React cleanup. No next-slide player is preloaded in this foundation. Development diagnostics are available at `window.__FILMOVY_KVIZ_MEDIA_DEBUG__` and fail when a projector exceeds the one-player budget.
 
+Every source/load/replay owns an immutable playback epoch and a dedicated player callback closure. A new source, generation, STOP, navigation, or unmount invalidates and destroys the old epoch before another player is created. An event from an invalidated epoch cannot be relabeled with the newest generation. Failed IFrame API loads clear the singleton promise; only a later explicit command/generation retries, so there is no automatic retry loop.
+
 Normalized slide fields are `mediaSource`, `clipStartSeconds`, and optional `clipEndSeconds`. Legacy `videoStart` / `videoEnd` remain preserved in `presentation` and private raw data; compatibility mapping uses them only when normalized fields are absent. Internally timing is finite non-negative seconds. An end is used only when it is strictly greater than start.
 
 ## AUDIO
 
-In ordinary question mode, the public projector payload omits the audio source and the renderer cannot mount a YouTube iframe. The projector shows question copy and a vinyl state driven by the sanitized media command. The moderator laptop mounts the visible, controlled YouTube player, so system audio comes from that device. PLAY loads the configured segment, STOP pauses and returns to its start, REPLAY loads it again from the configured start, and finish leaves the question visible.
+In ordinary question mode, the public projector payload omits the audio source and the renderer cannot mount a YouTube iframe. The projector shows question copy and a vinyl state driven only by confirmed `mediaPlaybackState === playing`, never by the PLAY command alone. The moderator laptop mounts the visible, controlled YouTube player, so system audio comes from that device. Errors and autoplay blocks transition the trusted state to `error`, stop the vinyl, retain the question, and require an explicit REPLAY.
 
 ## VIDEO
 
-Before play, the question is visible and no player is mounted. PLAY or REPLAY mounts one 16:9 projector player and hides the question. STOP, finish, navigation, or error returns to the stable question. There is no automatic answer reveal or navigation.
+Before play, the question is visible and no player is mounted. PLAY or REPLAY mounts one 16:9 projector player and hides the question. STOP, finish, navigation, or error returns to the stable question. The local error fallback is immediate; same-device playback state is then relayed to the authenticated moderator tab for authoritative publication. There is no automatic answer reveal or navigation.
 
 ## RECAP
 

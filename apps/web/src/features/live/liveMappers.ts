@@ -1,6 +1,6 @@
 import type { DocumentData } from 'firebase/firestore';
 
-import type { MediaPlaybackCommand, SlidePresentationInput } from '../presentation/types';
+import type { MediaPlaybackCommand, MediaPlaybackState, SlidePresentationInput } from '../presentation/types';
 import type {
   LiveControlMedia,
   LiveControlSlide,
@@ -61,6 +61,17 @@ function mediaCommand(data: DocumentData): MediaPlaybackCommand {
   return 'idle';
 }
 
+function mediaPlaybackState(data: DocumentData): MediaPlaybackState {
+  const value: unknown = data.mediaPlaybackState;
+  if (value === 'idle' || value === 'preparing' || value === 'ready' || value === 'playing'
+    || value === 'finished' || value === 'error') return value;
+  const command = mediaCommand(data);
+  if (command === 'play' || command === 'replay') return 'preparing';
+  if (command === 'finished') return 'finished';
+  if (command === 'error') return 'error';
+  return 'idle';
+}
+
 function stringArray(value: unknown): readonly string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
@@ -109,6 +120,7 @@ export function mapLiveControlState(id: string, data: DocumentData): LiveControl
     ...(optionalNumber(data, 'recapQuestionPosition') === undefined ? {} : { recapQuestionPosition: optionalNumber(data, 'recapQuestionPosition') }),
     ...(optionalString(data, 'recapQuestionId') === undefined ? {} : { recapQuestionId: optionalString(data, 'recapQuestionId') }),
     mediaCommand: mediaCommand(data),
+    mediaPlaybackState: mediaPlaybackState(data),
     mediaGeneration: optionalNumber(data, 'mediaGeneration') ?? 0,
     introGeneration: optionalNumber(data, 'introGeneration') ?? 0,
     revision: requiredNumber(data, 'revision'),
@@ -157,6 +169,7 @@ export function mapPublicLiveState(id: string, data: DocumentData): PublicLiveSt
     presentationMode: presentationMode(data),
     renderMode: renderMode(data),
     mediaCommand: mediaCommand(data),
+    mediaPlaybackState: mediaPlaybackState(data),
     mediaGeneration: optionalNumber(data, 'mediaGeneration') ?? 0,
     introGeneration: optionalNumber(data, 'introGeneration') ?? 0,
     ...(optionalNumber(data, 'questionNumber') === undefined ? {} : { questionNumber: optionalNumber(data, 'questionNumber') }),
@@ -170,6 +183,7 @@ export function mapPublicLiveState(id: string, data: DocumentData): PublicLiveSt
     answerRevealed: data.answerRevealed === true,
     ...(optionalString(data, 'revealedAnswer') === undefined ? {} : { revealedAnswer: optionalString(data, 'revealedAnswer') }),
     ...(optionalString(data, 'answerImage') === undefined ? {} : { answerImage: optionalString(data, 'answerImage') }),
+    ...(optionalNumber(data, 'recapQuestionPosition') === undefined ? {} : { recapQuestionPosition: optionalNumber(data, 'recapQuestionPosition') }),
     revision: requiredNumber(data, 'revision'),
   };
 }

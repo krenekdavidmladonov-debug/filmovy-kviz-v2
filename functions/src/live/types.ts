@@ -2,6 +2,7 @@ export type LiveSessionStatus = 'waiting' | 'active' | 'ended';
 export type LivePresentationMode = 'slide' | 'recap';
 export type LiveRenderMode = 'question' | 'recap' | 'roundIntro' | 'agenda' | 'rules' | 'end';
 export type LiveMediaCommand = 'idle' | 'play' | 'stop' | 'replay' | 'finished' | 'error';
+export type LiveMediaPlaybackState = 'idle' | 'preparing' | 'ready' | 'playing' | 'finished' | 'error';
 
 export interface PrivateLiveSession {
   readonly sessionId: string;
@@ -16,6 +17,7 @@ export interface PrivateLiveSession {
   readonly recapQuestionPosition?: number;
   readonly recapQuestionId?: string;
   readonly mediaCommand: LiveMediaCommand;
+  readonly mediaPlaybackState: LiveMediaPlaybackState;
   readonly mediaGeneration: number;
   readonly introGeneration: number;
   readonly revision: number;
@@ -74,6 +76,7 @@ export interface PublicLiveSession {
   readonly presentationMode: LivePresentationMode;
   readonly renderMode: LiveRenderMode;
   readonly mediaCommand: LiveMediaCommand;
+  readonly mediaPlaybackState: LiveMediaPlaybackState;
   readonly mediaGeneration: number;
   readonly introGeneration: number;
   readonly revision: number;
@@ -92,6 +95,7 @@ export interface PublicLiveSession {
   readonly backgroundOverlay?: number;
   readonly clipStartSeconds?: number;
   readonly clipEndSeconds?: number;
+  readonly recapQuestionPosition?: number;
   readonly revealedAnswer?: string;
   readonly answerImage?: string;
 }

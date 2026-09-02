@@ -4,9 +4,10 @@ import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/
 
 import { LiveSessionError } from './errors.js';
 import { buildPublicSessionState } from './publication.js';
-import { applyLiveSessionAction } from './session-machine.js';
+import { applyLiveSessionAction, applyMediaPlaybackReport } from './session-machine.js';
 import type {
   LiveMediaCommand,
+  LiveMediaPlaybackState,
   LivePresentationMode,
   LiveSessionAction,
   PrivateLiveSession,
@@ -33,6 +34,7 @@ interface ControlResponse {
   readonly answerRevealed: boolean;
   readonly presentationMode: LivePresentationMode;
   readonly mediaCommand: LiveMediaCommand;
+  readonly mediaPlaybackState: LiveMediaPlaybackState;
   readonly mediaGeneration: number;
   readonly revision: number;
 }
@@ -81,6 +83,15 @@ function requestedMediaGeneration(data: unknown): number {
   return data.mediaGeneration as number;
 }
 
+function requestedPlaybackState(data: unknown): Extract<LiveMediaPlaybackState, 'ready' | 'playing' | 'error' | 'finished'> {
+  if (!isObject(data)) throw new HttpsError('invalid-argument', 'playbackState is required.');
+  const value = data.playbackState;
+  if (value !== 'ready' && value !== 'playing' && value !== 'error' && value !== 'finished') {
+    throw new HttpsError('invalid-argument', 'playbackState is invalid.');
+  }
+  return value;
+}
+
 function requiredString(data: Record<string, unknown>, field: string, location: string): string {
   const value: unknown = data[field];
   if (typeof value !== 'string') throw new LiveSessionError('failed-precondition', `${location} is malformed.`);
@@ -106,6 +117,12 @@ function parseSession(snapshot: DocumentSnapshot): PrivateLiveSession {
   const presentationMode = data.presentationMode === 'recap' ? 'recap' : 'slide';
   const commandSet = new Set<LiveMediaCommand>(['idle', 'play', 'stop', 'replay', 'finished', 'error']);
   const mediaCommand = commandSet.has(data.mediaCommand as LiveMediaCommand) ? data.mediaCommand as LiveMediaCommand : 'idle';
+  const playbackSet = new Set<LiveMediaPlaybackState>(['idle', 'preparing', 'ready', 'playing', 'finished', 'error']);
+  const mediaPlaybackState = playbackSet.has(data.mediaPlaybackState as LiveMediaPlaybackState)
+    ? data.mediaPlaybackState as LiveMediaPlaybackState
+    : mediaCommand === 'play' || mediaCommand === 'replay' ? 'preparing'
+      : mediaCommand === 'finished' ? 'finished'
+        : mediaCommand === 'error' ? 'error' : 'idle';
   const currentSlideId = typeof data.currentSlideId === 'string' ? data.currentSlideId : undefined;
   const recapQuestionId = typeof data.recapQuestionId === 'string' ? data.recapQuestionId : undefined;
   const recapQuestionPosition = optionalInteger(data, 'recapQuestionPosition');
@@ -122,6 +139,7 @@ function parseSession(snapshot: DocumentSnapshot): PrivateLiveSession {
     ...(recapQuestionPosition === undefined ? {} : { recapQuestionPosition }),
     ...(recapQuestionId === undefined ? {} : { recapQuestionId }),
     mediaCommand,
+    mediaPlaybackState,
     mediaGeneration: optionalInteger(data, 'mediaGeneration') ?? 0,
     introGeneration: optionalInteger(data, 'introGeneration') ?? 0,
     revision: requiredNumber(data, 'revision', 'Live session'),
@@ -173,6 +191,7 @@ function response(session: PrivateLiveSession): ControlResponse {
     answerRevealed: session.answerRevealed,
     presentationMode: session.presentationMode,
     mediaCommand: session.mediaCommand,
+    mediaPlaybackState: session.mediaPlaybackState,
     mediaGeneration: session.mediaGeneration,
     revision: session.revision,
   };
@@ -201,7 +220,7 @@ export const createLiveSession = onCall(callableOptions, async (request): Promis
       const session: PrivateLiveSession = {
         sessionId: sessionRef.id, quizId, quizTitle: requiredString(quiz, 'title', 'Quiz'), slideCount,
         status: 'waiting', currentSlidePosition: 0, answerRevealed: false, presentationMode: 'slide',
-        mediaCommand: 'idle', mediaGeneration: 0, introGeneration: 0, revision: 0,
+        mediaCommand: 'idle', mediaPlaybackState: 'idle', mediaGeneration: 0, introGeneration: 0, revision: 0,
         createdBy: actor.uid, updatedBy: actor.uid, createdAt: now, startedAt: null, endedAt: null, updatedAt: now,
       };
       transaction.create(sessionRef, session);
@@ -259,6 +278,35 @@ async function mutateSession(request: CallableRequest<unknown>, kind: MutationKi
     });
   } catch (error) { return mapError(error); }
 }
+
+export const reportMediaPlayback = onCall(callableOptions, async (request): Promise<ControlResponse> => {
+  try {
+    const actor = authorizeStaff(request.auth);
+    const sessionId = requiredId(request.data, 'sessionId');
+    const generation = requestedMediaGeneration(request.data);
+    const playbackState = requestedPlaybackState(request.data);
+    const sessionRef = db.collection('sessions').doc(sessionId);
+    const publicRef = db.collection('publicSessions').doc(sessionId);
+    return await db.runTransaction(async (transaction) => {
+      const session = parseSession(await transaction.get(sessionRef));
+      if (session.status !== 'active' || generation !== session.mediaGeneration) {
+        throw new LiveSessionError('aborted', 'A stale media callback was ignored.');
+      }
+      const position = session.presentationMode === 'recap' ? session.recapQuestionPosition : session.currentSlidePosition;
+      if (position === undefined || position < 1) throw new LiveSessionError('failed-precondition', 'There is no active presentation slide.');
+      const slide = await loadSlide(transaction, session.quizId, position);
+      if (!['audio', 'music', 'video', 'youtube'].includes(slide.kind.toLowerCase())) {
+        throw new LiveSessionError('failed-precondition', 'The active slide has no playable media.');
+      }
+      const now = Timestamp.now();
+      const updated = applyMediaPlaybackReport(session, playbackState, generation, actor.uid, now);
+      if (updated === session) return response(session);
+      transaction.set(sessionRef, updated);
+      transaction.set(publicRef, buildPublicSessionState(updated, slide));
+      return response(updated);
+    });
+  } catch (error) { return mapError(error); }
+});
 
 export const goToSlide = onCall(callableOptions, (request) => mutateSession(request, 'go-to-slide'));
 export const nextSlide = onCall(callableOptions, (request) => mutateSession(request, 'next-slide'));

@@ -1,5 +1,6 @@
 import type {
   MediaPlaybackCommand,
+  MediaPlaybackState,
   NormalizedSlideRenderModel,
   SlideContentKind,
   SlideMediaReference,
@@ -177,18 +178,23 @@ export interface ProjectorMediaPlan {
 export function projectorMediaPlan(
   model: NormalizedSlideRenderModel,
   command: MediaPlaybackCommand,
+  playbackState: MediaPlaybackState = 'idle',
   locallyFinished = false,
+  locallyFailed = false,
 ): ProjectorMediaPlan {
-  const playing = (command === 'play' || command === 'replay') && !locallyFinished;
+  const commanded = command === 'play' || command === 'replay';
+  const failed = playbackState === 'error' || locallyFailed;
+  const finished = playbackState === 'finished' || locallyFinished;
   if (model.renderMode === 'recap' && (model.contentKind === 'audio' || model.contentKind === 'video')) {
-    return { mountPlayer: model.mediaSource !== undefined, showQuestion: true, vinylPlaying: false, startSeconds: 0 };
+    return { mountPlayer: model.mediaSource !== undefined && !failed, showQuestion: true, vinylPlaying: false, startSeconds: 0 };
   }
   if (model.contentKind === 'audio') {
-    return { mountPlayer: false, showQuestion: true, vinylPlaying: playing, startSeconds: model.clipStartSeconds,
+    return { mountPlayer: false, showQuestion: true, vinylPlaying: commanded && playbackState === 'playing' && !finished && !failed, startSeconds: model.clipStartSeconds,
       ...(model.clipEndSeconds === undefined ? {} : { endSeconds: model.clipEndSeconds }) };
   }
   if (model.contentKind === 'video') {
-    return { mountPlayer: playing && model.mediaSource !== undefined, showQuestion: !playing, vinylPlaying: false,
+    const mountPlayer = commanded && !finished && !failed && model.mediaSource !== undefined;
+    return { mountPlayer, showQuestion: !mountPlayer, vinylPlaying: false,
       startSeconds: model.clipStartSeconds,
       ...(model.clipEndSeconds === undefined ? {} : { endSeconds: model.clipEndSeconds }) };
   }
