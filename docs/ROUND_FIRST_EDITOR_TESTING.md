@@ -20,6 +20,20 @@ pnpm install --frozen-lockfile
 
 `.env.local` is uncommitted. The example enables emulators, uses `demo-filmovy-kviz-v2`, and disables non-demo Firebase projects.
 
+Browser QA also needs an executable browser. Either install the lockfile-compatible Playwright Chromium once:
+
+```powershell
+pnpm exec playwright install chromium
+```
+
+or point Playwright at an already installed compatible Chrome/Chromium binary:
+
+```powershell
+$env:PLAYWRIGHT_EXECUTABLE_PATH = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+```
+
+The browser binary is an explicit machine prerequisite and is not installed by `pnpm install`.
+
 ## Local editor for human review
 
 Terminal 1:
@@ -96,6 +110,8 @@ The editor E2E verifies:
 - round rename/duplicate/move/removal modes;
 - preservation of legacy fields;
 - absence of editor writes to a sentinel `publicSessions` document.
+
+Synthetic browser and script-based E2E use distinct quiz fixture IDs. This allows `live → editor → browser` and `browser → editor → live` to run against the same fresh emulator seed without a suite inheriting another suite's quiz revision.
 
 The complete browser suite also protects projector media lifecycle, recap answer authority, focused-shell behavior, and responsive editor behavior.
 

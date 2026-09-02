@@ -39,9 +39,9 @@ test('round-first editor supports semantic editing and responsive panel navigati
   });
   const page = await context.newPage();
   await login(page, baseURL);
-  await page.goto(`${baseURL}/admin/quizzes/quiz-editor-e2e`);
+  await page.goto(`${baseURL}/admin/quizzes/round-first-editor-browser-e2e`);
   await page.getByRole('link', { name: 'Otevřít editor' }).click();
-  await expect(page).toHaveURL(/\/admin\/quizzes\/quiz-editor-e2e\/edit$/u);
+  await expect(page).toHaveURL(/\/admin\/quizzes\/round-first-editor-browser-e2e\/edit$/u);
 
   await expect(page.locator('.round-first-editor')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Základní údaje' })).toBeVisible();

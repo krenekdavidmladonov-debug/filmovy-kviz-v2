@@ -267,6 +267,7 @@ async function seed(): Promise<void> {
     await clearLiveFlowFixture(db, 'live-session-e2e');
     await clearLiveFlowFixture(db, 'quiz-editor-e2e');
     await clearLiveFlowFixture(db, 'projector-lifecycle-e2e');
+    await clearLiveFlowFixture(db, 'round-first-editor-browser-e2e');
     const batch = db.batch();
     for (const quiz of quizzes) {
       writeQuiz(batch, quiz);
@@ -274,8 +275,9 @@ async function seed(): Promise<void> {
     writeLiveFlowQuiz(batch, 'live-session-e2e');
     writeLiveFlowQuiz(batch, 'quiz-editor-e2e');
     writeLiveFlowQuiz(batch, 'projector-lifecycle-e2e');
+    writeLiveFlowQuiz(batch, 'round-first-editor-browser-e2e');
     await batch.commit();
-    console.log(`Seeded ${quizzes.length} library quizzes and 3 isolated E2E fixtures into ${projectId}.`);
+    console.log(`Seeded ${quizzes.length} library quizzes and 4 isolated E2E fixtures into ${projectId}.`);
   } finally {
     await deleteApp(app);
   }
