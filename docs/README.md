@@ -4,6 +4,7 @@ This directory is the source of truth for Filmovy Kviz V2 product, architecture,
 
 ## Round-first quiz editor
 
+- [RELEASE_CANDIDATE_AUDIT.md](RELEASE_CANDIDATE_AUDIT.md) — sanitized integration, quality-gate, hygiene, and merge-readiness audit for core editor v0.2.
 - [QUIZ_EDITOR.md](QUIZ_EDITOR.md) — canonical product and persistence contract for the implemented editor.
 - [ROUND_FIRST_EDITOR_USER_GUIDE.md](ROUND_FIRST_EDITOR_USER_GUIDE.md) — moderator/admin workflow and field-level behavior.
 - [ROUND_FIRST_EDITOR_DEVELOPER_GUIDE.md](ROUND_FIRST_EDITOR_DEVELOPER_GUIDE.md) — code map, semantic facade, mutation boundary, lossless behavior, and extension rules.
