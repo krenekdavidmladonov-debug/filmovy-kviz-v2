@@ -3,7 +3,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/lib/**', '**/node_modules/**'] },
+  { ignores: ['**/.tools/**', '**/dist/**', '**/lib/**', '**/node_modules/**'] },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
@@ -26,6 +26,16 @@ export default tseslint.config(
       globals: globals.node,
       parserOptions: {
         projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ['packages/quiz-domain/**/*.ts'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+      parserOptions: {
+        project: './packages/quiz-domain/tsconfig.json',
         tsconfigRootDir: import.meta.dirname,
       },
     },
