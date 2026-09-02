@@ -18,6 +18,8 @@ export interface ProjectorChannel {
   close(): void;
 }
 
+export type ProjectorPresentationAuthority = 'fast-path-safe' | 'authoritative-only';
+
 const stateKeys = new Set([
   'sessionId', 'quizTitle', 'status', 'slidePosition', 'slideKind', 'title', 'text', 'options', 'media',
   'presentation', 'presentationMode', 'renderMode', 'mediaCommand', 'mediaPlaybackState', 'mediaGeneration',
@@ -115,7 +117,8 @@ export function parsePublicLiveState(value: unknown): PublicLiveState | undefine
 
   const hasAnswer = Object.hasOwn(data, 'revealedAnswer') || Object.hasOwn(data, 'answerImage');
   const recapAnswer = data.presentationMode === 'recap' && data.renderMode === 'recap'
-    && nonNegativeInteger(data.recapQuestionPosition) && data.recapQuestionPosition > 0;
+    && nonNegativeInteger(data.recapQuestionPosition) && data.recapQuestionPosition > 0
+    && data.recapQuestionPosition < data.slidePosition;
   const compatibilityReveal = data.presentationMode === 'slide' && data.renderMode === 'question' && data.answerRevealed === true;
   if ((hasAnswer && (!data.answerRevealed || (!recapAnswer && !compatibilityReveal)))
     || (data.answerRevealed && typeof data.revealedAnswer !== 'string')
@@ -245,13 +248,22 @@ export function isProjectorChannelMessage(value: unknown): value is ProjectorCha
   return parseProjectorChannelMessage(value) !== undefined;
 }
 
+export function projectorPresentationAuthority(state: PublicLiveState): ProjectorPresentationAuthority {
+  return state.answerRevealed
+    || state.revealedAnswer !== undefined
+    || state.answerImage !== undefined
+    ? 'authoritative-only'
+    : 'fast-path-safe';
+}
+
 export function shouldAcceptProjectorFastPath(
   expectedSessionId: string,
   authoritativeRevision: number,
   visibleRevision: number,
   candidate: PublicLiveState,
 ): boolean {
-  return candidate.sessionId === expectedSessionId
+  return projectorPresentationAuthority(candidate) === 'fast-path-safe'
+    && candidate.sessionId === expectedSessionId
     && authoritativeRevision >= 0
     && candidate.revision === authoritativeRevision + 1
     && candidate.revision > visibleRevision;

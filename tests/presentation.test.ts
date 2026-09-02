@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import {
   isProjectorChannelMessage,
   parseProjectorChannelMessage,
+  projectorPresentationAuthority,
   sanitizedChannelState,
   shouldAcceptProjectorFastPath,
 } from '../apps/web/src/features/live/projectorChannel';
@@ -156,7 +157,7 @@ describe('same-device public channel security', () => {
 
   test('accepts only a single selected RECAP answer with explicit selection', () => {
     const recap = publicState({
-      presentationMode: 'recap', renderMode: 'recap', recapQuestionPosition: 7,
+      slidePosition: 7, presentationMode: 'recap', renderMode: 'recap', recapQuestionPosition: 6,
       answerRevealed: true, revealedAnswer: 'Sanitizovaná odpověď', revision: 5,
     });
     expect(parseProjectorChannelMessage({ type: 'public-state', state: recap })).toEqual({ type: 'public-state', state: recap });
@@ -177,5 +178,29 @@ describe('same-device public channel security', () => {
     expect(shouldAcceptProjectorFastPath('safe-session', 4, 4, publicState({ revision: 99 }))).toBe(false);
     expect(shouldAcceptProjectorFastPath('safe-session', 4, 4, publicState({ revision: 4 }))).toBe(false);
     expect(shouldAcceptProjectorFastPath('safe-session', 4, 4, publicState({ sessionId: 'wrong-session', revision: 5 }))).toBe(false);
+  });
+
+  test('fast path never accepts an answer-bearing recap revision', () => {
+    const recapAnswer = publicState({
+      slidePosition: 7, presentationMode: 'recap', renderMode: 'recap', recapQuestionPosition: 6,
+      answerRevealed: true, revealedAnswer: 'Syntetická odpověď', revision: 5,
+    });
+    expect(projectorPresentationAuthority(recapAnswer)).toBe('authoritative-only');
+    expect(shouldAcceptProjectorFastPath('safe-session', 4, 4, recapAnswer)).toBe(false);
+    expect(projectorPresentationAuthority({ ...recapAnswer, answerImage: 'https://example.test/answer.jpg' })).toBe('authoritative-only');
+    expect(projectorPresentationAuthority(publicState({
+      answerRevealed: true, revealedAnswer: 'Kompatibilní odpověď', revision: 5,
+    }))).toBe('authoritative-only');
+  });
+
+  test('classifies non-answer state as fast-path-safe and rejects impossible recap selection', () => {
+    expect(projectorPresentationAuthority(publicState({ revision: 5 }))).toBe('fast-path-safe');
+    expect(parseProjectorChannelMessage({
+      type: 'public-state',
+      state: publicState({
+        slidePosition: 7, presentationMode: 'recap', renderMode: 'recap', recapQuestionPosition: 99,
+        answerRevealed: true, revealedAnswer: 'Syntetická odpověď', revision: 5,
+      }),
+    })).toBeUndefined();
   });
 });
