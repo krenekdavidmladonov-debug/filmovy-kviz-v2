@@ -54,6 +54,11 @@ describe('whole-quiz preflight', () => {
     expect(result.status).toBe('BLOCKED');
   });
 
+  test('title remains a valid prompt when legacy text is whitespace', () => {
+    const result = runQuizPreflight(quiz([slide({ title: 'Syntetické zadání', text: '   ' })]));
+    expect(codes(result)).not.toContain('QUESTION_PROMPT_MISSING');
+  });
+
   test('image requires a valid question image', () => {
     expect(codes(runQuizPreflight(quiz([slide({ kind: 'image', storedKind: 'image', questionImage: '' })])))).toContain('IMAGE_SOURCE_MISSING');
     expect(codes(runQuizPreflight(quiz([slide({ kind: 'image', storedKind: 'image', questionImage: 'not-a-url' })])))).toContain('IMAGE_SOURCE_INVALID');
@@ -91,6 +96,19 @@ describe('whole-quiz preflight', () => {
     expect(codes(empty)).toContain('QUIZ_HAS_NO_ROUNDS');
     const roundless = runQuizPreflight(quiz([slide({ roundId: undefined, roundTitle: undefined })]));
     expect(codes(roundless)).toContain('ROUNDLESS_QUESTIONS');
+    expect(roundless.status).toBe('BLOCKED');
+  });
+
+  test('a stored round title is required instead of accepting a generated fallback', () => {
+    const result = runQuizPreflight(quiz([slide({ roundTitle: undefined })]));
+    expect(codes(result)).toContain('ROUND_TITLE_MISSING');
+  });
+
+  test('normal system round slides allow intro and recap to be derived', () => {
+    const question = slide({ position: 2 });
+    const roundHeader = slide({ id: 'round-header', position: 1, storedKind: 'round', kind: 'round', isQuestion: false, title: 'První kolo', correctAnswer: '' });
+    const recap = slide({ id: 'recap', position: 3, storedKind: 'recap', kind: 'recap', isQuestion: false, title: 'Rekapitulace', correctAnswer: '' });
+    expect(runQuizPreflight(quiz([roundHeader, question, recap])).status).toBe('READY');
   });
 
   test('online media uncertainty is a warning rather than a blocker', () => {

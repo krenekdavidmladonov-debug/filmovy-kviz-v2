@@ -1,5 +1,5 @@
 import { isSafeHttpUrl, youtubeVideoId } from '../presentation/model';
-import { semanticQuestionType } from './semanticModel';
+import { questionPrompt, semanticQuestionType } from './semanticModel';
 import type { EditorSlide, EditorValidationIssue } from './types';
 
 const normalized = (value: string) => value.trim().toLocaleLowerCase('cs-CZ');
@@ -37,7 +37,7 @@ export function validateQuestion(slide: EditorSlide): readonly EditorValidationI
   if (!slide.isQuestion) return [];
   const type = semanticQuestionType(slide);
   const issues: EditorValidationIssue[] = [];
-  const prompt = (slide.text || slide.title).trim();
+  const prompt = questionPrompt(slide).trim();
   if (prompt === '') issues.push(issue('QUESTION_PROMPT_MISSING', 'STRUCTURE', 'prompt', 'Chybí zadání otázky.'));
   if (!rendererQuestionKinds.has(slide.kind.toLowerCase())) {
     issues.push(issue('QUESTION_RENDERER_UNSUPPORTED', 'STRUCTURE', 'prompt', 'Tento obsah renderer neumí bezpečně zobrazit jako otázku.'));

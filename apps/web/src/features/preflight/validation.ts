@@ -49,7 +49,7 @@ export function runQuizPreflight(
       fixTarget: { kind: 'quiz', field: 'quizTitle' },
     });
   }
-  if (model.rounds.length === 0) {
+  if (model.rounds.every((round) => round.id === 'roundless')) {
     issues.push({
       severity: 'BLOCKER', code: 'QUIZ_HAS_NO_ROUNDS', category: 'STRUCTURE',
       message: 'Kvíz nemá žádné kolo.', reference: quizReference,
@@ -70,7 +70,9 @@ export function runQuizPreflight(
       roundPosition: round.position,
       roundTitle: round.title,
     } as const;
-    if (round.title.trim() === '') {
+    const hasStoredRoundTitle = (round.settingsSlide?.title.trim() ?? '') !== ''
+      || round.slides.some((slide) => (slide.roundTitle?.trim() ?? '') !== '');
+    if (round.id !== 'roundless' && !hasStoredRoundTitle) {
       issues.push({
         severity: 'BLOCKER', code: 'ROUND_TITLE_MISSING', category: 'STRUCTURE',
         message: 'Kolo nemá název.', reference: roundReference,
@@ -86,8 +88,8 @@ export function runQuizPreflight(
     }
     if (round.id === 'roundless') {
       issues.push({
-        severity: 'WARNING', code: 'ROUNDLESS_QUESTIONS', category: 'LEGACY',
-        message: 'Starší otázky nejsou přiřazené ke skutečnému kolu.', reference: roundReference,
+        severity: 'BLOCKER', code: 'ROUNDLESS_QUESTIONS', category: 'STRUCTURE',
+        message: 'Otázky nejsou přiřazené ke skutečnému kolu.', reference: roundReference,
       });
     }
 

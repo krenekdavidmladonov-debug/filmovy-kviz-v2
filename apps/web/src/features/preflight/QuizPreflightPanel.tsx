@@ -92,7 +92,12 @@ export function QuizPreflightPanel({
       {visibleCategories.length > 0 && (
         <ul className="preflight-category-list" aria-label="Souhrn oblastí">
           {visibleCategories.map(([category, count]) => (
-            <li key={category} data-category={category}>
+            <li
+              key={category}
+              data-category={category}
+              data-category-blockers={count.blockers}
+              data-category-warnings={count.warnings}
+            >
               <strong>{categoryLabels[category as keyof typeof categoryLabels]}</strong>
               <span>{count.blockers > 0 ? `${count.blockers} blokující` : ''}{count.blockers > 0 && count.warnings > 0 ? ' · ' : ''}{count.warnings > 0 ? `${count.warnings} upozornění` : ''}</span>
             </li>
