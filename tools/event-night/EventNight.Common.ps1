@@ -154,7 +154,7 @@ function Assert-EventNightBuildManifest {
   if (-not (Test-Path -LiteralPath $Paths.BuildManifest -PathType Leaf)) {
     Throw-QaError 'Chybí manifest production buildu.' 'Nejdřív spusťte PREPARE_EVENT_NIGHT.cmd.'
   }
-  $manifest = Get-Content -LiteralPath $Paths.BuildManifest -Raw | ConvertFrom-Json
+  $manifest = Get-Content -LiteralPath $Paths.BuildManifest -Raw -Encoding UTF8 | ConvertFrom-Json
   if ([int]$manifest.schemaVersion -ne 1 -or [string]$manifest.projectId -ne $script:EventNightProjectId) {
     Throw-QaError 'Manifest buildu nemá bezpečný event-night formát nebo demo projekt.' 'Spusťte PREPARE_EVENT_NIGHT.cmd znovu.'
   }
@@ -172,7 +172,7 @@ function Get-EventNightCandidate {
   if (-not (Test-Path -LiteralPath $Paths.CandidateManifest -PathType Leaf)) {
     Throw-QaError 'Chybí lokální manifest vybraného kvízu.' 'Nejdřív spusťte PREPARE_EVENT_NIGHT.cmd.'
   }
-  $manifest = Get-Content -LiteralPath $Paths.CandidateManifest -Raw | ConvertFrom-Json
+  $manifest = Get-Content -LiteralPath $Paths.CandidateManifest -Raw -Encoding UTF8 | ConvertFrom-Json
   if ([int]$manifest.schemaVersion -ne 1 -or
       [string]$manifest.projectId -ne $script:EventNightProjectId -or
       [string]::IsNullOrWhiteSpace([string]$manifest.candidate.quizId)) {
@@ -192,7 +192,7 @@ function New-EventNightSnapshotManifest {
   }
   $candidate = Get-EventNightCandidate $Paths
   $health = if (Test-Path -LiteralPath $Paths.HealthPath -PathType Leaf) {
-    Get-Content -LiteralPath $Paths.HealthPath -Raw | ConvertFrom-Json
+    Get-Content -LiteralPath $Paths.HealthPath -Raw -Encoding UTF8 | ConvertFrom-Json
   } else { $null }
   $manifest = [ordered]@{
     schemaVersion = 1
@@ -219,7 +219,7 @@ function Assert-EventNightSnapshot {
   if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
     Throw-QaError 'Persistentní snapshot nemá event-night manifest.' 'Nejdřív spusťte PREPARE_EVENT_NIGHT.cmd.'
   }
-  $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+  $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
   $candidate = Get-EventNightCandidate $Paths
   if ([int]$manifest.schemaVersion -ne 1 -or
       [string]$manifest.projectId -ne $script:EventNightProjectId -or
@@ -374,7 +374,7 @@ function Invoke-EventNightHealth {
   if ($exitCode -ne 0 -or -not (Test-Path -LiteralPath $Paths.HealthPath -PathType Leaf)) {
     Throw-QaError 'Event-night browser health check selhal.' 'Zkontrolujte lokální emulátory a .local-data/event-night logy.'
   }
-  return Get-Content -LiteralPath $Paths.HealthPath -Raw | ConvertFrom-Json
+  return Get-Content -LiteralPath $Paths.HealthPath -Raw -Encoding UTF8 | ConvertFrom-Json
 }
 
 function Export-EventNightSnapshot {
@@ -421,7 +421,7 @@ function Export-EventNightSnapshot {
 function Get-EventNightState {
   param([Parameter(Mandatory = $true)][psobject]$Paths)
   if (-not (Test-Path -LiteralPath $Paths.StatePath -PathType Leaf)) { return $null }
-  try { return Get-Content -LiteralPath $Paths.StatePath -Raw | ConvertFrom-Json } catch { return $null }
+  try { return Get-Content -LiteralPath $Paths.StatePath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return $null }
 }
 
 function Write-EventNightReady {

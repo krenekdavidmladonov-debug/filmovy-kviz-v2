@@ -48,6 +48,9 @@ describe('event-night launcher safety contract', () => {
     ]) {
       expect(hasUtf8Bom(file), file).toBe(true);
     }
+    const jsonReads = common.split(/\r?\n/u).filter((line) => line.includes('Get-Content'));
+    expect(jsonReads.length).toBeGreaterThan(0);
+    expect(jsonReads.every((line) => line.includes('-Encoding UTF8'))).toBe(true);
   });
 
   test('pins localhost demo Firebase and clears credential variables', () => {
