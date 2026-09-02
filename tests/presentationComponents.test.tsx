@@ -199,29 +199,41 @@ describe('mounted media lifecycle regressions', () => {
     expect(window.__FILMOVY_KVIZ_MEDIA_DEBUG__).toEqual({ activePlayers: 0, peakPlayers: 1, createdPlayers: 2, destroyedPlayers: 2 });
   });
 
-  test('25 VIDEO PLAY/STOP cycles keep at most one heavy player mounted', async () => {
+  test('102 VIDEO PLAY/REPLAY/STOP operations keep at most one heavy player mounted', async () => {
     const video = {
       kind: 'video', title: 'Video otázka', text: 'Syntetické zadání', options: [], media: [], mediaSource: 'abcdefghijk',
     } as const;
     const view = await mounted(
       <SlideRenderer quizTitle="Syntetický kvíz" mediaCommand="stop" mediaGeneration={0} slide={video} />,
     );
-    for (let cycle = 1; cycle <= 25; cycle += 1) {
+    let operations = 0;
+    for (let cycle = 1; cycle <= 34; cycle += 1) {
       await act(async () => {
         view.root.render(
-          <SlideRenderer quizTitle="Syntetický kvíz" mediaCommand="play" mediaGeneration={cycle * 2 - 1} slide={video} />,
+          <SlideRenderer quizTitle="Syntetický kvíz" mediaCommand="play" mediaGeneration={cycle * 3 - 2} slide={video} />,
         );
       });
-      const player = FakePlayer.instances.at(-1)!;
-      await act(async () => { player.events.onReady(); player.events.onStateChange({ data: 1 }); });
+      operations += 1;
+      const playPlayer = FakePlayer.instances.at(-1)!;
+      await act(async () => { playPlayer.events.onReady(); playPlayer.events.onStateChange({ data: 1 }); });
       await act(async () => {
         view.root.render(
-          <SlideRenderer quizTitle="Syntetický kvíz" mediaCommand="stop" mediaGeneration={cycle * 2} slide={video} />,
+          <SlideRenderer quizTitle="Syntetický kvíz" mediaCommand="replay" mediaGeneration={cycle * 3 - 1} slide={video} />,
         );
       });
+      operations += 1;
+      const replayPlayer = FakePlayer.instances.at(-1)!;
+      await act(async () => { replayPlayer.events.onReady(); replayPlayer.events.onStateChange({ data: 1 }); });
+      await act(async () => {
+        view.root.render(
+          <SlideRenderer quizTitle="Syntetický kvíz" mediaCommand="stop" mediaGeneration={cycle * 3} slide={video} />,
+        );
+      });
+      operations += 1;
     }
+    expect(operations).toBe(102);
     expect(window.__FILMOVY_KVIZ_MEDIA_DEBUG__).toEqual({
-      activePlayers: 0, peakPlayers: 1, createdPlayers: 25, destroyedPlayers: 25,
+      activePlayers: 0, peakPlayers: 1, createdPlayers: 68, destroyedPlayers: 68,
     });
     await act(async () => { view.root.unmount(); });
   });

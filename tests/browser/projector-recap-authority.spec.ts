@@ -198,5 +198,6 @@ test('answer-bearing BroadcastChannel state renders zero times on two projectors
     expect(renderCounts.confirmed).toBeGreaterThan(0);
   }
   test.info().annotations.push({ type: 'authoritative-recap-latency-ms', description: String(authoritativeLatencyMs) });
+  globalThis.console.log(`Authoritative recap latency: ${authoritativeLatencyMs} ms`);
   await context.close();
 });
