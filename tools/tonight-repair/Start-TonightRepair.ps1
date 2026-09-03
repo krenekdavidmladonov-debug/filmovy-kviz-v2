@@ -39,6 +39,19 @@ try {
   $repairPaths = Get-TonightRepairPaths $repoRoot
   $state = Get-EventNightState $eventPaths
 
+  if ($null -ne $state) {
+    $recordedProcess = Get-Process -Id ([int]$state.emulators.pid) -ErrorAction SilentlyContinue
+    if ($null -ne $recordedProcess -and
+        -not (Test-EventNightWorker $state.emulators ([string]$state.runToken))) {
+      Throw-QaError 'Existuje aktivní proces se zastaralou nebo neověřitelnou event-night identitou.' 'Nic nebylo ukončeno. Požádejte vývojáře o kontrolu run-state.json.'
+    }
+    if ($null -eq $recordedProcess) {
+      Remove-Item -LiteralPath $eventPaths.StatePath -Force
+      $state = $null
+      Write-QaInfo 'Odstraněn neaktivní run-state po předchozím ukončeném workeru.'
+    }
+  }
+
   if ($null -eq $state) {
     Assert-EventNightSnapshot $eventPaths.SnapshotDirectory $eventPaths | Out-Null
     $gitStatus = (& $gitTool.Path -C $repoRoot status --porcelain=v1 2>$null | Out-String).Trim()

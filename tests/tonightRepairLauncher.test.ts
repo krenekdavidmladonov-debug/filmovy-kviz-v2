@@ -41,6 +41,8 @@ describe('tonight repair launcher safety contract', () => {
     expect(start).toContain('Assert-EventNightSnapshot');
     expect(start).toMatch(/backup/iu);
     expect(start).toContain('New-EventNightBuildManifest');
+    expect(start).toContain("if ($null -eq $recordedProcess)");
+    expect(start).toContain('Remove-Item -LiteralPath $eventPaths.StatePath -Force');
     expect(common).toContain(".local-data\\tonight-repair");
     expect(implementation).not.toMatch(/firebase\s+deploy/iu);
     expect(implementation).not.toContain('filmovy-kviz.web.app');
