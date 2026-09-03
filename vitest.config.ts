@@ -18,6 +18,8 @@ export default defineConfig({
       'tests/localQaLauncher.test.ts',
       'tests/eventNightLauncher.test.ts',
       'tests/tonightRepairLauncher.test.ts',
+      'tests/firebaseEmulatorEndpoints.test.ts',
+      'tests/eventNightAuditHarness.test.ts',
       'tools/migration-v1/test/**/*.test.ts',
     ],
   },

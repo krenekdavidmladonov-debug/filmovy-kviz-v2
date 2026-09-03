@@ -6,6 +6,7 @@ import { connectStorageEmulator, getStorage, type FirebaseStorage } from 'fireba
 import { getFirebaseAppContext } from './app';
 import { getFirebaseAuth } from './auth';
 import { getFirebaseFirestore } from './firestore';
+import { getFirebaseEmulatorEndpoints } from './emulators';
 
 export interface FirebaseServices {
   readonly auth: Auth;
@@ -28,8 +29,9 @@ export function getFirebaseServices(): FirebaseServices {
   const storage = getStorage(app);
 
   if (config.useEmulators) {
-    connectFunctionsEmulator(functions, '127.0.0.1', 5001);
-    connectStorageEmulator(storage, '127.0.0.1', 9199);
+    const endpoint = getFirebaseEmulatorEndpoints();
+    connectFunctionsEmulator(functions, endpoint.host, endpoint.functionsPort);
+    connectStorageEmulator(storage, endpoint.host, endpoint.storagePort);
   }
 
   services = { auth, db, functions, storage };

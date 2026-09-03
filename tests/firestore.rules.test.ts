@@ -10,7 +10,14 @@ import {
 import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, test } from 'vitest';
 
-const projectId = 'demo-filmovy-kviz-v2';
+const projectId = process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT ?? 'demo-filmovy-kviz-v2';
+if (!projectId.startsWith('demo-')) throw new Error('Rules tests require a demo-* project ID.');
+if (process.env.FIRESTORE_EMULATOR_HOST !== undefined) {
+  const endpoint = /^(127\.0\.0\.1|localhost|\[::1\]):([1-9]\d{0,4})$/u.exec(process.env.FIRESTORE_EMULATOR_HOST);
+  if (endpoint === null || Number(endpoint[2]) > 65_535) {
+    throw new Error('Rules tests require a loopback Firestore Emulator endpoint.');
+  }
+}
 const privateQuizPath = 'quizzes/security-test-quiz';
 const privateRoundPath = `${privateQuizPath}/rounds/security-test-round`;
 const privateSlidePath = `${privateQuizPath}/slides/security-test-slide`;

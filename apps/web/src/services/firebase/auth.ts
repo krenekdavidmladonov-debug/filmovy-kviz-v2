@@ -1,6 +1,7 @@
 import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth';
 
 import { getFirebaseAppContext } from './app';
+import { getFirebaseEmulatorEndpoints } from './emulators';
 
 let authService: Auth | undefined;
 
@@ -13,7 +14,8 @@ export function getFirebaseAuth(): Auth {
   const auth = getAuth(app);
 
   if (config.useEmulators) {
-    connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    const endpoint = getFirebaseEmulatorEndpoints();
+    connectAuthEmulator(auth, `http://${endpoint.host}:${endpoint.authPort}`, { disableWarnings: true });
   }
 
   authService = auth;
