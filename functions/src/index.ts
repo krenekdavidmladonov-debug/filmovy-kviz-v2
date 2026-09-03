@@ -33,6 +33,14 @@ export {
   updateQuizSlide,
 } from './editor/callables.js';
 
+export {
+  archiveEvent,
+  cancelEvent,
+  createEvent,
+  lockEventQuiz,
+  updateEvent,
+} from './events/callables.js';
+
 /** Minimal endpoint that does not initialize Admin SDK or access data. */
 export const health = onRequest(
   {

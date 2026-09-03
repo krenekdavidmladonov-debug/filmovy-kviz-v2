@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./packages/quiz-domain" },
     { "path": "./apps/web" },
     { "path": "./functions" }
   ]

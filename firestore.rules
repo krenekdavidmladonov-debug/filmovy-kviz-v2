@@ -40,9 +40,31 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    match /events/{document=**} {
+    // Event roots are private operational records. Admins and moderators may
+    // read them, but every authoritative mutation goes through a Function.
+    match /events/{eventId} {
       allow read: if isStaff();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // No event child collection is exposed in this foundation. Future
+    // registrations, teams, scores, and audit paths must opt in separately.
+    match /events/{eventId}/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Immutable quiz snapshots are private inputs for staff workflows.
+    // They include answers and legacy presentation data and are server-written.
+    match /quizSnapshots/{document=**} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // Anonymous clients may query the allowlisted event projection. Browsers
+    // never author public availability or event authority.
+    match /publicEvents/{eventId} {
+      allow read: if true;
+      allow create, update, delete: if false;
     }
 
     match /media/{document=**} {

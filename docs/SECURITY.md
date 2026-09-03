@@ -37,7 +37,10 @@ Current Firestore access is intentionally narrow:
 - anonymous and ordinary authenticated users cannot read or write private collections;
 - moderators and admins can read private `quizzes` and their slide/round/question subcollections;
 - every direct client quiz write is denied to both roles; admin editor writes exist only as trusted callable Functions;
-- existing event/media policy remains staff-read and admin-write until those flows are revisited;
+- event roots are staff-readable, unknown event subpaths are denied, and every event write is denied to clients; admin-only callable Functions own event mutations;
+- immutable quiz snapshots are staff-readable private data and every direct client write is denied;
+- `publicEvents` is anonymously readable/queryable sanitized data with every client write denied;
+- existing media policy remains staff-read and admin-write until that flow is revisited;
 - staff profiles are self-readable, while all user management is admin-only;
 - staff may read private `sessions`, but all client writes are denied;
 - anyone may get one known `publicSessions` document, collection listing is denied, and every client write is denied;
@@ -54,6 +57,8 @@ Editor preview is not a publication operation. It renders the current unsaved, a
 Quiz preflight is also a private staff-only read operation. Its result contains codes, Czech human messages, aggregate counts, and semantic references, but never embeds correct-answer values, question copy, media URLs, moderator notes, or `legacy.raw`. Running readiness in the editor is local and running it before live start does not write `publicSessions`; only the existing explicit live-session callable may publish its independently sanitized allowlist. The preflight feature changes neither Rules nor projector/BroadcastChannel authority.
 
 Guided repair keeps the same route guard but does not treat it as write authorization. The `repairQuizPreflightIssue` callable requires an `admin` claim, an exact current quiz revision, an existing authoritative question, and one strict discriminated request shape. Choice requests carry only `optionIndex`; the server verifies that the current option exists and uniquely identifies one stored value before assigning it privately. Video requests carry only finite numeric START/END values satisfying `0 <= START < END <= 86400` and are accepted only for a current Video question with a source. Unknown request fields are rejected. Moderator and ordinary-user writes fail, direct Firestore writes remain denied, success responses contain no private value, and the callable never touches `publicSessions` or BroadcastChannel code. The browser removes a repair issue only after a fresh private reload proves that shared preflight no longer reports it.
+
+Event lock uses that same shared quiz-domain/preflight implementation inside an admin-only transaction. It rereads the expected event and quiz revisions, rejects blockers, requires explicit warning acknowledgement, creates a complete private immutable snapshot, derives `ready`, and replaces the safe public event projection atomically. Browsers cannot submit readiness, assignment, snapshot data, scoring state, revisions, actors, timestamps, or public fields. Snapshot answers stay private and never enter `publicEvents`; existing `publicSessions` answer authority is unchanged.
 
 ## Public registration
 

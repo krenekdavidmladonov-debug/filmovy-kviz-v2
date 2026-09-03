@@ -8,7 +8,7 @@ export default tseslint.config(
       '**/dist/**',
       '**/lib/**',
       '**/node_modules/**',
-      '.tools/**',
+      '**/.tools/**',
       '.local-data/**',
       '.firebase/**',
       'coverage/**',
@@ -38,6 +38,16 @@ export default tseslint.config(
       globals: globals.node,
       parserOptions: {
         projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ['packages/quiz-domain/**/*.ts'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+      parserOptions: {
+        project: './packages/quiz-domain/tsconfig.json',
         tsconfigRootDir: import.meta.dirname,
       },
     },

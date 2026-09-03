@@ -379,6 +379,7 @@ async function seed(): Promise<void> {
     await clearLiveFlowFixture(db, 'preflight-blocked-e2e');
     await clearLiveFlowFixture(db, 'preflight-repair-flow-e2e');
     await clearLiveFlowFixture(db, 'preflight-repair-readonly-e2e');
+    await clearLiveFlowFixture(db, 'events-toctou-e2e');
     const batch = db.batch();
     for (const quiz of quizzes) {
       writeQuiz(batch, quiz);
@@ -392,8 +393,9 @@ async function seed(): Promise<void> {
     writePreflightQuiz(batch, 'preflight-blocked-e2e', 'blocked');
     writeRepairFlowQuiz(batch, 'preflight-repair-flow-e2e');
     writeRepairFlowQuiz(batch, 'preflight-repair-readonly-e2e');
+    writePreflightQuiz(batch, 'events-toctou-e2e', 'ready');
     await batch.commit();
-    console.log(`Seeded ${quizzes.length} library quizzes and 9 isolated E2E fixtures into ${projectId}.`);
+    console.log(`Seeded ${quizzes.length} library quizzes and 10 isolated E2E fixtures into ${projectId}.`);
   } finally {
     await deleteApp(app);
   }

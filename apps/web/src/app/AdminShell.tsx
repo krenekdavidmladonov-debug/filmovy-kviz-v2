@@ -7,6 +7,7 @@ import { productConfig } from '../config/product';
 const navigation = [
   { to: '/admin', label: 'Přehled', end: true },
   { to: '/admin/quizzes', label: 'Kvízy', end: false },
+  { to: '/admin/events', label: 'Akce', end: false },
 ] as const;
 
 const roleLabels: Readonly<Record<StaffRole, string>> = {

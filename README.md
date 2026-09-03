@@ -47,7 +47,8 @@ The application is available at `http://localhost:5173`. Administrative routes:
 - `/admin/live/:sessionId` — authenticated moderator live control
 - `/admin/no-access` — authenticated account without a staff role
 - `/projector/:sessionId` — public read-only sanitized projector
-- `/events` — public events placeholder
+- `/events` — sanitized public event list
+- `/admin/events` — trusted event administration and immutable quiz preparation
 
 The seed is idempotent and creates only local Authentication Emulator users:
 

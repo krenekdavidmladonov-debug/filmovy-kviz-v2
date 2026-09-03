@@ -1076,3 +1076,69 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
+
+/* Events foundation */
+.event-library,
+.event-editor-page,
+.event-detail-page,
+.public-events-page { display: grid; gap: var(--space-6); }
+.event-page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); }
+.event-page-heading h1,
+.public-events-page h1 { font-size: clamp(2.4rem, 5vw, 4.6rem); }
+.event-card-list,
+.public-event-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-4); }
+.event-card,
+.public-event-card,
+.event-section { padding: clamp(20px, 3vw, 32px); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); box-shadow: var(--shadow-sm); }
+.event-card { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); text-decoration: none; }
+.event-card:hover { border-color: var(--color-border-strong); transform: translateY(-1px); }
+.event-card h2,
+.public-event-card h2,
+.event-section h2 { margin: var(--space-3) 0 var(--space-2); }
+.event-card p,
+.public-event-card p { margin: 0; color: var(--color-text-muted); }
+.event-card-meta { display: grid; justify-items: end; gap: var(--space-2); text-align: right; }
+.event-card-meta span,
+.event-section-heading > span,
+.event-muted { color: var(--color-text-subtle); font-size: .78rem; }
+.event-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.event-field-wide { grid-column: 1 / -1; }
+.event-form-actions { display: flex; justify-content: flex-end; }
+.event-section { display: grid; gap: var(--space-5); }
+.event-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.event-section-heading .eyebrow { margin-bottom: var(--space-2); }
+.event-section-heading h2 { margin: 0; }
+.event-readonly-grid { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-3); }
+.event-readonly-grid > div { padding: var(--space-3); border-radius: var(--radius-sm); background: var(--color-surface-subtle); }
+.event-readonly-grid dt { color: var(--color-text-subtle); font-size: .72rem; text-transform: uppercase; }
+.event-readonly-grid dd { margin: 5px 0 0; font-weight: 800; }
+.event-locked-quiz,
+.event-readiness { padding: var(--space-4); display: grid; gap: var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-subtle); }
+.event-locked-quiz small,
+.event-readiness p,
+.event-readiness span { color: var(--color-text-muted); }
+.event-quiz-lock { display: grid; gap: var(--space-4); }
+.event-quiz-lock select { min-height: 44px; padding: 10px 12px; color: var(--color-text); border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-surface-subtle); }
+.event-readiness.status-blocked { border-left: 4px solid var(--color-error); }
+.event-readiness.status-ready_with_warnings { border-left: 4px solid var(--color-warning); }
+.event-readiness.status-ready { border-left: 4px solid var(--color-success); }
+.event-readiness .warning-confirmation { display: flex; align-items: center; gap: var(--space-2); }
+.event-readiness input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--color-accent); }
+.event-notice { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); color: var(--color-success); background: rgba(102, 204, 145, .08); }
+.event-danger-zone { display: flex; align-items: center; justify-content: space-between; }
+.event-public-state { margin-top: var(--space-8); padding: var(--space-6); color: var(--color-text-muted); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.public-event-card { display: grid; align-content: start; gap: var(--space-2); }
+.public-event-card > strong { margin-top: var(--space-3); }
+.public-event-card > span:not(.quiz-status),
+.public-event-card > small { color: var(--color-text-muted); }
+
+@media (max-width: 700px) {
+  .event-page-heading,
+  .event-card,
+  .event-danger-zone { align-items: flex-start; flex-direction: column; }
+  .event-card-meta { justify-items: start; text-align: left; }
+  .event-form { grid-template-columns: 1fr; }
+  .event-field-wide { grid-column: auto; }
+  .event-form-actions .primary-button,
+  .event-danger-zone button { width: 100%; }
+}

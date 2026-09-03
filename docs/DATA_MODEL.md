@@ -48,7 +48,11 @@ The local seed uses stable quiz, round, and question IDs. It is development data
 
 ### `events/{eventId}`
 
-Authoritative event record: quiz reference, venue/time, capacity, registration status, lifecycle status, and audit fields. Staff access only.
+Authoritative event record implemented by Events Foundation: `schemaVersion`, title/start/time zone, private venue configuration, separate team/people capacities, per-event team-size bounds, registration status, lifecycle status, nullable immutable quiz assignment, fixed-point scoring foundation (`unitScale: 2`, `rankingMode: dense`, server-owned `started`), monotonic revision, and trusted audit fields. Staff may read the root; every client write is denied and mutations use admin-only Functions.
+
+### `quizSnapshots/{snapshotId}`
+
+Immutable, private event quiz source for one exact quiz ID and revision. The root stores source identity/counts and a sanitized preflight summary. Nested `slides` preserve all private presentation fields, correct answers, media, and legacy extensions; nested `rounds` preserve ordered round metadata. Direct client writes are denied. A relock creates a new snapshot rather than modifying the old one.
 
 ### `events/{eventId}/registrations/{registrationId}`
 
@@ -74,7 +78,7 @@ Private metadata: Storage path, content type, size, checksum, owner, processing 
 
 ### `publicEvents/{eventId}`
 
-Safe listing data: title, venue display name, start time, public capacity state (`open`, `few_left`, `full`, `closed`), deadline, and public description. Contact details are excluded.
+Implemented safe listing data: title, venue display/public location, start time/time zone, coarse registration/availability state, team-size range, revision, and updated timestamp. Exact team/people capacities, quiz assignment/snapshot data, answers, organizer details, and contacts are excluded. Anonymous clients may read/query; all writes are server-only.
 
 ### `publicSessions/{sessionId}`
 
