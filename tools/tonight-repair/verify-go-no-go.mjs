@@ -2,11 +2,18 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { deleteApp as deleteAdminApp, getApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { deleteApp, initializeApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { connectFirestoreEmulator, doc, getDoc, getFirestore } from 'firebase/firestore';
+import {
+  collection,
+  connectFirestoreEmulator,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  orderBy,
+  query,
+} from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 
 import { requireFullEmulatorEnvironment } from '../local-emulator-environment.mjs';
@@ -33,7 +40,7 @@ function assertPublicSafe(value, answerRevealed) {
 }
 
 async function inventory(db) {
-  const quizzes = await db.collection('quizzes').get();
+  const quizzes = await getDocs(collection(db, 'quizzes'));
   let slides = 0;
   let rounds = 0;
   let questions = 0;
@@ -42,8 +49,8 @@ async function inventory(db) {
   let legacyRawSlides = 0;
   const candidateSlides = [];
   for (const quiz of quizzes.docs) {
-    const slideDocs = await quiz.ref.collection('slides').orderBy('position').get();
-    const roundDocs = await quiz.ref.collection('rounds').orderBy('position').get();
+    const slideDocs = await getDocs(query(collection(quiz.ref, 'slides'), orderBy('position')));
+    const roundDocs = await getDocs(query(collection(quiz.ref, 'rounds'), orderBy('position')));
     slides += slideDocs.size;
     rounds += roundDocs.size;
     for (const slide of slideDocs.docs) {
@@ -139,27 +146,25 @@ async function main() {
   const sourceUnchanged = createHash('sha256').update(sourceBytes).digest('hex') === candidateManifest.sourceSha256;
   if (!sourceUnchanged) throw new Error('Read-only V1 source hash changed.');
 
-  const adminApp = getApps().find((app) => app.name === 'tonight-go-no-go-admin')
-    ?? initializeAdminApp({ projectId }, 'tonight-go-no-go-admin');
-  const db = getAdminFirestore(adminApp);
-  const { summary, candidateSlides } = await inventory(db);
-  const expectedInventory = { quizzes: 4, slides: 315, rounds: 23, questions: 263, correctAnswers: 263, mediaReferences: 154 };
-  for (const [field, expected] of Object.entries(expectedInventory)) {
-    if (summary[field] !== expected) throw new Error(`Migration inventory mismatch for ${field}.`);
-  }
-  if (summary.legacyRawSlides !== 315) throw new Error('Lossless legacy.raw inventory is incomplete.');
-
   const firebaseOptions = { apiKey: 'demo-api-key', authDomain: `${projectId}.firebaseapp.com`, projectId, appId: '1:123:web:tonight-go-no-go' };
   const staffApp = initializeApp(firebaseOptions, 'tonight-go-no-go-staff');
   const projectorApp = initializeApp(firebaseOptions, 'tonight-go-no-go-projector');
   const auth = getAuth(staffApp);
   const functions = getFunctions(staffApp, 'europe-west1');
+  const staffDb = getFirestore(staffApp);
   const projectorDb = getFirestore(projectorApp);
   connectAuthEmulator(auth, `http://${authEndpoint.host}:${authEndpoint.port}`, { disableWarnings: true });
   connectFunctionsEmulator(functions, functionsEndpoint.host, functionsEndpoint.port);
+  connectFirestoreEmulator(staffDb, firestoreEndpoint.host, firestoreEndpoint.port);
   connectFirestoreEmulator(projectorDb, firestoreEndpoint.host, firestoreEndpoint.port);
   await expectPrivateReadDenied(projectorDb, repairReport.candidate.quizId);
   await signInWithEmailAndPassword(auth, 'admin@example.test', 'LocalQuiz123!');
+  const { summary, candidateSlides } = await inventory(staffDb);
+  const expectedInventory = { quizzes: 4, slides: 315, rounds: 23, questions: 263, correctAnswers: 263, mediaReferences: 154 };
+  for (const [field, expected] of Object.entries(expectedInventory)) {
+    if (summary[field] !== expected) throw new Error(`Migration inventory mismatch for ${field}.`);
+  }
+  if (summary.legacyRawSlides !== 315) throw new Error('Lossless legacy.raw inventory is incomplete.');
 
   let liveSmoke = { created: false, nextPrevious: false, audioBoundary: false, videoBoundary: false, recapAuthority: false };
   if (repairReport.readiness.blockers === 0) {
@@ -192,7 +197,6 @@ async function main() {
   await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
   console.log(JSON.stringify({ status: 'PASS', verdict: report.verdict, blockers: repairReport.readiness.blockers, output: '.local-data/tonight-repair/go-no-go-report.json' }));
   await Promise.all([deleteApp(staffApp), deleteApp(projectorApp)]);
-  await deleteAdminApp(adminApp);
 }
 
 main().catch((error) => {
