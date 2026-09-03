@@ -4,6 +4,11 @@ This directory is the source of truth for Filmovy Kviz V2 product, architecture,
 
 ## IMPLEMENTED
 
+### Development baseline
+
+- [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md) — canonical branch roles, test levels, reasoning policy, and worktree convention.
+- [ROADMAP_V03.md](ROADMAP_V03.md) — implemented baseline, ordered next work, and explicitly deferred scope.
+
 ### Core, security, and V1 migration
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — repository shape and trust boundaries.
