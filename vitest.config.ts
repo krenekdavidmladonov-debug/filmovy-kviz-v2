@@ -15,6 +15,8 @@ export default defineConfig({
       'tests/quizPreflight.test.ts',
       'tests/quizRepair.test.ts',
       'tests/events.test.ts',
+      'tests/printCenter.test.ts',
+      'tests/printCenterSecurity.test.ts',
       'tests/localEmulatorEnvironment.test.ts',
       'tests/localQaLauncher.test.ts',
       'tests/eventNightLauncher.test.ts',

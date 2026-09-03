@@ -47,6 +47,13 @@ Managed exports and extracted documents are local-only under Git-ignored `.local
 
 Registration and scoring are deliberately absent from the implemented Events Foundation.
 
+### PDF Print Center
+
+- [PRINT_CENTER.md](PRINT_CENTER.md) — immutable-snapshot print flow, deterministic engine, layouts, and limits.
+- [PDF_SECURITY.md](PDF_SECURITY.md) — authorization matrix, request allowlist, privacy, logging, and abuse controls.
+
+Persisted registration/team binding and automatic scoring remain deliberately absent.
+
 ### Local QA and event-night tooling
 
 - [LOCAL_QA.md](LOCAL_QA.md) — one-click Windows QA launcher, tool discovery, localhost ports, and identity-checked process handling.
@@ -60,7 +67,7 @@ The following areas are discovery work only and must not be treated as shipped b
 
 - registration, capacity enforcement for teams/people, and transactional signup;
 - scoring, referee workflow, half-points, dense ranking, leaderboard, and announcement;
-- PDF Print Center, answer keys, team sheets, and event-team binding;
+- persisted event-team binding and automatic population of print documents from registrations;
 - emailing;
 - offline operation;
 - Storage and media ownership/lifecycle.
