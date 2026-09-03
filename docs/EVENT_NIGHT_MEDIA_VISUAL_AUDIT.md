@@ -49,20 +49,20 @@ Aktuální inventory obsahuje 20 Audio a 20 Video raw referencí, 20 sémantick�
 | --- | ---: |
 | PLAYABLE | 0 |
 | PLAYABLE_AFTER_ACTIVATION | 0 |
-| EMBED_DENIED | 0 |
+| EMBED_DENIED | 3 |
 | UNAVAILABLE | 0 |
-| TIMEOUT | 0 |
+| TIMEOUT | 17 |
 | INVALID_SOURCE | 0 |
-| UNVERIFIED | 20 |
+| UNVERIFIED | 0 |
 
-Skutečný externí YouTube probe nebyl spuštěn, protože auditní prostředí nepovolilo odeslat privátní candidate-derived identifikátory externímu IFrame API. Nuly v ostatních klasifikacích nejsou potvrzením dostupnosti. Lokální syntetické lifecycle testy ověřily ruční Audio/Video PLAY/STOP/REPLAY, stale callback ochranu, nejvýše jeden heavy player, cleanup, question návrat, vinyl stav a recap od 0:00. Skutečný zvuk, dostupnost, seek a timing proti reálným médiím zůstávají `UNVERIFIED` / `HUMAN QA REQUIRED`.
+Schválený read-only probe všech 20 unikátních zdrojů proběhl sekvenčně přes oficiální YouTube IFrame API, s nejvýše dvěma pokusy na zdroj, omezeným timeoutem a nejvýše jedním playerem. API bylo dostupné; 20 playerů bylo vytvořeno a 20 zničeno, po cleanupu nezůstal žádný aktivní player. `EMBED_DENIED`: `R2 Q7 AUDIO`, `R2 Q8 VIDEO`, `R5 Q7 AUDIO`. `TIMEOUT`: `R1 Q6 AUDIO`, `R1 Q7 AUDIO`, `R1 Q8 VIDEO`, `R1 Q9 VIDEO`, `R2 Q6 AUDIO`, `R2 Q9 VIDEO`, `R3 Q6 AUDIO`, `R3 Q7 AUDIO`, `R3 Q8 VIDEO`, `R3 Q9 VIDEO`, `R4 Q6 AUDIO`, `R4 Q7 AUDIO`, `R4 Q8 VIDEO`, `R4 Q9 VIDEO`, `R5 Q6 AUDIO`, `R5 Q8 VIDEO`, `R5 Q9 VIDEO`. Candidate revision a fingerprint zůstaly shodné, nevznikla žádná candidate session a zdrojový read-only hash se nezměnil.
 
 ## Findings
 
 - `P2 OFFLINE_SAFETY_COPY_OVERWRITTEN`: projektor při offline stavu správně odstraní stale slide i answer, ale následná listener chyba přepíše přesnější bezpečnostní vysvětlení obecným connection textem. Recovery funguje.
 - `P2 SYNTHETIC_IMAGE_BROKEN_FALLBACK_MISSING`: layout Image otázky zůstane stabilní, ale při chybě zdroje není vlastní profesionální fallback.
 - P0: 0.
-- P1: 0 v provedených lokálních kontrolách. Externí média nebyla klasifikována a kandidát má nadále 16 známých content blockerů.
+- P1: 0 v provedených lokálních kontrolách. Externí probe nepotvrdil žádný přehratelný zdroj a kandidát má nadále 16 známých content blockerů.
 
 ## Quality gate
 
@@ -70,4 +70,4 @@ Node 22 a JDK 21: dependency lock PASS; `pnpm check` PASS; unit/component/audit 
 
 ## Human QA
 
-Před eventem je stále nutné opravit 16 obsahových blockerů, doplnit `R2 Q8` timing lidským rozhodnutím a fyzicky ověřit vybraný Audio/Video/recap shortlist: reálnou YouTube dostupnost a embed, user activation, slyšitelný zvuk, HDMI umístění, browser fullscreen, projektor, čitelnost a subjektivní vizuální dojem. Tento audit neopravňuje merge ani deployment.
+Před eventem je stále nutné opravit 16 obsahových blockerů. `R2 Q7 AUDIO`, `R2 Q8 VIDEO` a `R5 Q7 AUDIO` vyžadují náhradu nebo ruční ověření embedu; `R2 Q8 VIDEO` navíc potřebuje lidské rozhodnutí o timingu. Všech 17 položek se stavem `TIMEOUT` vyžaduje fyzické ověření dostupnosti, user activation, slyšitelného zvuku, START/END, STOP/REPLAY, HDMI, fullscreen/projektoru a recap od 0:00. Tento audit neopravňuje merge ani deployment.
