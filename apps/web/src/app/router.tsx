@@ -51,6 +51,11 @@ const AdminEventDetailPage = lazy(async () => {
   return { default: module.AdminEventDetailPage };
 });
 
+const AdminPrintCenterPage = lazy(async () => {
+  const module = await import('../routes/admin/AdminPrintCenterPage');
+  return { default: module.AdminPrintCenterPage };
+});
+
 const LiveControlPage = lazy(async () => {
   const module = await import('../routes/admin/LiveControlPage');
   return { default: module.LiveControlPage };
@@ -89,6 +94,7 @@ export const router = createBrowserRouter([
           { path: 'events', element: <LazyAdminRoute><AdminEventsPage /></LazyAdminRoute> },
           { path: 'events/new', element: <LazyAdminRoute><AdminEventCreatePage /></LazyAdminRoute> },
           { path: 'events/:eventId', element: <LazyAdminRoute><AdminEventDetailPage /></LazyAdminRoute> },
+          { path: 'events/:eventId/print', element: <LazyAdminRoute><AdminPrintCenterPage /></LazyAdminRoute> },
         ],
       },
       { path: '*', element: <NotFoundPage /> },

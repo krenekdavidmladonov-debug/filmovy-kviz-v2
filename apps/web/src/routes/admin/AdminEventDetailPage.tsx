@@ -142,6 +142,12 @@ export function AdminEventDetailPage() {
         ) : <p className="event-muted">Moderátor může připravenou akci číst, konfiguraci a snapshot mění pouze administrátor.</p>}
       </section>
 
+      <section className="event-section">
+        <div className="event-section-heading"><div><p className="eyebrow">Dokumenty</p><h2>Tiskové centrum</h2></div>{locked && <span>Neměnný snapshot</span>}</div>
+        <p className="event-muted">Hrací archy, privátní klíč odpovědí a bodovací tabulka pro ruční práci na místě.</p>
+        <Link className="secondary-link" to={`/admin/events/${event.id}/print`}>Otevřít tiskové centrum</Link>
+      </section>
+
       {admin && <section className="event-section event-danger-zone"><div><p className="eyebrow">Stav akce</p><h2>Bezpečné ukončení</h2></div>{event.lifecycleStatus === 'cancelled' ? <button className="secondary-button" type="button" disabled={pending} onClick={() => void runAction(() => archiveEvent(event.id, event.revision), 'Akce byla archivována.')}>Archivovat akci</button> : event.lifecycleStatus !== 'archived' && event.lifecycleStatus !== 'completed' ? <button className="danger-button" type="button" disabled={pending} onClick={() => { if (window.confirm('Opravdu zrušit tuto akci? Veřejná projekce bude odstraněna.')) void runAction(() => cancelEvent(event.id, event.revision), 'Akce byla zrušena.'); }}>Zrušit akci</button> : null}</section>}
     </article>
   );
