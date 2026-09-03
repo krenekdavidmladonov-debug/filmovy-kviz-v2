@@ -42,7 +42,7 @@ export function EditorOutline({
       <section className="outline-section">
         <h2>Úvod kvízu</h2>
         {model.introduction.map((section) => (
-          <button key={section.key} type="button" className={`outline-system-item ${selected(`system:${section.key}`)}`} onClick={() => onSelect(`system:${section.key}`)}>
+          <button key={section.key} type="button" data-audit-selection={`system:${section.key}`} data-audit-slide-id={section.slide?.id} className={`outline-system-item ${selected(`system:${section.key}`)}`} onClick={() => onSelect(`system:${section.key}`)}>
             <span>{section.label}</span>{section.generated && <small>Automaticky</small>}
           </button>
         ))}
@@ -53,7 +53,7 @@ export function EditorOutline({
         {model.rounds.map((round) => (
           <details key={round.id} open className="outline-round">
             <summary><span>{round.position}. kolo</span><strong>{round.title}</strong><small>{round.questions.length} otázek</small></summary>
-            <button type="button" className={`outline-system-item ${selected(`round:${round.id}`)}`} onClick={() => onSelect(`round:${round.id}`)}>Nastavení kola</button>
+            <button type="button" data-audit-selection={`round:${round.id}`} data-audit-slide-id={round.settingsSlide?.id} className={`outline-system-item ${selected(`round:${round.id}`)}`} onClick={() => onSelect(`round:${round.id}`)}>Nastavení kola</button>
             <ol>
               {round.questions.map((question) => {
                 const key = `slide:${question.slide.id}`;
@@ -62,7 +62,7 @@ export function EditorOutline({
                 const issue = issues.find((item) => item.severity === 'error') ?? issues[0];
                 return (
                   <li key={question.slide.id}>
-                    <button type="button" className={`outline-question ${selected(key)}`} onClick={() => onSelect(key)}>
+                    <button type="button" data-audit-selection={key} data-audit-slide-id={question.slide.id} className={`outline-question ${selected(key)}`} onClick={() => onSelect(key)}>
                       <span className="outline-question-number">{question.number}</span>
                       <span><strong>{questionTypeLabels[question.type]}</strong><small>{questionSummary(displayedSlide)}</small></span>
                       {issue && <span className={`outline-issue ${issue.severity}`} title={issue.message} aria-label={issue.message}>!</span>}
@@ -86,10 +86,10 @@ export function EditorOutline({
               })()}
             </ol>
             {round.recaps.map((recap) => (
-              <button key={recap.id} type="button" className={`outline-system-item ${selected(`slide:${recap.id}`)}`} onClick={() => onSelect(`slide:${recap.id}`)}>Rekapitulace</button>
+              <button key={recap.id} type="button" data-audit-selection={`slide:${recap.id}`} data-audit-slide-id={recap.id} className={`outline-system-item ${selected(`slide:${recap.id}`)}`} onClick={() => onSelect(`slide:${recap.id}`)}>Rekapitulace</button>
             ))}
             {round.otherSystemSlides.map((slide) => (
-              <button key={slide.id} type="button" className={`outline-system-item legacy ${selected(`slide:${slide.id}`)}`} onClick={() => onSelect(`slide:${slide.id}`)}>Starší nastavení kola</button>
+              <button key={slide.id} type="button" data-audit-selection={`slide:${slide.id}`} data-audit-slide-id={slide.id} className={`outline-system-item legacy ${selected(`slide:${slide.id}`)}`} onClick={() => onSelect(`slide:${slide.id}`)}>Starší nastavení kola</button>
             ))}
             {round.id === 'roundless'
               ? <p className="field-help">Otázky bez kola lze přesunout do existujícího kola.</p>
@@ -111,8 +111,8 @@ export function EditorOutline({
       {(model.closing.length > 0 || model.legacy.length > 0) && (
         <section className="outline-section">
           <h2>Závěr a starší obsah</h2>
-          {model.closing.map((slide) => <button key={slide.id} type="button" className={`outline-system-item ${selected(`slide:${slide.id}`)}`} onClick={() => onSelect(`slide:${slide.id}`)}>Závěr kvízu</button>)}
-          {model.legacy.map((slide) => <button key={slide.id} type="button" className={`outline-system-item legacy ${selected(`slide:${slide.id}`)}`} onClick={() => onSelect(`slide:${slide.id}`)}>Starší obsah</button>)}
+          {model.closing.map((slide) => <button key={slide.id} type="button" data-audit-selection={`slide:${slide.id}`} data-audit-slide-id={slide.id} className={`outline-system-item ${selected(`slide:${slide.id}`)}`} onClick={() => onSelect(`slide:${slide.id}`)}>Závěr kvízu</button>)}
+          {model.legacy.map((slide) => <button key={slide.id} type="button" data-audit-selection={`slide:${slide.id}`} data-audit-slide-id={slide.id} className={`outline-system-item legacy ${selected(`slide:${slide.id}`)}`} onClick={() => onSelect(`slide:${slide.id}`)}>Starší obsah</button>)}
         </section>
       )}
     </aside>
