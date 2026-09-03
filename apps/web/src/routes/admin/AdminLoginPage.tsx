@@ -1,12 +1,19 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
 import { getCzechAuthError } from '../../auth/authErrors';
 import { productConfig } from '../../config/product';
 import { AdminLoading } from './AdminLoading';
 
+export function safeAdminReturnPath(state: unknown): string {
+  if (typeof state !== 'object' || state === null || !('from' in state)) return '/admin';
+  const from: unknown = state.from;
+  return typeof from === 'string' && from.startsWith('/admin/') && !from.startsWith('//') ? from : '/admin';
+}
+
 export function AdminLoginPage() {
+  const location = useLocation();
   const { currentUser, role, loading, initializationError, signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,8 +24,10 @@ export function AdminLoginPage() {
     return <AdminLoading />;
   }
 
+  const requestedPath = safeAdminReturnPath(location.state as unknown);
+
   if (currentUser) {
-    return <Navigate to={role ? '/admin' : '/admin/no-access'} replace />;
+    return <Navigate to={role ? requestedPath : '/admin/no-access'} replace />;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

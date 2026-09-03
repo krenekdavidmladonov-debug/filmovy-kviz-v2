@@ -27,6 +27,7 @@ export {
   moveQuizSlide,
   removeQuizRound,
   reorderQuizQuestion,
+  repairQuizPreflightIssue,
   updateQuizRound,
   updateQuizMetadata,
   updateQuizSlide,

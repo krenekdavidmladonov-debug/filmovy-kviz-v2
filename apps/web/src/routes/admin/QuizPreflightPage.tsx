@@ -104,6 +104,7 @@ export function QuizPreflightPage() {
           <>
             <strong>Kvíz zatím nelze spustit.</strong>
             <p>Opravte {result.blockerCount} {result.blockerCount === 1 ? 'blokující problém' : 'blokující problémy'}.</p>
+            <Link className="button-link repair-entry-link" to={`/admin/quizzes/${encodeURIComponent(quiz.id)}/readiness/repair`}>Opravit blokující problémy</Link>
             <button type="button" className="primary-button" disabled>Kvíz nelze spustit</button>
           </>
         ) : result.warningCount > 0 ? (

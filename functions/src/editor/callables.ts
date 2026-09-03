@@ -21,6 +21,7 @@ import {
   type StoredEditorSlide,
 } from './model.js';
 import type { EditorQuizMutationResponse, EditorSlideKind } from './types.js';
+import { applyPreflightRepair, requestedPreflightRepair } from './repair.js';
 import {
   expectedRevision,
   isObject,
@@ -334,6 +335,39 @@ export const updateQuizSlide = onCall(callableOptions, async (request): Promise<
       }
       const result = writeQuizState(transaction, state, updated, actor);
       return { ...result, selectedSlideId: slideId };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
+
+export const repairQuizPreflightIssue = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const quizId = requiredId(request.data, 'quizId');
+    const slideId = requiredId(request.data, 'slideId');
+    const revision = expectedRevision(request.data);
+    const repair = requestedPreflightRepair(request.data);
+    return await db.runTransaction(async (transaction) => {
+      const state = await loadQuizState(transaction, quizId, revision);
+      const current = state.slides.find((slide) => slide.id === slideId);
+      if (current === undefined) throw new QuizEditorError('not-found', 'Quiz slide was not found.');
+      const applied = applyPreflightRepair(current, repair);
+      transaction.set(state.quizRef.collection('slides').doc(slideId), applied.slide.data);
+      const roundId = slideRoundId(current);
+      if (applied.kind === 'choice-answer' && roundId !== undefined && applied.privateCorrectAnswer !== undefined) {
+        transaction.set(
+          state.quizRef.collection('rounds').doc(roundId).collection('questions').doc(slideId),
+          { correctAnswer: applied.privateCorrectAnswer },
+          { merge: true },
+        );
+      }
+      transaction.update(state.quizRef, {
+        revision: state.revision + 1,
+        updatedAt: Timestamp.now(),
+        updatedBy: actor.uid,
+      });
+      return { ...publicResponse(state, state.slides, slideId) };
     });
   } catch (error) {
     return mapError(error);

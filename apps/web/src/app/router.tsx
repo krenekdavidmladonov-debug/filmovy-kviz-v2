@@ -31,6 +31,11 @@ const QuizPreflightPage = lazy(async () => {
   return { default: module.QuizPreflightPage };
 });
 
+const QuizRepairPage = lazy(async () => {
+  const module = await import('../routes/admin/QuizRepairPage');
+  return { default: module.QuizRepairPage };
+});
+
 const LiveControlPage = lazy(async () => {
   const module = await import('../routes/admin/LiveControlPage');
   return { default: module.LiveControlPage };
@@ -65,6 +70,7 @@ export const router = createBrowserRouter([
           { path: 'quizzes', element: <LazyAdminRoute><QuizLibraryPage /></LazyAdminRoute> },
           { path: 'quizzes/:quizId', element: <LazyAdminRoute><QuizDetailPage /></LazyAdminRoute> },
           { path: 'quizzes/:quizId/readiness', element: <LazyAdminRoute><QuizPreflightPage /></LazyAdminRoute> },
+          { path: 'quizzes/:quizId/readiness/repair', element: <LazyAdminRoute><QuizRepairPage /></LazyAdminRoute> },
         ],
       },
       { path: '*', element: <NotFoundPage /> },

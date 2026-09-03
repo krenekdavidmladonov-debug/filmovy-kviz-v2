@@ -46,6 +46,20 @@ export const updateQuizMetadata = (quizId: string, revision: number, title: stri
 export const updateQuizSlide = (quizId: string, revision: number, slide: EditorSlide) => (
   invoke('updateQuizSlide', { quizId, slideId: slide.id, expectedRevision: revision, slide: slidePayload(slide) })
 );
+export const repairQuizChoiceAnswer = (quizId: string, revision: number, slideId: string, optionIndex: number) => (
+  invoke('repairQuizPreflightIssue', {
+    quizId, slideId, expectedRevision: revision, kind: 'choice-answer', optionIndex,
+  })
+);
+export const repairQuizVideoTiming = (
+  quizId: string,
+  revision: number,
+  slideId: string,
+  clipStartSeconds: number,
+  clipEndSeconds: number,
+) => invoke('repairQuizPreflightIssue', {
+  quizId, slideId, expectedRevision: revision, kind: 'video-timing', clipStartSeconds, clipEndSeconds,
+});
 export const createQuizSlide = (quizId: string, revision: number, position: number, slide: EditorSlide) => (
   invoke('createQuizSlide', { quizId, expectedRevision: revision, position, slide: slidePayload(slide) })
 );
