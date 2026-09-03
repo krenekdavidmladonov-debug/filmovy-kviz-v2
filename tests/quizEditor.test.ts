@@ -9,6 +9,7 @@ import {
   sortedSlides,
 } from '../functions/src/editor/model';
 import { validateSlideInput } from '../functions/src/editor/validation';
+import { requestedPreflightRepair } from '../functions/src/editor/repair';
 
 function slideInput(overrides: Record<string, unknown> = {}) {
   return {
@@ -139,6 +140,17 @@ describe('quiz editor lossless model', () => {
   test('rejects a stale quiz revision', () => {
     expect(() => assertRevision({ revision: 8 }, 7)).toThrow(QuizEditorError);
     expect(() => assertRevision({ revision: 8 }, 7)).toThrow('another editor');
+  });
+
+  test('accepts only narrow repair request shapes', () => {
+    expect(requestedPreflightRepair({
+      quizId: 'quiz', slideId: 'slide', expectedRevision: 2,
+      kind: 'choice-answer', optionIndex: 5,
+    })).toEqual({ kind: 'choice-answer', optionIndex: 5 });
+    expect(requestedPreflightRepair({
+      quizId: 'quiz', slideId: 'slide', expectedRevision: 2,
+      kind: 'video-timing', clipStartSeconds: 1.5, clipEndSeconds: 7,
+    })).toEqual({ kind: 'video-timing', clipStartSeconds: 1.5, clipEndSeconds: 7 });
   });
 });
 

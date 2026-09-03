@@ -302,6 +302,55 @@ function writePreflightQuiz(batch: WriteBatch, quizId: string, state: 'ready' | 
   });
 }
 
+function writeRepairFlowQuiz(batch: WriteBatch, quizId: string): void {
+  const db = getFirestore();
+  const quizRef = db.collection('quizzes').doc(quizId);
+  const timestamp = Timestamp.fromDate(new Date('2026-09-03T08:00:00.000Z'));
+  const slides = [
+    {
+      id: 'slide-001', kind: 'round', isQuestion: false, title: 'Syntetické repair kolo', text: '',
+      options: [], correctAnswer: '', media: [], presentation: {},
+    },
+    {
+      id: 'slide-002', kind: 'question', isQuestion: true, title: '', text: 'Syntetická Choice otázka',
+      options: ['Syntetická možnost A', 'Syntetická možnost B', 'Syntetická možnost C', 'Syntetická možnost D', 'Syntetická možnost E'],
+      correctAnswer: 'Historická syntetická hodnota', media: [], presentation: {},
+    },
+    {
+      id: 'slide-003', kind: 'video', isQuestion: true, title: '', text: 'Syntetická Video otázka',
+      options: [], correctAnswer: 'Syntetická odpověď', media: [{ role: 'prompt', kind: 'video', value: 'abcdefghijk' }],
+      presentation: { videoStart: 8, videoEnd: 4 }, mediaSource: 'abcdefghijk', clipStartSeconds: 8, clipEndSeconds: 4,
+    },
+    {
+      id: 'slide-004', kind: 'recap', isQuestion: false, title: 'Rekapitulace', text: '',
+      options: [], correctAnswer: '', media: [], presentation: {},
+    },
+  ] as const;
+  batch.set(quizRef, {
+    title: 'Syntetický guided repair', description: 'Pouze lokální fixture.', status: 'ready', revision: 0,
+    createdAt: timestamp, updatedAt: timestamp, createdBy: seedActor, updatedBy: seedActor,
+    slideCount: slides.length, roundCount: 1, questionCount: 2,
+  });
+  slides.forEach((slide, index) => {
+    batch.set(quizRef.collection('slides').doc(slide.id), {
+      ...slide, position: index + 1, roundId: 'repair-round', roundTitle: 'Syntetické repair kolo',
+      legacy: { source: 'synthetic-emulator-seed', raw: { opaque: 'preserve-only' } },
+    });
+  });
+  const roundRef = quizRef.collection('rounds').doc('repair-round');
+  batch.set(roundRef, {
+    title: 'Syntetické repair kolo', type: 'classic', position: 1, slideCount: slides.length, questionCount: 2,
+  });
+  batch.set(roundRef.collection('questions').doc('slide-002'), {
+    type: 'text', prompt: 'Syntetická Choice otázka', options: slides[1].options,
+    correctAnswer: slides[1].correctAnswer, position: 1, sourceSlideId: 'slide-002',
+  });
+  batch.set(roundRef.collection('questions').doc('slide-003'), {
+    type: 'video', prompt: 'Syntetická Video otázka', correctAnswer: slides[2].correctAnswer,
+    position: 2, sourceSlideId: 'slide-003',
+  });
+}
+
 async function clearLiveFlowFixture(db: Firestore, quizId: string): Promise<void> {
   const quizRef = db.collection('quizzes').doc(quizId);
   const [rounds, slides] = await Promise.all([
@@ -328,6 +377,8 @@ async function seed(): Promise<void> {
     await clearLiveFlowFixture(db, 'preflight-ready-e2e');
     await clearLiveFlowFixture(db, 'preflight-warning-e2e');
     await clearLiveFlowFixture(db, 'preflight-blocked-e2e');
+    await clearLiveFlowFixture(db, 'preflight-repair-flow-e2e');
+    await clearLiveFlowFixture(db, 'preflight-repair-readonly-e2e');
     const batch = db.batch();
     for (const quiz of quizzes) {
       writeQuiz(batch, quiz);
@@ -339,8 +390,10 @@ async function seed(): Promise<void> {
     writePreflightQuiz(batch, 'preflight-ready-e2e', 'ready');
     writePreflightQuiz(batch, 'preflight-warning-e2e', 'warning');
     writePreflightQuiz(batch, 'preflight-blocked-e2e', 'blocked');
+    writeRepairFlowQuiz(batch, 'preflight-repair-flow-e2e');
+    writeRepairFlowQuiz(batch, 'preflight-repair-readonly-e2e');
     await batch.commit();
-    console.log(`Seeded ${quizzes.length} library quizzes and 7 isolated E2E fixtures into ${projectId}.`);
+    console.log(`Seeded ${quizzes.length} library quizzes and 9 isolated E2E fixtures into ${projectId}.`);
   } finally {
     await deleteApp(app);
   }

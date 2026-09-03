@@ -78,6 +78,12 @@ async function run() {
     () => invoke('updateQuizMetadata', { quizId, expectedRevision: 0, quiz: { title: 'Denied', description: '' } }),
     'functions/unauthenticated',
   );
+  await expectFunctionError(
+    () => invoke('repairQuizPreflightIssue', {
+      quizId, slideId: 'slide-002', expectedRevision: 0, kind: 'choice-answer', optionIndex: 0,
+    }),
+    'functions/unauthenticated',
+  );
 
   await signInWithEmailAndPassword(auth, 'user@example.test', 'LocalQuiz123!');
   await expectFunctionError(
@@ -91,6 +97,12 @@ async function run() {
   assert.equal((await getDoc(slideRef('slide-002'))).exists(), true);
   await expectFunctionError(
     () => invoke('updateQuizSlide', { quizId, slideId: 'slide-002', expectedRevision: 0, slide: editorSlide() }),
+    'functions/permission-denied',
+  );
+  await expectFunctionError(
+    () => invoke('repairQuizPreflightIssue', {
+      quizId, slideId: 'slide-002', expectedRevision: 0, kind: 'choice-answer', optionIndex: 0,
+    }),
     'functions/permission-denied',
   );
   await signOut(auth);
@@ -245,11 +257,57 @@ async function run() {
   assert.equal((await getDoc(doc(db, 'quizzes', quizId, 'rounds', roundHeader.roundId))).exists(), false);
   assert.equal((await getDoc(slideRef('slide-002'))).data().roundId, 'live-round');
 
+  await expectFunctionError(
+    () => invoke('repairQuizPreflightIssue', {
+      quizId, slideId: 'slide-002', expectedRevision: 15, kind: 'choice-answer', optionIndex: 99,
+    }),
+    'functions/invalid-argument',
+  );
+  const beforeRepair = (await getDoc(slideRef('slide-002'))).data();
+  const selectedStoredOption = beforeRepair.options[4];
+  const repairedChoice = await invoke('repairQuizPreflightIssue', {
+    quizId, slideId: 'slide-002', expectedRevision: 15, kind: 'choice-answer', optionIndex: 4,
+  });
+  assert.equal(repairedChoice.revision, 16);
+  assert.equal(JSON.stringify(repairedChoice).includes(selectedStoredOption), false);
+  assert.equal(Object.hasOwn(repairedChoice, 'correctAnswer'), false);
+  const afterChoiceRepair = (await getDoc(slideRef('slide-002'))).data();
+  assert.equal(afterChoiceRepair.correctAnswer, selectedStoredOption);
+  assert.deepEqual(afterChoiceRepair.legacy, originalLegacy);
+  assert.equal(
+    (await getDoc(doc(db, 'quizzes', quizId, 'rounds', 'live-round', 'questions', 'slide-002'))).data().correctAnswer,
+    selectedStoredOption,
+  );
+  await expectFunctionError(
+    () => invoke('repairQuizPreflightIssue', {
+      quizId, slideId: 'slide-002', expectedRevision: 15, kind: 'choice-answer', optionIndex: 0,
+    }),
+    'functions/aborted',
+  );
+  await expectFunctionError(
+    () => invoke('repairQuizPreflightIssue', {
+      quizId, slideId: createdQuestion.selectedSlideId, expectedRevision: 16, kind: 'video-timing',
+      clipStartSeconds: 12, clipEndSeconds: 12,
+    }),
+    'functions/invalid-argument',
+  );
+  const repairedTiming = await invoke('repairQuizPreflightIssue', {
+    quizId, slideId: createdQuestion.selectedSlideId, expectedRevision: 16, kind: 'video-timing',
+    clipStartSeconds: 4.5, clipEndSeconds: 11,
+  });
+  assert.equal(repairedTiming.revision, 17);
+  assert.equal(Object.hasOwn(repairedTiming, 'clipStartSeconds'), false);
+  const repairedVideoSlide = (await getDoc(slideRef(createdQuestion.selectedSlideId))).data();
+  assert.deepEqual(
+    { clipStartSeconds: repairedVideoSlide.clipStartSeconds, clipEndSeconds: repairedVideoSlide.clipEndSeconds },
+    { clipStartSeconds: 4.5, clipEndSeconds: 11 },
+  );
+
   const finalQuiz = (await getDoc(quizRef)).data();
   const finalOrderedSlides = await orderedSlides();
   assert.equal(finalQuiz.slideCount, finalOrderedSlides.length);
   assert.deepEqual(finalOrderedSlides.map((slide) => slide.data().position), Array.from({ length: finalOrderedSlides.length }, (_, index) => index + 1));
-  assert.equal(finalQuiz.revision, 15);
+  assert.equal(finalQuiz.revision, 17);
   assert.equal((await getDoc(doc(db, 'publicSessions', 'quiz-editor-e2e'))).exists(), false);
 
   globalThis.console.log(JSON.stringify({
@@ -257,6 +315,8 @@ async function run() {
     directWritesDenied: true, staleAndConcurrentWritesVerified: true,
     legacyRoundTripPreserved: true, orderedCrudVerified: true,
     implicitRoundCreatedAndCleaned: true, semanticRoundAndQuestionOperationsVerified: true,
+    guidedChoiceAndTimingRepairVerified: true, repairAuthorizationAndStaleRevisionVerified: true,
+    repairResponseSanitized: true,
     safeRoundRemovalModesVerified: true, publicSessionUntouched: true,
   }, null, 2));
 }
