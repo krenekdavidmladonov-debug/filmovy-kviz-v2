@@ -41,6 +41,8 @@ export {
   updateEvent,
 } from './events/callables.js';
 
+export { generatePrintArtifact } from './print/endpoint.js';
+
 /** Minimal endpoint that does not initialize Admin SDK or access data. */
 export const health = onRequest(
   {
