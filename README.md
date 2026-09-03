@@ -2,7 +2,18 @@
 
 [![CI](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/actions/workflows/ci.yml)
 
-Clean replacement for the Filmový Kvíz application. The current foundation includes a React web client, Firebase Functions, emulator-only staff authentication, tested Firestore authorization rules, routing, and architecture documentation. Quiz behavior is intentionally not implemented yet.
+Clean replacement for the Filmový Kvíz application. The current foundation includes a React web client, trusted Firebase Functions, emulator-only staff authentication, tested Firestore authorization rules, a live/projector foundation, and a lossless round-first quiz editor for migrated V1 content.
+
+## RYCHLÉ SPUŠTĚNÍ PRO HUMAN QA
+
+Windows:
+
+1. Dvakrát klikněte na `START_LOCAL_QA.cmd` v rootu projektu.
+2. Počkejte, až se automaticky otevře `http://localhost:5173/admin/login`.
+3. Přihlaste se jako `admin@example.test` s heslem `LocalQuiz123!`.
+4. Po testování dvakrát klikněte na `STOP_LOCAL_QA.cmd`.
+
+Launcher sám najde podporovaný Node.js, pnpm a Javu, ověří porty, spustí pouze projekt `demo-filmovy-kviz-v2`, počká na emulátory, provede idempotentní seed a spustí Vite. Nemění uživatelský ani systémový `PATH`. Pokud některý předpoklad nebo bezpečnostní kontrola selže, nic dalšího nespustí a zobrazí lidskou chybu. Podrobnosti a řešení problémů jsou v [lokálním QA návodu](docs/LOCAL_QA.md).
 
 ## Requirements
 
@@ -32,8 +43,10 @@ The application is available at `http://localhost:5173`. Administrative routes:
 - `/admin` — protected staff dashboard
 - `/admin/quizzes` — read-only quiz library
 - `/admin/quizzes/:quizId` — read-only rounds and questions
+- `/admin/quizzes/:quizId/edit` — focused round-first editor; admin write and moderator read-only
+- `/admin/live/:sessionId` — authenticated moderator live control
 - `/admin/no-access` — authenticated account without a staff role
-- `/projector` — public projector placeholder
+- `/projector/:sessionId` — public read-only sanitized projector
 - `/events` — public events placeholder
 
 The seed is idempotent and creates only local Authentication Emulator users:
@@ -83,6 +96,15 @@ firebase.json         Hosting, Functions, rules, and emulator configuration
 firestore.rules       Deny-by-default Firestore rules
 storage.rules         Deny-by-default Storage rules
 ```
+
+## Documentation
+
+Start with [docs/README.md](docs/README.md). The round-first editor documentation is split by audience:
+
+- [editor contract](docs/QUIZ_EDITOR.md);
+- [user guide](docs/ROUND_FIRST_EDITOR_USER_GUIDE.md);
+- [developer guide](docs/ROUND_FIRST_EDITOR_DEVELOPER_GUIDE.md);
+- [testing and local operations](docs/ROUND_FIRST_EDITOR_TESTING.md).
 
 ## Important safety boundary
 

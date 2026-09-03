@@ -1,40 +1,52 @@
 import { httpsCallable } from 'firebase/functions';
 
 import { getFirebaseServices } from '../../services/firebase/client';
+import type { MediaPlaybackState } from '../presentation/types';
 import type { LiveActionResponse } from './types';
 
-function callable(name: string) {
-  return httpsCallable<Record<string, unknown>, LiveActionResponse>(getFirebaseServices().functions, name);
+async function invoke(name: string, data: Record<string, unknown>): Promise<LiveActionResponse> {
+  const callable = httpsCallable<Record<string, unknown>, LiveActionResponse>(getFirebaseServices().functions, name);
+  return (await callable(data)).data;
 }
 
-export async function createLiveSession(quizId: string): Promise<LiveActionResponse> {
-  return (await callable('createLiveSession')({ quizId })).data;
+export function createLiveSession(quizId: string): Promise<LiveActionResponse> {
+  return invoke('createLiveSession', { quizId });
 }
 
-async function mutate(
-  name: string,
+function revisionAction(name: string) {
+  return (sessionId: string, expectedRevision: number) => invoke(name, { sessionId, expectedRevision });
+}
+
+export const nextSlide = revisionAction('nextSlide');
+export const previousSlide = revisionAction('previousSlide');
+export const revealAnswer = revisionAction('revealAnswer');
+export const hideAnswer = revisionAction('hideAnswer');
+export const playMedia = revisionAction('playMedia');
+export const stopMedia = revisionAction('stopMedia');
+export const replayMedia = revisionAction('replayMedia');
+export const startIntro = revisionAction('startIntro');
+export const endLiveSession = revisionAction('endLiveSession');
+
+export function goToSlide(sessionId: string, expectedRevision: number, position: number): Promise<LiveActionResponse> {
+  return invoke('goToSlide', { sessionId, expectedRevision, position });
+}
+
+export function selectRecapQuestion(sessionId: string, expectedRevision: number, position: number): Promise<LiveActionResponse> {
+  return invoke('selectRecapQuestion', { sessionId, expectedRevision, position });
+}
+
+export function finishMedia(
   sessionId: string,
   expectedRevision: number,
-  extra: Record<string, unknown> = {},
+  mediaGeneration: number,
 ): Promise<LiveActionResponse> {
-  return (await callable(name)({ sessionId, expectedRevision, ...extra })).data;
+  return invoke('finishMedia', { sessionId, expectedRevision, mediaGeneration });
 }
 
-export const nextSlide = (sessionId: string, expectedRevision: number) => (
-  mutate('nextSlide', sessionId, expectedRevision)
-);
-export const previousSlide = (sessionId: string, expectedRevision: number) => (
-  mutate('previousSlide', sessionId, expectedRevision)
-);
-export const revealAnswer = (sessionId: string, expectedRevision: number) => (
-  mutate('revealAnswer', sessionId, expectedRevision)
-);
-export const hideAnswer = (sessionId: string, expectedRevision: number) => (
-  mutate('hideAnswer', sessionId, expectedRevision)
-);
-export const endLiveSession = (sessionId: string, expectedRevision: number) => (
-  mutate('endLiveSession', sessionId, expectedRevision)
-);
-export const goToSlide = (sessionId: string, expectedRevision: number, position: number) => (
-  mutate('goToSlide', sessionId, expectedRevision, { position })
-);
+export function reportMediaPlayback(
+  sessionId: string,
+  mediaGeneration: number,
+  playbackState: Extract<MediaPlaybackState, 'ready' | 'playing' | 'error' | 'finished'>,
+): Promise<LiveActionResponse> {
+  return invoke('reportMediaPlayback', { sessionId, mediaGeneration, playbackState });
+}

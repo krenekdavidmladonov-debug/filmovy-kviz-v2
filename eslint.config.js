@@ -3,7 +3,19 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/lib/**', '**/node_modules/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/lib/**',
+      '**/node_modules/**',
+      '.tools/**',
+      '.local-data/**',
+      '.firebase/**',
+      'coverage/**',
+      'playwright-report/**',
+      'test-results/**',
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
@@ -41,13 +53,31 @@ export default tseslint.config(
     },
   },
   {
-    files: ['tests/**/*.ts', 'tools/migration-v1/test/**/*.ts', 'vitest.config.ts', 'vitest.rules.config.ts'],
+    files: ['tests/**/*.{ts,tsx}', 'tools/migration-v1/test/**/*.ts', 'tools/event-night/**/*.ts', 'playwright.config.ts', 'vitest.config.ts', 'vitest.rules.config.ts'],
     languageOptions: {
-      globals: globals.node,
+      globals: { ...globals.node, ...globals.browser },
       parserOptions: {
         project: './tsconfig.tests.json',
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+  },
+  {
+    files: ['tools/**/*.mjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ['tests/**/*.mjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    files: ['tests/**/*.tsx'],
+    rules: {
+      '@typescript-eslint/require-await': 'off',
     },
   },
 );

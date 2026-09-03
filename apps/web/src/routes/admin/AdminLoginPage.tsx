@@ -1,11 +1,19 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
 import { getCzechAuthError } from '../../auth/authErrors';
+import { productConfig } from '../../config/product';
 import { AdminLoading } from './AdminLoading';
 
+export function safeAdminReturnPath(state: unknown): string {
+  if (typeof state !== 'object' || state === null || !('from' in state)) return '/admin';
+  const from: unknown = state.from;
+  return typeof from === 'string' && from.startsWith('/admin/') && !from.startsWith('//') ? from : '/admin';
+}
+
 export function AdminLoginPage() {
+  const location = useLocation();
   const { currentUser, role, loading, initializationError, signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,8 +24,10 @@ export function AdminLoginPage() {
     return <AdminLoading />;
   }
 
+  const requestedPath = safeAdminReturnPath(location.state as unknown);
+
   if (currentUser) {
-    return <Navigate to={role ? '/admin' : '/admin/no-access'} replace />;
+    return <Navigate to={role ? requestedPath : '/admin/no-access'} replace />;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -40,16 +50,16 @@ export function AdminLoginPage() {
         <p className="eyebrow">Soukromá část</p>
         <h1>Přihlášení do administrace</h1>
         <p className="lead">
-          Přístup je určen pouze administrátorům a moderátorům filmového kvízu.
+          Přístup je určen pouze administrátorům a moderátorům kvízové platformy.
         </p>
       </div>
 
       <form className="login-card" onSubmit={(event) => void handleSubmit(event)}>
         <div className="login-card-heading">
-          <span className="secure-badge" aria-hidden="true">FK</span>
+          <span className="secure-badge" aria-hidden="true">{productConfig.shortName}</span>
           <div>
             <h2>Vítejte zpět</h2>
-            <p>Přihlaste se testovacím účtem z lokálního emulátoru.</p>
+            <p>Přihlaste se svým pracovním účtem.</p>
           </div>
         </div>
 
@@ -86,8 +96,6 @@ export function AdminLoginPage() {
         <button className="primary-button" type="submit" disabled={submitting || Boolean(initializationError)}>
           {submitting ? 'Přihlašuji…' : 'Přihlásit se'}
         </button>
-
-        <p className="form-note">Pouze lokální vývoj · Firebase Authentication Emulator</p>
       </form>
     </section>
   );

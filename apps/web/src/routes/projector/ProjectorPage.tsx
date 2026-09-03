@@ -1,82 +1,61 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
+import { productConfig } from '../../config/product';
+import {
+  broadcastPlaybackState,
+  openProjectorChannel,
+  parseProjectorChannelMessage,
+  shouldAcceptProjectorFastPath,
+  type ProjectorChannel,
+} from '../../features/live/projectorChannel';
 import { subscribePublicLiveState } from '../../features/live/liveRepository';
-import type { PublicLiveState, PublicMedia } from '../../features/live/types';
+import { projectorFullscreenFailureMessage, requestProjectorFullscreen } from '../../features/live/projectorWindow';
+import type { PublicLiveState } from '../../features/live/types';
+import { SlideRenderer } from '../../features/presentation/SlideRenderer';
 
-function safeHttpUrl(value: string): string | undefined {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function MediaItem({ media }: { readonly media: PublicMedia }) {
-  const url = safeHttpUrl(media.source);
-  if (media.kind === 'image' && url) {
-    return <img className="projector-image" src={url} alt="Médium k otázce" />;
-  }
+function ProjectorMessage({ title, text, quizTitle, error = false }: {
+  readonly title: string; readonly text?: string; readonly quizTitle?: string; readonly error?: boolean;
+}) {
   return (
-    <div className={`projector-media media-${media.kind}`}>
-      <strong>{media.kind === 'audio' ? 'Audio' : media.kind === 'video' ? 'Video' : 'Médium'}</strong>
-      {url ? <a href={url} target="_blank" rel="noreferrer">Otevřít bezpečný zdroj</a> : <span>{media.source}</span>}
-    </div>
+    <article className={`projector-message-canvas${error ? ' is-error' : ''}`}>
+      <div><p className="slide-kicker">{quizTitle ?? productConfig.name}</p><h1>{title}</h1>{text && <p>{text}</p>}</div>
+    </article>
   );
 }
 
-function ProjectorState({ state }: { readonly state: PublicLiveState }) {
-  if (state.status === 'waiting') {
-    return (
-      <section className="projector-stage projector-message">
-        <p className="eyebrow">{state.quizTitle}</p>
-        <h1>Čekáme na první slide</h1>
-        <p>Moderátor kvíz připravuje.</p>
-      </section>
-    );
-  }
-
-  if (state.status === 'ended') {
-    return (
-      <section className="projector-stage projector-message">
-        <p className="eyebrow">{state.quizTitle}</p>
-        <h1>Kvíz skončil</h1>
-        <p>Děkujeme za účast.</p>
-      </section>
-    );
-  }
-
-  const isLegacy = state.slideKind === 'pl' || state.slideKind === 'legacy';
+function ProjectorState({ state, onMediaFinished, onMediaPlaybackState }: {
+  readonly state: PublicLiveState;
+  readonly onMediaFinished: (generation: number) => void;
+  readonly onMediaPlaybackState: (generation: number, state: 'ready' | 'playing' | 'error') => void;
+}) {
+  if (state.status === 'waiting') return <ProjectorMessage quizTitle={state.quizTitle} title="Čekáme na první slide" text="Moderátor kvíz připravuje." />;
+  if (state.status === 'ended') return <ProjectorMessage quizTitle={state.quizTitle} title="Kvíz skončil" text="Děkujeme za účast." />;
   return (
-    <article className="projector-stage">
-      <header className="projector-meta">
-        <span>Slide {state.slidePosition}</span>
-        <span>{isLegacy ? 'Legacy slide' : state.slideKind}</span>
-      </header>
-      <p className="eyebrow">{state.quizTitle}</p>
-      <h1>{state.title || (isLegacy ? 'Legacy slide' : 'Filmový kvíz')}</h1>
-      {state.text && <p className="projector-prompt">{state.text}</p>}
-      {state.options.length > 0 && (
-        <ol className="projector-options">
-          {state.options.map((option, index) => <li key={`${index}-${option}`}>{option}</li>)}
-        </ol>
-      )}
-      {state.media.length > 0 && (
-        <div className="projector-media-grid">
-          {state.media.map((media, index) => <MediaItem key={`${media.role}-${media.source}-${index}`} media={media} />)}
-        </div>
-      )}
-      {state.answerRevealed && (
-        <section className="projector-answer" aria-live="polite">
-          <span>Správná odpověď</span>
-          <strong>{state.revealedAnswer}</strong>
-          {state.answerImage && safeHttpUrl(state.answerImage) && (
-            <img className="projector-image answer" src={state.answerImage} alt="Obrázek k odhalené odpovědi" />
-          )}
-        </section>
-      )}
-    </article>
+    <SlideRenderer
+      quizTitle={state.quizTitle}
+      mode={state.renderMode}
+      mediaCommand={state.mediaCommand}
+      mediaPlaybackState={state.mediaPlaybackState}
+      mediaGeneration={state.mediaGeneration}
+      introGeneration={state.introGeneration}
+      onMediaFinished={onMediaFinished}
+      onMediaPlaybackState={(generation, playbackState) => onMediaPlaybackState(generation, playbackState)}
+      slide={{
+        kind: state.slideKind ?? 'legacy', title: state.title ?? '', text: state.text ?? '',
+        options: state.options, media: state.media, presentation: state.presentation,
+        ...(state.questionNumber === undefined ? {} : { questionNumber: state.questionNumber }),
+        ...(state.questionCount === undefined ? {} : { questionCount: state.questionCount }),
+        ...(state.backgroundImage === undefined ? {} : { backgroundImage: state.backgroundImage }),
+        ...(state.questionImage === undefined ? {} : { questionImage: state.questionImage }),
+        ...(state.answerImage === undefined ? {} : { answerImage: state.answerImage }),
+        ...(state.mediaSource === undefined ? {} : { mediaSource: state.mediaSource }),
+        ...(state.backgroundOverlay === undefined ? {} : { backgroundOverlay: state.backgroundOverlay }),
+        ...(state.clipStartSeconds === undefined ? {} : { clipStartSeconds: state.clipStartSeconds }),
+        ...(state.clipEndSeconds === undefined ? {} : { clipEndSeconds: state.clipEndSeconds }),
+        ...(state.revealedAnswer === undefined ? {} : { revealedAnswer: state.revealedAnswer }),
+      }}
+    />
   );
 }
 
@@ -85,39 +64,118 @@ export function ProjectorPage() {
   const [state, setState] = useState<PublicLiveState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fullscreenNotice, setFullscreenNotice] = useState<string | null>(null);
+  const stateRef = useRef<PublicLiveState | null>(null);
+  const authoritativeStateRef = useRef<PublicLiveState | null>(null);
+  const authoritativeRevisionRef = useRef(-1);
+  const fastPathRollbackRef = useRef<number | undefined>(undefined);
+  const channelRef = useRef<ProjectorChannel | undefined>(undefined);
 
   useEffect(() => {
-    if (!sessionId) {
-      setLoading(false);
-      return;
-    }
+    if (!sessionId) { setLoading(false); return; }
     setLoading(true);
+    const channel = openProjectorChannel(sessionId);
+    channelRef.current = channel;
+    if (channel) {
+      channel.setMessageHandler((data) => {
+        const message = parseProjectorChannelMessage(data);
+        if (message?.type !== 'public-state') return;
+        const next = message.state;
+        if (!shouldAcceptProjectorFastPath(
+          sessionId,
+          authoritativeRevisionRef.current,
+          stateRef.current?.revision ?? -1,
+          next,
+        )) return;
+        if (fastPathRollbackRef.current !== undefined) window.clearTimeout(fastPathRollbackRef.current);
+        stateRef.current = next;
+        setState(next);
+        setError(null);
+        setLoading(false);
+        fastPathRollbackRef.current = window.setTimeout(() => {
+          const authoritative = authoritativeStateRef.current;
+          if (authoritative === null || authoritative.revision >= next.revision) return;
+          stateRef.current = authoritative;
+          setState(authoritative);
+          fastPathRollbackRef.current = undefined;
+        }, 1_500);
+      });
+    }
     const markOffline = () => {
+      if (fastPathRollbackRef.current !== undefined) window.clearTimeout(fastPathRollbackRef.current);
+      fastPathRollbackRef.current = undefined;
+      stateRef.current = null;
+      authoritativeStateRef.current = null;
+      authoritativeRevisionRef.current = -1;
       setState(null);
       setError('Projektor je offline; z bezpečnostních důvodů nezobrazuje uložený stav.');
       setLoading(false);
     };
     window.addEventListener('offline', markOffline);
     const unsubscribe = subscribePublicLiveState(sessionId, (value) => {
+      if (fastPathRollbackRef.current !== undefined) window.clearTimeout(fastPathRollbackRef.current);
+      fastPathRollbackRef.current = undefined;
+      authoritativeStateRef.current = value;
+      authoritativeRevisionRef.current = value?.revision ?? -1;
+      stateRef.current = value;
       setState(value);
       setError(null);
       setLoading(false);
     }, () => {
+      if (fastPathRollbackRef.current !== undefined) window.clearTimeout(fastPathRollbackRef.current);
+      fastPathRollbackRef.current = undefined;
+      stateRef.current = null;
+      authoritativeStateRef.current = null;
+      authoritativeRevisionRef.current = -1;
       setState(null);
       setError('Spojení s projektorem se nezdařilo. Zkontrolujte emulator a připojení.');
       setLoading(false);
     });
     return () => {
       window.removeEventListener('offline', markOffline);
+      if (fastPathRollbackRef.current !== undefined) window.clearTimeout(fastPathRollbackRef.current);
       unsubscribe();
+      channel?.close();
+      channelRef.current = undefined;
     };
   }, [sessionId]);
 
-  if (!sessionId) {
-    return <section className="projector-stage projector-message"><h1>Chybí session ID</h1><p>Otevřete odkaz vytvořený v moderátorském panelu.</p></section>;
-  }
-  if (loading) return <section className="projector-stage projector-message"><h1>Načítám projektor…</h1></section>;
-  if (error) return <section className="projector-stage projector-message error"><h1>Projektor není připojen</h1><p>{error}</p></section>;
-  if (!state) return <section className="projector-stage projector-message"><h1>Session nenalezena</h1><p>Zkontrolujte adresu projektoru.</p></section>;
-  return <ProjectorState state={state} />;
+  const enterFullscreen = useCallback(async () => {
+    const opened = await requestProjectorFullscreen();
+    setFullscreenNotice(opened ? null : projectorFullscreenFailureMessage);
+  }, []);
+
+  useEffect(() => {
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'f' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        void enterFullscreen();
+      }
+    };
+    window.addEventListener('keydown', keyboard);
+    return () => window.removeEventListener('keydown', keyboard);
+  }, [enterFullscreen]);
+
+  let content;
+  if (!sessionId) content = <ProjectorMessage title="Chybí session ID" text="Otevřete odkaz vytvořený v moderátorském panelu." />;
+  else if (loading) content = <ProjectorMessage title="Načítám projektor…" />;
+  else if (error) content = <ProjectorMessage error title="Projektor není připojen" text={error} />;
+  else if (!state) content = <ProjectorMessage title="Session nenalezena" text="Zkontrolujte adresu projektoru." />;
+  else content = (
+    <ProjectorState
+      state={state}
+      onMediaFinished={(generation) => broadcastPlaybackState(channelRef.current, state.sessionId, generation, 'finished')}
+      onMediaPlaybackState={(generation, playbackState) => broadcastPlaybackState(
+        channelRef.current, state.sessionId, generation, playbackState,
+      )}
+    />
+  );
+
+  return (
+    <main className="projector-shell">
+      <div className="projector-viewport">{content}</div>
+      {fullscreenNotice && <p className="projector-fullscreen-notice" role="status">{fullscreenNotice}</p>}
+      <button className="projector-fullscreen-button" onClick={() => void enterFullscreen()} title="Celá obrazovka (F)">Celá obrazovka · F</button>
+    </main>
+  );
 }

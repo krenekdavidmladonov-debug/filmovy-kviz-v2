@@ -12,8 +12,9 @@ function assertSafeEmulatorEnvironment(): string {
   const emulatorHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
   const projectId = process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT;
 
-  if (emulatorHost !== '127.0.0.1:9099' && emulatorHost !== 'localhost:9099') {
-    throw new Error('Refusing to seed: FIREBASE_AUTH_EMULATOR_HOST must point to local port 9099.');
+  const portMatch = /^(?:localhost|127\.0\.0\.1|\[::1\]):([1-9]\d{0,4})$/u.exec(emulatorHost ?? '');
+  if (portMatch === null || Number(portMatch[1]) > 65_535) {
+    throw new Error('Refusing to seed: FIREBASE_AUTH_EMULATOR_HOST must use localhost with an explicit port.');
   }
 
   if (!projectId?.startsWith('demo-')) {
