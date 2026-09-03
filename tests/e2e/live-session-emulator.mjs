@@ -18,18 +18,12 @@ import {
   getFunctions,
   httpsCallable,
 } from 'firebase/functions';
+import { requireFullEmulatorEnvironment } from '../../tools/local-emulator-environment.mjs';
 
-const projectId = globalThis.process.env.GCLOUD_PROJECT ?? globalThis.process.env.GOOGLE_CLOUD_PROJECT;
-if (!projectId?.startsWith('demo-')) throw new Error('E2E requires a demo-* project ID.');
-if (!['127.0.0.1:8080', 'localhost:8080'].includes(globalThis.process.env.FIRESTORE_EMULATOR_HOST)) {
-  throw new Error('E2E requires the local Firestore Emulator.');
-}
-if (!['127.0.0.1:9099', 'localhost:9099'].includes(globalThis.process.env.FIREBASE_AUTH_EMULATOR_HOST)) {
-  throw new Error('E2E requires the local Authentication Emulator.');
-}
-if (!['127.0.0.1:5001', 'localhost:5001'].includes(globalThis.process.env.FUNCTIONS_EMULATOR_HOST)) {
-  throw new Error('E2E requires the local Functions Emulator.');
-}
+const { projectId, authEndpoint, firestoreEndpoint, functionsEndpoint } = requireFullEmulatorEnvironment(
+  globalThis.process.env,
+  'Live session E2E',
+);
 
 const options = {
   apiKey: 'demo-api-key',
@@ -44,10 +38,10 @@ const staffDb = getFirestore(staffApp);
 const projectorDb = getFirestore(projectorApp);
 const functions = getFunctions(staffApp, 'europe-west1');
 
-connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-connectFirestoreEmulator(staffDb, '127.0.0.1', 8080);
-connectFirestoreEmulator(projectorDb, '127.0.0.1', 8080);
-connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+connectAuthEmulator(auth, `http://${authEndpoint.host}:${authEndpoint.port}`, { disableWarnings: true });
+connectFirestoreEmulator(staffDb, firestoreEndpoint.host, firestoreEndpoint.port);
+connectFirestoreEmulator(projectorDb, firestoreEndpoint.host, firestoreEndpoint.port);
+connectFunctionsEmulator(functions, functionsEndpoint.host, functionsEndpoint.port);
 
 const invoke = async (name, data) => (await httpsCallable(functions, name)(data)).data;
 
@@ -127,7 +121,7 @@ async function run() {
   control = await invoke('nextSlide', { sessionId, expectedRevision: control.revision });
   assert.equal(control.currentSlidePosition, 2);
   state = await publicState(sessionId);
-  assert.equal(state.slideKind, 'question');
+  assert.equal(state.slideKind, 'free');
   assertPublicSafe(state, false);
   assert.equal(JSON.stringify(state).includes('Syntetická odpověď'), false);
   assert.equal(JSON.stringify(state).includes('answer.jpg'), false);
@@ -192,6 +186,118 @@ async function run() {
   const adminSession = await invoke('createLiveSession', { quizId: 'live-session-e2e' });
   assert.equal(adminSession.status, 'waiting');
 
+  let foundationControl = await invoke('goToSlide', {
+    sessionId: adminSession.sessionId, position: 1, expectedRevision: adminSession.revision,
+  });
+  foundationControl = await invoke('startIntro', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  let foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.introGeneration, 1);
+  assertPublicSafe(foundationState, false);
+
+  foundationControl = await invoke('goToSlide', {
+    sessionId: adminSession.sessionId, position: 5, expectedRevision: foundationControl.revision,
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.slideKind, 'audio');
+  assert.equal(Object.hasOwn(foundationState, 'mediaSource'), false, 'Normal audio must not publish its source.');
+  assert.equal(JSON.stringify(foundationState.media).includes('erroraudio1'), false);
+  foundationControl = await invoke('playMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  assert.equal(foundationControl.mediaCommand, 'play');
+  assert.equal(foundationControl.mediaPlaybackState, 'preparing');
+  foundationControl = await invoke('reportMediaPlayback', {
+    sessionId: adminSession.sessionId, mediaGeneration: foundationControl.mediaGeneration, playbackState: 'ready',
+  });
+  assert.equal(foundationControl.mediaPlaybackState, 'ready');
+  foundationControl = await invoke('reportMediaPlayback', {
+    sessionId: adminSession.sessionId, mediaGeneration: foundationControl.mediaGeneration, playbackState: 'playing',
+  });
+  assert.equal(foundationControl.mediaPlaybackState, 'playing');
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.mediaPlaybackState, 'playing');
+  foundationControl = await invoke('reportMediaPlayback', {
+    sessionId: adminSession.sessionId, mediaGeneration: foundationControl.mediaGeneration, playbackState: 'error',
+  });
+  assert.equal(foundationControl.mediaCommand, 'error');
+  assert.equal(foundationControl.mediaPlaybackState, 'error');
+  foundationControl = await invoke('replayMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  assert.equal(foundationControl.mediaPlaybackState, 'preparing');
+  foundationControl = await invoke('stopMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  assert.equal(foundationControl.mediaCommand, 'stop');
+  assert.equal(foundationControl.mediaPlaybackState, 'idle');
+
+  foundationControl = await invoke('goToSlide', {
+    sessionId: adminSession.sessionId, position: 6, expectedRevision: foundationControl.revision,
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.slideKind, 'video');
+  assert.equal(foundationState.mediaSource, 'errorvideo1');
+  foundationControl = await invoke('playMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  assert.equal(foundationControl.mediaPlaybackState, 'preparing');
+  foundationControl = await invoke('reportMediaPlayback', {
+    sessionId: adminSession.sessionId, mediaGeneration: foundationControl.mediaGeneration, playbackState: 'error',
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.mediaCommand, 'error');
+  assert.equal(foundationState.mediaPlaybackState, 'error');
+  foundationControl = await invoke('replayMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  foundationControl = await invoke('stopMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+
+  foundationControl = await invoke('goToSlide', {
+    sessionId: adminSession.sessionId, position: 7, expectedRevision: foundationControl.revision,
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.presentationMode, 'recap');
+  assert.equal(foundationState.renderMode, 'recap');
+  assertPublicSafe(foundationState, false);
+
+  foundationControl = await invoke('selectRecapQuestion', {
+    sessionId: adminSession.sessionId, position: 6, expectedRevision: foundationControl.revision,
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assertPublicSafe(foundationState, true);
+  assert.equal(foundationState.revealedAnswer, 'Video');
+  assert.equal(foundationState.mediaSource, 'errorvideo1');
+  foundationControl = await invoke('playMedia', {
+    sessionId: adminSession.sessionId, expectedRevision: foundationControl.revision,
+  });
+  const playingGeneration = foundationControl.mediaGeneration;
+  await expectFunctionError(
+    () => invoke('finishMedia', {
+      sessionId: adminSession.sessionId,
+      expectedRevision: foundationControl.revision,
+      mediaGeneration: playingGeneration - 1,
+    }),
+    'functions/aborted',
+  );
+  foundationControl = await invoke('finishMedia', {
+    sessionId: adminSession.sessionId,
+    expectedRevision: foundationControl.revision,
+    mediaGeneration: playingGeneration,
+  });
+  assert.equal(foundationControl.mediaCommand, 'finished');
+
+  foundationControl = await invoke('selectRecapQuestion', {
+    sessionId: adminSession.sessionId, position: 2, expectedRevision: foundationControl.revision,
+  });
+  foundationState = await publicState(adminSession.sessionId);
+  assert.equal(foundationState.revealedAnswer, 'Syntetická odpověď');
+  assert.equal(JSON.stringify(foundationState).includes('https://example.test/video'), false, 'Previous recap media must be replaced.');
+  assertPublicSafe(foundationState, true);
+
   await signOut(auth);
   await signInWithEmailAndPassword(auth, 'user@example.test', 'LocalQuiz123!');
   await assert.rejects(getDoc(doc(staffDb, 'sessions', adminSession.sessionId)), /permission-denied/u);
@@ -203,6 +309,10 @@ async function run() {
     normalUserDenied: true,
     answerLeakBeforeReveal: false,
     staleAndConcurrentOperationsVerified: true,
+    normalAudioSourceWithheld: true,
+    mediaGenerationVerified: true,
+    actualPlaybackStateVerified: true,
+    recapArbitrarySelectionVerified: true,
     endedStateVerified: true,
   }, null, 2));
 }

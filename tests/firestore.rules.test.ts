@@ -17,6 +17,11 @@ const privateSlidePath = `${privateQuizPath}/slides/security-test-slide`;
 const privateQuestionPath = `${privateRoundPath}/questions/security-test-question`;
 const privateSessionPath = 'sessions/security-test-session';
 const publicSessionPath = 'publicSessions/security-test-session';
+const privateEventPath = 'events/security-test-event';
+const privateEventChildPath = `${privateEventPath}/future/private-child`;
+const privateSnapshotPath = 'quizSnapshots/security-test-snapshot';
+const privateSnapshotSlidePath = `${privateSnapshotPath}/slides/security-test-slide`;
+const publicEventPath = 'publicEvents/security-test-event';
 
 let testEnvironment: RulesTestEnvironment;
 
@@ -62,6 +67,19 @@ beforeEach(async () => {
       answerRevealed: false,
       title: 'Public prompt',
     });
+    await setDoc(doc(context.firestore(), privateEventPath), {
+      title: 'Private event', revision: 1, lifecycleStatus: 'scheduled',
+    });
+    await setDoc(doc(context.firestore(), privateEventChildPath), { secret: true });
+    await setDoc(doc(context.firestore(), privateSnapshotPath), {
+      quizId: 'security-test-quiz', quizRevision: 1,
+    });
+    await setDoc(doc(context.firestore(), privateSnapshotSlidePath), {
+      correctAnswer: 'Private snapshot answer',
+    });
+    await setDoc(doc(context.firestore(), publicEventPath), {
+      title: 'Public event', registrationStatus: 'scheduled',
+    });
   });
 });
 
@@ -80,6 +98,9 @@ describe('anonymous user', () => {
     await assertFails(getDoc(doc(db, privateSlidePath)));
     await assertFails(getDoc(doc(db, privateQuestionPath)));
     await assertFails(getDoc(doc(db, privateSessionPath)));
+    await assertFails(getDoc(doc(db, privateEventPath)));
+    await assertFails(getDoc(doc(db, privateSnapshotPath)));
+    await assertFails(getDoc(doc(db, privateSnapshotSlidePath)));
   });
 
   test('cannot write private data', async () => {
@@ -94,6 +115,18 @@ describe('anonymous user', () => {
     await assertFails(getDocs(collection(db, 'publicSessions')));
     await assertFails(setDoc(doc(db, publicSessionPath), { answerRevealed: true }));
   });
+
+  test('can read and query public events but cannot write them', async () => {
+    const db = testEnvironment.unauthenticatedContext().firestore();
+    await assertSucceeds(getDoc(doc(db, publicEventPath)));
+    await assertSucceeds(getDocs(collection(db, 'publicEvents')));
+    await assertFails(setDoc(doc(db, publicEventPath), { title: 'Forged' }));
+  });
+
+  test('cannot read unknown private event subpaths', async () => {
+    const db = testEnvironment.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(db, privateEventChildPath)));
+  });
 });
 
 describe('authenticated user without a role', () => {
@@ -102,6 +135,8 @@ describe('authenticated user without a role', () => {
     await assertFails(getDoc(doc(db, privateQuizPath)));
     await assertFails(getDoc(doc(db, privateSlidePath)));
     await assertFails(getDoc(doc(db, privateSessionPath)));
+    await assertFails(getDoc(doc(db, privateEventPath)));
+    await assertFails(getDoc(doc(db, privateSnapshotPath)));
   });
 
   test('cannot write private data', async () => {
@@ -155,6 +190,18 @@ describe('moderator', () => {
       .firestore();
     await assertFails(setDoc(doc(db, 'quizzes/moderator-write'), { title: 'Denied' }));
   });
+
+  test('can read an event root and private snapshot but cannot write or read unknown event children', async () => {
+    const db = testEnvironment
+      .authenticatedContext('moderator-user', { role: 'moderator' })
+      .firestore();
+    await assertSucceeds(getDoc(doc(db, privateEventPath)));
+    await assertSucceeds(getDoc(doc(db, privateSnapshotPath)));
+    await assertSucceeds(getDoc(doc(db, privateSnapshotSlidePath)));
+    await assertFails(setDoc(doc(db, privateEventPath), { title: 'Denied' }));
+    await assertFails(setDoc(doc(db, privateSnapshotPath), { quizId: 'forged' }));
+    await assertFails(getDoc(doc(db, privateEventChildPath)));
+  });
 });
 
 describe('admin', () => {
@@ -173,11 +220,24 @@ describe('admin', () => {
     await assertFails(setDoc(doc(db, privateSessionPath), { status: 'ended' }));
   });
 
-  test('cannot write a quiz in the read-only phase', async () => {
+  test('cannot bypass trusted editor Functions with a direct quiz write', async () => {
     const db = testEnvironment
       .authenticatedContext('admin-user', { role: 'admin' })
       .firestore();
     await assertFails(setDoc(doc(db, 'quizzes/admin-write'), { title: 'Denied' }));
+  });
+
+  test('can read event and snapshot data but cannot directly mutate authoritative event paths', async () => {
+    const db = testEnvironment
+      .authenticatedContext('admin-user', { role: 'admin' })
+      .firestore();
+    await assertSucceeds(getDoc(doc(db, privateEventPath)));
+    await assertSucceeds(getDoc(doc(db, privateSnapshotPath)));
+    await assertSucceeds(getDoc(doc(db, privateSnapshotSlidePath)));
+    await assertFails(setDoc(doc(db, privateEventPath), { title: 'Bypass' }));
+    await assertFails(setDoc(doc(db, privateEventChildPath), { secret: false }));
+    await assertFails(setDoc(doc(db, privateSnapshotSlidePath), { correctAnswer: 'Bypass' }));
+    await assertFails(setDoc(doc(db, publicEventPath), { title: 'Bypass' }));
   });
 });
 

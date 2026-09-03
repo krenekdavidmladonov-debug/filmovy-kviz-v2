@@ -1,0 +1,43 @@
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+
+import { createEvent, eventActionError } from '../../features/events/eventApi';
+import { EventForm } from '../../features/events/EventForm';
+import type { EventFormValues } from '../../features/events/types';
+import { useAuth } from '../../auth/AuthProvider';
+
+const initialValues: EventFormValues = {
+  title: '', startsAt: '', timeZone: 'Europe/Prague', venueName: '', publicLocation: '',
+  teamCapacity: 20, peopleCapacity: 120, teamSizeMin: 2, teamSizeMax: 6,
+};
+
+export function AdminEventCreatePage() {
+  const { role } = useAuth();
+  const navigate = useNavigate();
+  const [values, setValues] = useState(initialValues);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      const result = await createEvent(values);
+      await navigate(`/admin/events/${result.eventId}`);
+    } catch (actionError) {
+      setError(eventActionError(actionError));
+    } finally {
+      setPending(false);
+    }
+  };
+  if (role !== 'admin') {
+    return <section className="quiz-state-card"><div><h2>Pouze pro administrátora</h2><p>Moderátor může akce prohlížet, ale nemůže měnit jejich konfiguraci.</p></div><Link className="secondary-link" to="/admin/events">Zpět na akce</Link></section>;
+  }
+  return (
+    <section className="event-editor-page">
+      <Link className="back-link" to="/admin/events">← Zpět na akce</Link>
+      <header className="event-page-heading"><p className="eyebrow">Nová akce</p><h1>Vytvořit akci</h1><p className="lead">Registrace zůstávají naplánované; tento krok vytváří pouze bezpečný základ akce.</p></header>
+      {error && <p className="round-editor-error" role="alert">{error}</p>}
+      <EventForm values={values} pending={pending} submitLabel="Vytvořit akci" onChange={setValues} onSubmit={() => void submit()} />
+    </section>
+  );
+}

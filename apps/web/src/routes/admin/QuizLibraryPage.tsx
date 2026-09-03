@@ -41,22 +41,20 @@ export function QuizLibraryPage() {
     <section className="quiz-library">
       <header className="section-heading">
         <div>
-          <p className="eyebrow">Administrace · Kvízy</p>
-          <h1>Knihovna kvízů</h1>
-          <p className="lead">Přehled připravených, rozpracovaných a archivovaných filmových kvízů.</p>
+          <p className="eyebrow">Administrace</p>
+          <h1>Kvízy</h1>
+          <p className="lead">Připravené, rozpracované a archivované kvízy na jednom místě.</p>
         </div>
-        <div className="section-summary" aria-label="Souhrn knihovny">
-          <strong>{quizzes.length}</strong>
-          <span>{quizzes.length === 1 ? 'kvíz' : quizzes.length < 5 ? 'kvízy' : 'kvízů'}</span>
-        </div>
+        <p className="section-count" aria-label="Souhrn knihovny">
+          {quizzes.length} {quizzes.length === 1 ? 'kvíz' : quizzes.length < 5 ? 'kvízy' : 'kvízů'}
+        </p>
       </header>
 
       {quizzes.length === 0 ? (
         <div className="quiz-state-card">
-          <span className="state-symbol" aria-hidden="true">0</span>
           <div>
-            <h2>Knihovna je prázdná</h2>
-            <p>Spusťte emulator-only seed příkaz a potom načtení zopakujte.</p>
+            <h2>Zatím tu nejsou žádné kvízy</h2>
+            <p>Jakmile bude kvíz vytvořený, objeví se v této knihovně.</p>
           </div>
           <button className="secondary-button" type="button" onClick={() => void loadQuizzes()}>
             Načíst znovu

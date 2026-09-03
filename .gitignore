@@ -21,6 +21,8 @@ ui-debug.log
 
 # Test and tool output
 coverage/
+playwright-report/
+test-results/
 .eslintcache
 
 # Editors and operating systems

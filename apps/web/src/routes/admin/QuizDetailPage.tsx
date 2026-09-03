@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
-import { createLiveSession } from '../../features/live/liveApi';
 import { QuizErrorState } from '../../features/quizzes/QuizErrorState';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
 import {
@@ -16,13 +15,10 @@ import type { QuizDetail } from '../../features/quizzes/types';
 
 export function QuizDetailPage() {
   const { quizId } = useParams<{ quizId: string }>();
-  const navigate = useNavigate();
   const [quiz, setQuiz] = useState<QuizDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
 
   const loadQuiz = useCallback(async () => {
     if (!quizId) {
@@ -49,20 +45,6 @@ export function QuizDetailPage() {
   useEffect(() => {
     void loadQuiz();
   }, [loadQuiz]);
-
-  async function startLiveQuiz() {
-    if (!quizId) return;
-    setStarting(true);
-    setStartError(null);
-    try {
-      const session = await createLiveSession(quizId);
-      void navigate(`/admin/live/${encodeURIComponent(session.sessionId)}`);
-    } catch {
-      setStartError('Live session se nepodařilo vytvořit. Kvíz musí mít ordered slides a Functions Emulator musí běžet.');
-    } finally {
-      setStarting(false);
-    }
-  }
 
   if (loading) {
     return <QuizLoading label="Načítám detail kvízu…" />;
@@ -102,12 +84,10 @@ export function QuizDetailPage() {
           <dl className="quiz-metrics">
             <div><dt>Kola</dt><dd>{quiz.roundCount}</dd></div>
             <div><dt>Otázky</dt><dd>{quiz.questionCount}</dd></div>
-            <div><dt>Aktualizoval</dt><dd>{quiz.updatedBy}</dd></div>
           </dl>
-          <button className="primary-button" disabled={starting} onClick={() => void startLiveQuiz()}>
-            {starting ? 'Spouštím…' : 'Spustit kvíz'}
-          </button>
-          {startError && <p className="form-error" role="alert">{startError}</p>}
+          <Link className="primary-button" to={`/admin/quizzes/${encodeURIComponent(quiz.id)}/readiness`}>Spustit kvíz</Link>
+          <Link className="secondary-link" to={`/admin/quizzes/${encodeURIComponent(quiz.id)}/readiness`}>Zkontrolovat připravenost</Link>
+          <Link className="secondary-link" to={`/admin/quizzes/${encodeURIComponent(quiz.id)}/edit`}>Otevřít editor</Link>
         </div>
       </header>
 
@@ -128,7 +108,9 @@ export function QuizDetailPage() {
             </header>
 
             {round.questions.length === 0 ? (
-              <p className="round-empty">V tomto kole zatím nejsou otázky.</p>
+              <p className="round-empty">{round.questionCount > 0
+                ? 'Detail otázek teď není dostupný. Zkuste stránku načíst znovu.'
+                : 'V tomto kole zatím nejsou otázky.'}</p>
             ) : (
               <ol className="question-list">
                 {round.questions.map((question) => (

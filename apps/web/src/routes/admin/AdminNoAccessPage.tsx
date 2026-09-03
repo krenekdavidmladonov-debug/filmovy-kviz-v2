@@ -34,7 +34,7 @@ export function AdminNoAccessPage() {
       <p className="eyebrow">Přístup zamítnut</p>
       <h1>Nemáte oprávnění</h1>
       <p>
-        Účet <strong>{currentUser.email}</strong> nemá roli admin ani moderator.
+        Účet <strong>{currentUser.email}</strong> nemá oprávnění pro vstup do administrace.
       </p>
       <button className="secondary-button" type="button" onClick={() => void handleSignOut()} disabled={pending}>
         {pending ? 'Odhlašuji…' : 'Odhlásit'}

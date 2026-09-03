@@ -1,30 +1,16 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
-const navigation = [
-  { to: '/admin', label: 'Admin' },
-  { to: '/projector', label: 'Projektor' },
-  { to: '/events', label: 'Akce' },
-] as const;
+import { productConfig } from '../config/product';
 
 export function AppLayout() {
   return (
     <div className="app-shell">
       <header className="site-header">
-        <NavLink className="brand" to="/events" aria-label="Filmový Kvíz – úvod">
-          <span className="brand-mark" aria-hidden="true">FK</span>
-          <span>Filmový Kvíz <strong>V2</strong></span>
+        <NavLink className="brand" to="/events" aria-label={`${productConfig.adminLabel} – úvod`}>
+          <span className="brand-mark" aria-hidden="true">{productConfig.shortName}</span>
+          <span>{productConfig.name}</span>
         </NavLink>
-        <nav aria-label="Hlavní navigace">
-          {navigation.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+        <NavLink className="nav-link" to="/admin">Administrace</NavLink>
       </header>
       <main className="page-shell">
         <Outlet />

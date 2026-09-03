@@ -8,6 +8,7 @@ import { AdminNoAccessPage } from '../routes/admin/AdminNoAccessPage';
 import { RequireStaff } from '../routes/admin/RequireStaff';
 import { EventsPage } from '../routes/events/EventsPage';
 import { NotFoundPage } from '../routes/NotFoundPage';
+import { AdminShell } from './AdminShell';
 import { AppLayout } from './AppLayout';
 
 const QuizLibraryPage = lazy(async () => {
@@ -18,6 +19,36 @@ const QuizLibraryPage = lazy(async () => {
 const QuizDetailPage = lazy(async () => {
   const module = await import('../routes/admin/QuizDetailPage');
   return { default: module.QuizDetailPage };
+});
+
+const QuizEditorPage = lazy(async () => {
+  const module = await import('../routes/admin/QuizEditorPage');
+  return { default: module.QuizEditorPage };
+});
+
+const QuizPreflightPage = lazy(async () => {
+  const module = await import('../routes/admin/QuizPreflightPage');
+  return { default: module.QuizPreflightPage };
+});
+
+const QuizRepairPage = lazy(async () => {
+  const module = await import('../routes/admin/QuizRepairPage');
+  return { default: module.QuizRepairPage };
+});
+
+const AdminEventsPage = lazy(async () => {
+  const module = await import('../routes/admin/AdminEventsPage');
+  return { default: module.AdminEventsPage };
+});
+
+const AdminEventCreatePage = lazy(async () => {
+  const module = await import('../routes/admin/AdminEventCreatePage');
+  return { default: module.AdminEventCreatePage };
+});
+
+const AdminEventDetailPage = lazy(async () => {
+  const module = await import('../routes/admin/AdminEventDetailPage');
+  return { default: module.AdminEventDetailPage };
 });
 
 const LiveControlPage = lazy(async () => {
@@ -39,25 +70,36 @@ function LazyProjectorRoute() {
 }
 
 export const router = createBrowserRouter([
+  { path: 'projector', element: <LazyProjectorRoute /> },
+  { path: 'projector/:sessionId', element: <LazyProjectorRoute /> },
+  {
+    path: 'admin',
+    element: <RequireStaff />,
+    children: [
+      { path: 'live/:sessionId', element: <LazyAdminRoute><LiveControlPage /></LazyAdminRoute> },
+      { path: 'quizzes/:quizId/edit', element: <LazyAdminRoute><QuizEditorPage /></LazyAdminRoute> },
+      {
+        element: <AdminShell />,
+        children: [
+          { index: true, element: <AdminPage /> },
+          { path: 'quizzes', element: <LazyAdminRoute><QuizLibraryPage /></LazyAdminRoute> },
+          { path: 'quizzes/:quizId', element: <LazyAdminRoute><QuizDetailPage /></LazyAdminRoute> },
+          { path: 'quizzes/:quizId/readiness', element: <LazyAdminRoute><QuizPreflightPage /></LazyAdminRoute> },
+          { path: 'quizzes/:quizId/readiness/repair', element: <LazyAdminRoute><QuizRepairPage /></LazyAdminRoute> },
+          { path: 'events', element: <LazyAdminRoute><AdminEventsPage /></LazyAdminRoute> },
+          { path: 'events/new', element: <LazyAdminRoute><AdminEventCreatePage /></LazyAdminRoute> },
+          { path: 'events/:eventId', element: <LazyAdminRoute><AdminEventDetailPage /></LazyAdminRoute> },
+        ],
+      },
+      { path: '*', element: <NotFoundPage /> },
+    ],
+  },
   {
     element: <AppLayout />,
     children: [
       { index: true, element: <Navigate to="/events" replace /> },
       { path: 'admin/login', element: <AdminLoginPage /> },
       { path: 'admin/no-access', element: <AdminNoAccessPage /> },
-      {
-        path: 'admin',
-        element: <RequireStaff />,
-        children: [
-          { index: true, element: <AdminPage /> },
-          { path: 'quizzes', element: <LazyAdminRoute><QuizLibraryPage /></LazyAdminRoute> },
-          { path: 'quizzes/:quizId', element: <LazyAdminRoute><QuizDetailPage /></LazyAdminRoute> },
-          { path: 'live/:sessionId', element: <LazyAdminRoute><LiveControlPage /></LazyAdminRoute> },
-          { path: '*', element: <NotFoundPage /> },
-        ],
-      },
-      { path: 'projector', element: <LazyProjectorRoute /> },
-      { path: 'projector/:sessionId', element: <LazyProjectorRoute /> },
       { path: 'events', element: <EventsPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
