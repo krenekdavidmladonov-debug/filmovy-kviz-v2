@@ -47,7 +47,7 @@ try {
   $report = Invoke-TonightGoNoGo $repoRoot $nodeTool $eventPaths $repairPaths
   Write-Host ''
   if ([int]$repair.readiness.blockers -eq 0 -and [string]$report.verdict -eq 'V2_OBSAHOVE_PRIPRAVENA') {
-    Write-Host 'V2 OBSAHOVĚ PŘIPRAVENA' -ForegroundColor Green
+    Write-Host 'GO — V2 SOFTWARE READY FOR PHYSICAL CHECK' -ForegroundColor Green
     Write-Host ''
     Write-Host 'Zbývá:'
     Write-Host '- fyzický HDMI test;'
@@ -57,7 +57,7 @@ try {
     Write-Host '- jedno skutečné VIDEO;'
     Write-Host '- jeden RECAP.'
   } else {
-    Write-Host 'V2 NENÍ PŘIPRAVENA' -ForegroundColor Yellow
+    Write-Host 'NO-GO — USE V1' -ForegroundColor Yellow
     Write-Host ''
     Write-Host "Zbývá $($repair.readiness.blockers) problémů."
     Write-Host 'Použijte START_TONIGHT_REPAIR.cmd.'
@@ -68,7 +68,7 @@ try {
   exit 0
 } catch {
   Write-Host ''
-  Write-Host 'USE V1 TONIGHT' -ForegroundColor Red
+  Write-Host 'NO-GO — USE V1' -ForegroundColor Red
   Write-Host $_.Exception.Message -ForegroundColor Red
   Write-QaWarning 'Verifier preflight neobešel a žádný deploy neprovedl.'
   Complete-GoNoGoWindow

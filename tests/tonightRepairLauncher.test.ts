@@ -70,6 +70,7 @@ describe('tonight repair launcher safety contract', () => {
     expect(goNoGo).toContain("invoke('revealAnswer'");
     expect(goNoGo).toContain('Question-mode AUDIO source was published');
     expect(goNoGo).toContain('Anonymous client unexpectedly read a private quiz');
-    expect(verify).toContain('USE V1 TONIGHT');
+    expect(verify).toContain('GO — V2 SOFTWARE READY FOR PHYSICAL CHECK');
+    expect(verify).toContain('NO-GO — USE V1');
   });
 });
