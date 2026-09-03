@@ -206,7 +206,7 @@ describe('mounted media lifecycle regressions', () => {
     expect(window.__FILMOVY_KVIZ_MEDIA_DEBUG__).toEqual({ activePlayers: 0, peakPlayers: 1, createdPlayers: 2, destroyedPlayers: 2 });
   });
 
-  test('153 VIDEO PLAY/REPLAY/STOP operations keep at most one heavy player mounted', async () => {
+  test('300 VIDEO PLAY/REPLAY/STOP operations keep at most one heavy player mounted', async () => {
     const video = {
       kind: 'video', title: 'Video otázka', text: 'Syntetické zadání', options: [], media: [], mediaSource: 'abcdefghijk',
     } as const;
@@ -214,7 +214,7 @@ describe('mounted media lifecycle regressions', () => {
       <SlideRenderer quizTitle="Syntetický kvíz" mediaCommand="stop" mediaGeneration={0} slide={video} />,
     );
     let operations = 0;
-    for (let cycle = 1; cycle <= 51; cycle += 1) {
+    for (let cycle = 1; cycle <= 100; cycle += 1) {
       await act(async () => {
         view.root.render(
           <SlideRenderer quizTitle="Syntetický kvíz" mediaCommand="play" mediaGeneration={cycle * 3 - 2} slide={video} />,
@@ -238,9 +238,9 @@ describe('mounted media lifecycle regressions', () => {
       });
       operations += 1;
     }
-    expect(operations).toBe(153);
+    expect(operations).toBe(300);
     expect(window.__FILMOVY_KVIZ_MEDIA_DEBUG__).toEqual({
-      activePlayers: 0, peakPlayers: 1, createdPlayers: 102, destroyedPlayers: 102,
+      activePlayers: 0, peakPlayers: 1, createdPlayers: 200, destroyedPlayers: 200,
     });
     await act(async () => { view.root.unmount(); });
   });
