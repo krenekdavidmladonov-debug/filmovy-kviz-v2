@@ -37,6 +37,8 @@ describe('Windows local QA launcher contract', () => {
     expect(common).toContain('startedAtUtc');
     expect(common).toContain('[Globalization.DateTimeStyles]::RoundtripKind');
     expect(common).toContain('StartTime.ToUniversalTime().Ticks');
+    expect(common).toContain('$authoritativeProcess = Get-Process -Id $Process.Id -ErrorAction Stop');
+    expect(common).toContain('$authoritativeProcess.StartTime.ToUniversalTime()');
     expect(common).toContain('ExpectedToken');
     expect(stop).toContain("Stop-TrackedWorker $state.vite 'vite'");
     expect(stop).toContain("Stop-TrackedWorker $state.emulators 'emulators'");

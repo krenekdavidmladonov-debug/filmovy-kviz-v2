@@ -428,7 +428,13 @@ function Get-LocalQaState {
 
 function Get-ProcessStartUtc {
   param([Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process)
-  return $Process.StartTime.ToUniversalTime().ToString('o')
+
+  # Windows PowerShell 5.1 can expose an incorrect StartTime on the Process
+  # object returned directly by Start-Process (the local offset is effectively
+  # applied twice). Re-open the process by PID before persisting its identity so
+  # later launchers compare against the operating system's canonical value.
+  $authoritativeProcess = Get-Process -Id $Process.Id -ErrorAction Stop
+  return $authoritativeProcess.StartTime.ToUniversalTime().ToString('o')
 }
 
 function Test-TrackedWorker {
