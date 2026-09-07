@@ -53,6 +53,8 @@ test('management link edits and idempotently soft-cancels its registration', asy
   const eventId = await createOpenEvent(page, baseURL, 'Management link E2E');
   await register(page, baseURL, eventId, 'Původní tým', 'manage@example.test');
   await page.getByRole('link', { name: 'Spravovat registraci' }).click();
+  await expect(page.getByLabel('Počet členů')).toHaveAttribute('min', '2');
+  await expect(page.getByLabel('Počet členů')).toHaveAttribute('max', '6');
   await page.getByLabel('Název týmu').fill('Upravený tým');
   await page.getByLabel('Počet členů').fill('3');
   await page.getByRole('button', { name: 'Uložit změny' }).click();
@@ -70,9 +72,29 @@ test('admin sees private contacts and moderator receives read-only registration 
   await expect(page.getByText('staff-only@example.test')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Zrušit' })).toBeVisible();
   await page.getByRole('button', { name: 'Odhlásit se' }).click();
+  await expect(page).toHaveURL(/\/admin\/login$/u);
   await login(page, baseURL, 'moderator@example.test');
   await page.goto(`${baseURL}/admin/events/${eventId}/registrations`);
   await expect(page.getByText('staff-only@example.test')).toBeVisible();
   await expect(page.getByText('Moderátor má přístup pouze pro čtení.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Zrušit' })).toHaveCount(0);
 });
+
+for (const role of ['user', 'moderator']) {
+  test(`management link remains usable in ${role} session`, async ({ page, baseURL }) => {
+    const eventId = await createOpenEvent(page, baseURL, `Management ${role}`);
+    await register(page, baseURL, eventId, 'Tým držitele odkazu', 'holder@example.test');
+    const managementLink = await page.getByRole('link', { name: 'Spravovat registraci' }).getAttribute('href');
+    expect(managementLink).toBeTruthy();
+    await login(page, baseURL, `${role}@example.test`);
+    await page.goto(`${baseURL}${managementLink}`);
+    await expect(page.getByLabel('Počet členů')).toHaveAttribute('min', '2');
+    await expect(page.getByLabel('Počet členů')).toHaveAttribute('max', '6');
+    await page.getByLabel('Počet členů').fill('3');
+    await page.getByRole('button', { name: 'Uložit změny' }).click();
+    await expect(page.getByText('Registrace byla upravena.')).toBeVisible();
+    page.once('dialog', (dialog) => dialog.accept());
+    await page.getByRole('button', { name: 'Zrušit registraci' }).click();
+    await expect(page.getByRole('heading', { name: 'Registrace je zrušená' })).toBeVisible();
+  });
+}

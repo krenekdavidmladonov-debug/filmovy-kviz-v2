@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
+import { FunctionsError } from 'firebase/functions';
+import { registrationActionError } from '../apps/web/src/features/events/registrationApi';
 
 import { capacityAfter, effectiveRegistrationStatus, hasCapacity, normalizeTeamName } from '../functions/src/registrations/domain';
 import { registrationToPrintTeam } from '../functions/src/registrations/print-adapter';
@@ -8,6 +10,15 @@ import { registrationInput } from '../functions/src/registrations/validation';
 const capacity = { acceptedTeams: 19, acceptedPeople: 98, maximumTeams: 20, maximumPeople: 100 };
 
 describe('registration domain', () => {
+  test('maps public validation failures to Czech without returning server exception text', () => {
+    for (const [code, message, expected] of [
+      ['invalid-argument', 'contactEmail is invalid.', 'Zadejte platný e-mail.'],
+      ['invalid-argument', 'Team size must be between 2 and 6.', 'Počet členů musí být celé číslo v povoleném rozsahu této akce.'],
+      ['failed-precondition', 'Registration capacity is full.', 'Kapacita akce je naplněna. Nový tým nyní nelze přihlásit.'],
+      ['failed-precondition', 'Registration is closed.', 'Registrace jsou uzavřené. Přihlášku už nelze měnit ani zrušit.'],
+    ] as const) expect(registrationActionError(new FunctionsError(code, message))).toBe(expected);
+    expect(registrationActionError(new FunctionsError('failed-precondition', 'INTERNAL PRIVATE DETAIL'))).not.toContain('INTERNAL');
+  });
   test('normalizes Unicode, case, and whitespace for event-scoped uniqueness', () => {
     expect(normalizeTeamName('  FILMOVÍ   BORCI ')).toBe(normalizeTeamName('Filmoví borci'));
     expect(normalizeTeamName('Cafe\u0301')).toBe(normalizeTeamName('CAFÉ'));

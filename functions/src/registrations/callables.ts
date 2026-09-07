@@ -236,7 +236,7 @@ export const createEventRegistration = onCall(callableOptions, async (request) =
 });
 
 export const getEventRegistration = onCall(callableOptions, async (request) => {
-  requirePublicCaller(request.auth);
+  // The management token, not the browser's staff session, grants access.
   const eventId = requestId(request.data, 'eventId');
   const registrationId = requestId(request.data, 'registrationId');
   const token = requestToken(request.data);
@@ -248,7 +248,6 @@ export const getEventRegistration = onCall(callableOptions, async (request) => {
 });
 
 export const updateEventRegistration = onCall(callableOptions, async (request) => {
-  requirePublicCaller(request.auth);
   const eventId = requestId(request.data, 'eventId');
   const registrationId = requestId(request.data, 'registrationId');
   const token = requestToken(request.data);
@@ -340,7 +339,6 @@ async function cancelRegistration(
 }
 
 export const cancelEventRegistration = onCall(callableOptions, async (request) => {
-  requirePublicCaller(request.auth);
   return cancelRegistration(
     requestId(request.data, 'eventId'),
     requestId(request.data, 'registrationId'),

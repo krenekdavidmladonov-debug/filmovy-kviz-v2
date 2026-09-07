@@ -12,4 +12,6 @@ Staff use `/admin/events/:eventId/registrations`. Admins configure and cancel; m
 
 ## PDF contract
 
+Management forms load the event's actual team-size limits through `publicEvents`; server validation remains authoritative. Public failures are mapped to Czech messages without displaying raw server exceptions. A full event still permits existing teams to reduce their size or cancel while the window is open. Manual closure means unpublishing registration; cancellation does not reopen it. Expired windows likewise deny self-service changes.
+
 `accepted Registration -> PrintTeam` maps only the registration document ID and display team name. The server resolves one or all accepted teams; cancelled teams and contact fields cannot be supplied by the browser or rendered.

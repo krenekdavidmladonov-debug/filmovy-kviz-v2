@@ -54,7 +54,18 @@ export function registrationActionError(error: unknown): string {
     if (error.code === 'functions/resource-exhausted') return 'Kapacita akce už nestačí pro tento tým.';
     if (error.code === 'functions/not-found') return 'Registrace nebo bezpečný odkaz nejsou platné.';
     if (error.code === 'functions/permission-denied') return 'Tuto operaci nelze provést v přihlášené staff relaci.';
-    if (error.code === 'functions/failed-precondition' || error.code === 'functions/invalid-argument') return error.message;
+    if (error.code === 'functions/invalid-argument') {
+      if (error.message.startsWith('contactEmail')) return 'Zadejte platný e-mail.';
+      if (error.message.startsWith('memberCount') || error.message.startsWith('Team size')) return 'Počet členů musí být celé číslo v povoleném rozsahu této akce.';
+      if (error.message.startsWith('teamName')) return 'Název týmu musí mít 2–80 znaků a nesmí obsahovat řídicí znaky.';
+      return 'Zkontrolujte vyplněné údaje a zkuste to znovu.';
+    }
+    if (error.code === 'functions/failed-precondition') {
+      if (error.message.startsWith('Registration capacity is full')) return 'Kapacita akce je naplněna. Nový tým nyní nelze přihlásit.';
+      if (error.message.startsWith('Registration is closed')) return 'Registrace jsou uzavřené. Přihlášku už nelze měnit ani zrušit.';
+      if (error.message.startsWith('Registration is cancelled')) return 'Tato přihláška už byla zrušena.';
+      return 'Tuto změnu teď nelze provést. Obnovte stránku a zkontrolujte stav registrace.';
+    }
   }
   return 'Registraci se nepodařilo uložit. Zkuste to znovu.';
 }
