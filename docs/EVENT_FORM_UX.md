@@ -1,4 +1,4 @@
-# Event form UX fix (not deployed)
+# Event form UX fix
 
 Base: `chore/v2-staging-environment`, SHA
 `81a24c85b0fc187876a6421c29c15b7d0101a5b3` (open PR #11).
@@ -36,18 +36,15 @@ After screenshots: fix worktree `.local-data/events-form-ux/after-local/` (local
 Both sets include both forms at all three requested viewport sizes.
 They are ignored and not committed. After images do NOT prove a deployed fix.
 
-## Deployment blockers
+## Delivery follow-up
 
 Observed staging release: `sites/filmovy-kviz-v2-staging/releases/1788779886011000`;
 Hosting version `7a62b04cc6b9ef92`, released 2026-09-07T11:18:06.011Z.
-It was not changed by this task.
+This is the pre-fix release. Hosting-only deployment audit records the next release locally.
 
-The existing guarded staging script always deploys Functions, Rules and Hosting.
-No guarded Hosting-only entry point exists. The task explicitly forbids bypassing
-that guard, so no deployment was attempted. Authorize a narrowly scoped extension
-of that script before deploying this UI-only fix.
-
-The existing CI workflow triggers only for PRs targeting main (and pushes to main).
-It does not run on this required stacked PR base. CI requires either an approved
-trigger adjustment for this base or a separately approved merge of base PR #11
-followed by retargeting. No PR was merged and no branch filters were changed.
+The operator explicitly authorized adding `--hosting-only` to the existing guarded
+staging script and adding only `chore/v2-staging-environment` to the CI pull_request
+base filter. main triggers, jobs, permissions and pinned actions remain unchanged.
+No merge or retargeting is required. Deploy only after CI passes for the exact HEAD.
+Read-only post-deploy screenshots belong in ignored `.local-data/events-form-ux/after-staging/`;
+they are distinct from the earlier local fixture screenshots.

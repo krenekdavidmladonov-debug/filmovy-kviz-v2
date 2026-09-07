@@ -25,6 +25,20 @@ is not configured or supported by this deployment path.
 
 ## Deploy a reviewed main
 
+### Hosting-only delivery
+
+From a clean, reviewed commit with passing CI, run with Node 22:
+`node tools/staging/deploy.mjs filmovy-kviz-v2-staging --hosting-only`.
+This mode preserves all staging environment guards and rejects target/resource overrides,
+hooks, backend rewrites and pinTag. It builds only the domain/frontend, checks the
+frontend output, then gives Firebase CLI a generated configuration containing only
+the fixed Hosting site and absolute frontend build directory, with `--only hosting`.
+No Functions packaging, Rules/indexes, Storage, Auth or seed runs in this mode.
+The ignored `.local-data/staging/hosting-<SHA>.json` records the exact commit and
+previous/new release/version for rollback investigation. No automatic rollback runs.
+
+### Full staging deployment
+
 Use Node 22, installed workspace dependencies, and an operator Firebase CLI login.
 Safely fast-forward a clean main checkout after reviewing the merge, then run
 `DEPLOY_STAGING.cmd` from the repository. This prints the branch and exact target,

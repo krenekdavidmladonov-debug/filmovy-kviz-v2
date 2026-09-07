@@ -1,19 +1,21 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, writeFileSync, readdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertStagingEnvironment, assertStagingProject, STAGING_PROJECT, STAGING_URL } from './guard.mjs';
-import { stagingWebConfig } from './cloud.mjs';
+import { stagingWebConfig, stagingClient } from './cloud.mjs';
+import { deploymentMode, assertHostingOnlyConfig, hostingOnlyArgs, assertFrontendFiles } from './hosting-only.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 process.chdir(root);
 assertStagingProject(process.argv[2]);
-if (process.argv.length !== 3) throw new Error('Usage: node tools/staging/deploy.mjs filmovy-kviz-v2-staging');
+const mode = deploymentMode(process.argv.slice(2));
 if (Number(process.versions.node.split('.')[0]) !== 22) throw new Error('Node 22 required.');
 const branch = spawnSync('git', ['branch', '--show-current'], { encoding: 'utf8' });
 if (branch.status !== 0 || !branch.stdout.trim()) throw new Error('A named Git branch is required.');
 console.log(`Branch: ${branch.stdout.trim()}\nTarget: ${STAGING_PROJECT}`);
 const config = JSON.parse(readFileSync('firebase.staging.json', 'utf8'));
+if (mode === 'hosting-only') assertHostingOnlyConfig(config);
 if (config.hosting.site !== STAGING_PROJECT || config.functions.source !== '.local-data/staging/functions' ||
     config.hosting.public !== 'apps/web/dist' || config.storage || config.functions.predeploy) throw new Error('Unexpected deploy configuration.');
 const sdk = await stagingWebConfig();
@@ -28,6 +30,45 @@ function run(file, args, cwd = root) {
   if (result.status !== 0) throw new Error('Staging command failed; deployment stopped.');
 }
 const tsc = path.join(root, 'node_modules/typescript/bin/tsc');
+if (mode === 'hosting-only') {
+  const git = (args) => {
+    const result = spawnSync('git', args, { encoding: 'utf8' });
+    if (result.status !== 0) throw new Error('Cannot verify deployment Git state.');
+    return result.stdout.trim();
+  };
+  if (git(['status', '--porcelain'])) throw new Error('Hosting-only requires a clean verified commit.');
+  const sha = git(['rev-parse', 'HEAD']);
+  const hosting = await stagingClient('https://firebasehosting.googleapis.com', 'v1beta1');
+  const releases = async () => (await hosting.get(`sites/${STAGING_PROJECT}/releases`, { queryParams: { pageSize: 1 } })).body.releases ?? [];
+  const previous = (await releases()).map((release) => ({ name: release.name, releaseTime: release.releaseTime, version: release.version?.name }));
+  run(tsc, ['-p', 'packages/quiz-domain/tsconfig.json']);
+  run(path.join(root, 'apps/web/node_modules/vite/bin/vite.js'), ['build', '--mode', 'staging'], path.join(root, 'apps/web'));
+  const publicDir = path.join(root, 'apps/web/dist');
+  if (realpathSync(publicDir) !== publicDir) throw new Error('Frontend output must not be a linked directory.');
+  const files = [];
+  function inspect(directory, prefix = '') {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) throw new Error('Linked frontend artifacts are forbidden.');
+      const name = prefix + entry.name;
+      if (entry.isDirectory()) inspect(path.join(directory, entry.name), name + '/');
+      else files.push({ name, text: readFileSync(path.join(directory, entry.name), 'utf8') });
+    }
+  }
+  inspect(publicDir);
+  assertFrontendFiles(files);
+  if (!files.some((file) => file.text.includes('STAGING'))) throw new Error('STAGING marker missing from build.');
+  mkdirSync('.local-data/staging', { recursive: true });
+  const configPath = path.join(root, '.local-data/staging/hosting-only.json');
+  writeFileSync(configPath, JSON.stringify({ hosting: { ...config.hosting, public: publicDir } }, null, 2));
+  const auditPath = path.join(root, '.local-data/staging/hosting-' + sha + '.json');
+  writeFileSync(auditPath, JSON.stringify({ sha, branch: branch.stdout.trim(), project: STAGING_PROJECT, previous, status: 'prepared' }, null, 2));
+  if (git(['rev-parse', 'HEAD']) !== sha || git(['status', '--porcelain'])) throw new Error('Git state changed during build.');
+  run(path.join(root, 'node_modules/firebase-tools/lib/bin/firebase.js'), hostingOnlyArgs(STAGING_PROJECT, env, config, configPath));
+  const current = (await releases()).map((release) => ({ name: release.name, releaseTime: release.releaseTime, version: release.version?.name }));
+  writeFileSync(auditPath, JSON.stringify({ sha, project: STAGING_PROJECT, previous, current, status: 'deployed' }, null, 2));
+  console.log(JSON.stringify({ sha, previous, current, url: STAGING_URL }));
+  process.exit(0);
+}
 run(tsc, ['-p', 'packages/quiz-domain/tsconfig.json']);
 run(tsc, ['-p', 'functions/tsconfig.json']);
 run(path.join(root, 'apps/web/node_modules/vite/bin/vite.js'), ['build', '--mode', 'staging'], path.join(root, 'apps/web'));
