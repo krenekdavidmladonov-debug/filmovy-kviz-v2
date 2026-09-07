@@ -4,6 +4,7 @@ import type {
   PrintArtifactType,
   PrintDisposition,
   PrintOptions,
+  PrintRequestOptions,
   PrintTeam,
   TeamSheetMode,
 } from './types.js';
@@ -55,8 +56,9 @@ function parseTeams(value: unknown): PrintTeam[] {
     if (!isRecord(entry)) {
       throw new PrintCenterError(400, 'invalid-team', 'Neplatný tým.');
     }
-    assertExactKeys(entry, ['name']);
-    if (typeof entry.name !== 'string') {
+    assertExactKeys(entry, ['id', 'name']);
+    if (typeof entry.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/u.test(entry.id)
+      || typeof entry.name !== 'string') {
       throw new PrintCenterError(400, 'invalid-team-name', 'Název týmu musí být text.');
     }
     const name = entry.name.trim().normalize('NFC');
@@ -68,8 +70,28 @@ function parseTeams(value: unknown): PrintTeam[] {
       throw new PrintCenterError(400, 'duplicate-team', 'Názvy týmů se nesmí opakovat.');
     }
     seen.add(key);
-    return { name };
+    return { id: entry.id, name };
   });
+}
+
+export function parsePrintRequestOptions(value: unknown): PrintRequestOptions {
+  if (!isRecord(value)) throw new PrintCenterError(400, 'invalid-request', 'Neplatný požadavek na PDF.');
+  const artifactType = parseArtifactType(value.artifactType);
+  const disposition = parseDisposition(value.disposition);
+  if (artifactType === 'answer-key' || artifactType === 'score-table') {
+    assertExactKeys(value, ['artifactType', 'disposition']);
+    return { artifactType, disposition };
+  }
+  const mode = parseMode(value.mode);
+  if (mode === 'single') {
+    assertExactKeys(value, ['artifactType', 'disposition', 'mode', 'teamId']);
+    if (typeof value.teamId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/u.test(value.teamId)) {
+      throw new PrintCenterError(400, 'invalid-team', 'Neplatný tým.');
+    }
+    return { artifactType, disposition, mode, teamId: value.teamId };
+  }
+  assertExactKeys(value, ['artifactType', 'disposition', 'mode']);
+  return { artifactType, disposition, mode };
 }
 
 export function parsePrintOptions(value: unknown): PrintOptions {

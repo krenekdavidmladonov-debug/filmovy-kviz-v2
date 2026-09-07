@@ -17,6 +17,7 @@ export default defineConfig({
       'tests/events.test.ts',
       'tests/printCenter.test.ts',
       'tests/printCenterSecurity.test.ts',
+      'tests/registrations.test.ts',
       'tests/localEmulatorEnvironment.test.ts',
       'tests/localQaLauncher.test.ts',
       'tests/eventNightLauncher.test.ts',

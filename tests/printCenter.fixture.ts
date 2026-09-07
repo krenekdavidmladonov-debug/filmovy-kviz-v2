@@ -30,6 +30,7 @@ export function syntheticPrintEvent(): PrintEvent {
 
 export function syntheticTeams(count = 20): PrintTeam[] {
   return Array.from({ length: count }, (_, index) => ({
+    id: `team-${index + 1}`,
     name: index === count - 1
       ? `Tým ${index + 1} — Neobyčejně dlouhý český název Žluťoučkých koní`
       : `Tým ${String(index + 1).padStart(2, '0')}`,

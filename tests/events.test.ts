@@ -86,17 +86,22 @@ describe('public event projection', () => {
       ...validConfiguration,
       startsAt: 'timestamp',
       registrationStatus: 'scheduled',
+      registrationPublished: false,
+      acceptedTeams: 0,
+      acceptedPeople: 0,
+      registrationOpensAt: null,
+      registrationClosesAt: null,
       revision: 3,
       updatedAt: 'updated',
     });
     expect(projection).toEqual({
       title: 'Filmový večer', startsAt: 'timestamp', timeZone: 'Europe/Prague',
       venueName: 'Kulturní dům', publicLocation: 'Hlavní sál',
-      registrationStatus: 'scheduled', availability: 'scheduled',
+      registrationStatus: 'scheduled', registrationPublished: false, availability: 'scheduled',
       teamSize: { min: 2, max: 6 }, revision: 3, updatedAt: 'updated',
+      capacity: { teams: { accepted: 0, maximum: 20 }, people: { accepted: 0, maximum: 120 } },
+      registrationWindow: { opensAt: null, closesAt: null },
     });
-    expect(projection).not.toHaveProperty('teamCapacity');
-    expect(projection).not.toHaveProperty('peopleCapacity');
     expect(projection).not.toHaveProperty('quizAssignment');
     expect(JSON.stringify(projection)).not.toMatch(/answer|email|organizer|contact/iu);
   });

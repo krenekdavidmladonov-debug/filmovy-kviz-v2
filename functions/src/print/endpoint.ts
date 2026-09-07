@@ -7,8 +7,9 @@ import { PrintCenterError } from './errors.js';
 import { PRINT_LIMITS } from './limits.js';
 import { renderPrintArtifact } from './renderer.js';
 import { mapSnapshotToPrintEvent } from './snapshot-mapper.js';
-import type { PrintLogMetadata } from './types.js';
-import { authorizePrintArtifact, parsePrintOptions } from './validation.js';
+import { registrationToPrintTeam } from '../registrations/print-adapter.js';
+import type { PrintLogMetadata, PrintOptions, PrintRequestOptions, PrintTeam } from './types.js';
+import { authorizePrintArtifact, parsePrintRequestOptions } from './validation.js';
 
 if (getApps().length === 0) initializeApp();
 
@@ -42,6 +43,38 @@ function optionsFromBody(body: unknown): unknown {
   return data.options;
 }
 
+async function acceptedTeams(eventId: string): Promise<PrintTeam[]> {
+  const snapshot = await getFirestore().collection('events').doc(eventId)
+    .collection('registrations').orderBy('createdAt').limit(501).get();
+  const teams = snapshot.docs.flatMap((document) => {
+    const team = registrationToPrintTeam(document.id, record(document.data()));
+    return team === undefined ? [] : [team];
+  });
+  if (teams.length > PRINT_LIMITS.teams) {
+    throw new PrintCenterError(409, 'team-limit', `PDF podporuje nejvýše ${PRINT_LIMITS.teams} přijatých týmů.`);
+  }
+  return teams;
+}
+
+async function resolvePrintOptions(eventId: string, request: PrintRequestOptions): Promise<PrintOptions> {
+  if (request.artifactType === 'answer-key') return request;
+  if (request.artifactType === 'team-sheets' && request.mode === 'generic') {
+    return { ...request, teams: [] };
+  }
+  if (request.artifactType === 'team-sheets' && request.mode === 'single') {
+    const snapshot = await getFirestore().collection('events').doc(eventId)
+      .collection('registrations').doc(request.teamId).get();
+    const team = snapshot.exists ? registrationToPrintTeam(snapshot.id, record(snapshot.data())) : undefined;
+    if (team === undefined) throw new PrintCenterError(404, 'team-not-found', 'Přijatý tým nebyl nalezen.');
+    return { artifactType: 'team-sheets', disposition: request.disposition, mode: 'single', teams: [team] };
+  }
+  const teams = await acceptedTeams(eventId);
+  if (teams.length === 0) throw new PrintCenterError(409, 'missing-teams', 'Akce zatím nemá žádné přijaté týmy.');
+  return request.artifactType === 'score-table'
+    ? { ...request, teams }
+    : { ...request, teams };
+}
+
 export const generatePrintArtifact = onRequest(
   {
     region: 'europe-west1',
@@ -65,9 +98,10 @@ export const generatePrintArtifact = onRequest(
       }
 
       const eventId = eventIdFromBody(request.body);
-      const options = parsePrintOptions(optionsFromBody(request.body));
+      const requestedOptions = parsePrintRequestOptions(optionsFromBody(request.body));
       const token = await getAuth().verifyIdToken(bearerToken(request.header('authorization')));
-      authorizePrintArtifact(token.role, options.artifactType);
+      authorizePrintArtifact(token.role, requestedOptions.artifactType);
+      const options = await resolvePrintOptions(eventId, requestedOptions);
 
       const db = getFirestore();
       const eventSnapshot = await db.collection('events').doc(eventId).get();

@@ -121,6 +121,12 @@ export function AdminEventDetailPage() {
       {notice && <p className="event-notice" role="status">{notice}</p>}
 
       <section className="event-section">
+        <div className="event-section-heading"><div><p className="eyebrow">Registrace</p><h2>Týmy a kapacita</h2></div><span>{event.acceptedTeams} / {event.teamCapacity} týmů</span></div>
+        <p className="event-muted">Registrační okno, souhrn osob a privátní kontakty týmů.</p>
+        <Link className="secondary-link" to={`/admin/events/${event.id}/registrations`}>Otevřít registrace</Link>
+      </section>
+
+      <section className="event-section">
         <div className="event-section-heading"><div><p className="eyebrow">Konfigurace</p><h2>Základní údaje</h2></div><span>Revize {event.revision}</span></div>
         {admin ? <EventForm values={values} pending={pending} submitLabel="Uložit změny" onChange={setValues} onSubmit={() => void runAction(() => updateEvent(event.id, event.revision, values), 'Změny akce byly uloženy.')} /> : (
           <dl className="event-readonly-grid"><div><dt>Místo</dt><dd>{event.venue.name}</dd></div><div><dt>Veřejná lokalita</dt><dd>{event.venue.publicLocation}</dd></div><div><dt>Kapacita týmů</dt><dd>{event.teamCapacity}</dd></div><div><dt>Kapacita lidí</dt><dd>{event.peopleCapacity}</dd></div><div><dt>Velikost týmu</dt><dd>{event.teamSizeMin}–{event.teamSizeMax}</dd></div></dl>

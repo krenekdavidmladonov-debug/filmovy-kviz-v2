@@ -57,8 +57,15 @@ export interface PublicEventProjectionInput {
   readonly timeZone: string;
   readonly venue: EventVenueInput;
   readonly registrationStatus: RegistrationStatus;
+  readonly registrationPublished: boolean;
   readonly teamSizeMin: number;
   readonly teamSizeMax: number;
+  readonly teamCapacity: number;
+  readonly peopleCapacity: number;
+  readonly acceptedTeams: number;
+  readonly acceptedPeople: number;
+  readonly registrationOpensAt: unknown;
+  readonly registrationClosesAt: unknown;
   readonly revision: number;
   readonly updatedAt: unknown;
 }

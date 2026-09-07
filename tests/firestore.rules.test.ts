@@ -19,6 +19,8 @@ const privateSessionPath = 'sessions/security-test-session';
 const publicSessionPath = 'publicSessions/security-test-session';
 const privateEventPath = 'events/security-test-event';
 const privateEventChildPath = `${privateEventPath}/future/private-child`;
+const privateRegistrationPath = `${privateEventPath}/registrations/security-registration`;
+const privateRegistrationNamePath = `${privateEventPath}/registrationNames/private-hash`;
 const privateSnapshotPath = 'quizSnapshots/security-test-snapshot';
 const privateSnapshotSlidePath = `${privateSnapshotPath}/slides/security-test-slide`;
 const publicEventPath = 'publicEvents/security-test-event';
@@ -71,6 +73,8 @@ beforeEach(async () => {
       title: 'Private event', revision: 1, lifecycleStatus: 'scheduled',
     });
     await setDoc(doc(context.firestore(), privateEventChildPath), { secret: true });
+    await setDoc(doc(context.firestore(), privateRegistrationPath), { teamName: 'Synthetic team', contactEmail: 'team@example.test' });
+    await setDoc(doc(context.firestore(), privateRegistrationNamePath), { registrationId: 'security-registration' });
     await setDoc(doc(context.firestore(), privateSnapshotPath), {
       quizId: 'security-test-quiz', quizRevision: 1,
     });
@@ -99,6 +103,8 @@ describe('anonymous user', () => {
     await assertFails(getDoc(doc(db, privateQuestionPath)));
     await assertFails(getDoc(doc(db, privateSessionPath)));
     await assertFails(getDoc(doc(db, privateEventPath)));
+    await assertFails(getDoc(doc(db, privateRegistrationPath)));
+    await assertFails(getDocs(collection(db, `${privateEventPath}/registrations`)));
     await assertFails(getDoc(doc(db, privateSnapshotPath)));
     await assertFails(getDoc(doc(db, privateSnapshotSlidePath)));
   });
@@ -136,6 +142,7 @@ describe('authenticated user without a role', () => {
     await assertFails(getDoc(doc(db, privateSlidePath)));
     await assertFails(getDoc(doc(db, privateSessionPath)));
     await assertFails(getDoc(doc(db, privateEventPath)));
+    await assertFails(getDoc(doc(db, privateRegistrationPath)));
     await assertFails(getDoc(doc(db, privateSnapshotPath)));
   });
 
@@ -191,11 +198,15 @@ describe('moderator', () => {
     await assertFails(setDoc(doc(db, 'quizzes/moderator-write'), { title: 'Denied' }));
   });
 
-  test('can read an event root and private snapshot but cannot write or read unknown event children', async () => {
+  test('can read event registrations but not uniqueness state or write registration data', async () => {
     const db = testEnvironment
       .authenticatedContext('moderator-user', { role: 'moderator' })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateEventPath)));
+    await assertSucceeds(getDoc(doc(db, privateRegistrationPath)));
+    await assertSucceeds(getDocs(collection(db, `${privateEventPath}/registrations`)));
+    await assertFails(getDoc(doc(db, privateRegistrationNamePath)));
+    await assertFails(setDoc(doc(db, privateRegistrationPath), { teamName: 'Bypass' }));
     await assertSucceeds(getDoc(doc(db, privateSnapshotPath)));
     await assertSucceeds(getDoc(doc(db, privateSnapshotSlidePath)));
     await assertFails(setDoc(doc(db, privateEventPath), { title: 'Denied' }));
@@ -232,10 +243,14 @@ describe('admin', () => {
       .authenticatedContext('admin-user', { role: 'admin' })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateEventPath)));
+    await assertSucceeds(getDoc(doc(db, privateRegistrationPath)));
+    await assertSucceeds(getDocs(collection(db, `${privateEventPath}/registrations`)));
+    await assertFails(getDoc(doc(db, privateRegistrationNamePath)));
     await assertSucceeds(getDoc(doc(db, privateSnapshotPath)));
     await assertSucceeds(getDoc(doc(db, privateSnapshotSlidePath)));
     await assertFails(setDoc(doc(db, privateEventPath), { title: 'Bypass' }));
     await assertFails(setDoc(doc(db, privateEventChildPath), { secret: false }));
+    await assertFails(setDoc(doc(db, privateRegistrationPath), { contactEmail: 'forged@example.test' }));
     await assertFails(setDoc(doc(db, privateSnapshotSlidePath), { correctAnswer: 'Bypass' }));
     await assertFails(setDoc(doc(db, publicEventPath), { title: 'Bypass' }));
   });

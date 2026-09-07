@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { listPublicEvents } from '../../features/events/eventRepository';
 import type { PublicEventRecord } from '../../features/events/types';
@@ -43,6 +44,7 @@ export function EventsPage() {
               <strong>{new Intl.DateTimeFormat('cs-CZ', { dateStyle: 'full', timeStyle: 'short', timeZone: event.timeZone }).format(event.startsAt)}</strong>
               <span>{event.publicLocation}</span>
               <small>Tým: {event.teamSizeMin}–{event.teamSizeMax} členů</small>
+              <Link className="secondary-link" to={`/events/${event.id}`}>Detail a registrace</Link>
             </article>
           ))}
         </div>

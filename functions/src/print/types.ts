@@ -32,6 +32,7 @@ export interface PrintEvent {
 }
 
 export interface PrintTeam {
+  id: string;
   name: string;
 }
 
@@ -54,6 +55,12 @@ export type PrintOptions =
       disposition: PrintDisposition;
       teams: PrintTeam[];
     };
+
+export type PrintRequestOptions =
+  | { artifactType: 'team-sheets'; disposition: PrintDisposition; mode: 'generic' | 'all' }
+  | { artifactType: 'team-sheets'; disposition: PrintDisposition; mode: 'single'; teamId: string }
+  | { artifactType: 'answer-key'; disposition: PrintDisposition }
+  | { artifactType: 'score-table'; disposition: PrintDisposition };
 
 export interface RenderedPrintArtifact {
   bytes: Uint8Array;

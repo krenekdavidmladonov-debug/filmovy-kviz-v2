@@ -40,6 +40,7 @@ Current Firestore access is intentionally narrow:
 - event roots are staff-readable, unknown event subpaths are denied, and every event write is denied to clients; admin-only callable Functions own event mutations;
 - immutable quiz snapshots are staff-readable private data and every direct client write is denied;
 - `publicEvents` is anonymously readable/queryable sanitized data with every client write denied;
+- private event registration records are staff-readable, direct-write denied; uniqueness reservations are server-only;
 - existing media policy remains staff-read and admin-write until that flow is revisited;
 - staff profiles are self-readable, while all user management is admin-only;
 - staff may read private `sessions`, but all client writes are denied;
@@ -64,7 +65,7 @@ The PDF endpoint verifies an ID token, resolves the snapshot from the private ev
 
 ## Public registration
 
-Registration is a callable/HTTP Function rather than a direct Firestore write. It validates fields/types, normalization/limits, contact format, team-size bounds, event state and capacity transactionally, duplicate/idempotency behavior, and abuse controls before launch. Responses reveal no other teams, contacts, or internal capacity details.
+Registration uses callable Functions rather than direct Firestore writes. It validates fields/types, normalization/limits, contact format, team-size bounds, server-time window, unique names, and both capacities transactionally. Management tokens are random bearer capabilities stored only as SHA-256 verifiers; invalid combinations are non-enumerating. Responses reveal no other teams or contacts. Production abuse controls remain a launch prerequisite.
 
 ## Firebase configuration and secrets
 

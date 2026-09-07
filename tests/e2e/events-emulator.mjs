@@ -83,11 +83,10 @@ async function run() {
   assert.equal(privateCreated.scoring.started, false);
   const publicCreated = (await getDoc(publicRef)).data();
   assert.deepEqual(Object.keys(publicCreated).sort(), [
-    'availability', 'publicLocation', 'registrationStatus', 'revision', 'startsAt',
-    'teamSize', 'timeZone', 'title', 'updatedAt', 'venueName',
+    'availability', 'capacity', 'publicLocation', 'registrationPublished', 'registrationStatus', 'registrationWindow',
+    'revision', 'startsAt', 'teamSize', 'timeZone', 'title', 'updatedAt', 'venueName',
   ]);
-  assert.equal('teamCapacity' in publicCreated, false);
-  assert.equal('peopleCapacity' in publicCreated, false);
+  assert.deepEqual(publicCreated.capacity, { teams: { accepted: 0, maximum: 20 }, people: { accepted: 0, maximum: 120 } });
   assert.equal('quizAssignment' in publicCreated, false);
   await assert.rejects(updateDoc(eventRef, { title: 'Direct bypass' }), /permission-denied/u);
 

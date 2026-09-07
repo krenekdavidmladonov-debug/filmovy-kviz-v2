@@ -47,8 +47,21 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // No event child collection is exposed in this foundation. Future
-    // registrations, teams, scores, and audit paths must opt in separately.
+    // Registration contact data is staff-only. Creation, management-link
+    // mutations, capacity accounting, and administrative cancellation are
+    // trusted Functions operations; direct browser writes are always denied.
+    match /events/{eventId}/registrations/{registrationId} {
+      allow read: if isStaff();
+      allow create, update, delete: if false;
+    }
+
+    // Uniqueness reservations contain internal transaction state and are
+    // never browser-readable, including by staff.
+    match /events/{eventId}/registrationNames/{nameHash} {
+      allow read, write: if false;
+    }
+
+    // Every other event child path remains private.
     match /events/{eventId}/{document=**} {
       allow read, write: if false;
     }
