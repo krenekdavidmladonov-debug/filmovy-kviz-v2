@@ -60,6 +60,8 @@ Guided repair keeps the same route guard but does not treat it as write authoriz
 
 Event lock uses that same shared quiz-domain/preflight implementation inside an admin-only transaction. It rereads the expected event and quiz revisions, rejects blockers, requires explicit warning acknowledgement, creates a complete private immutable snapshot, derives `ready`, and replaces the safe public event projection atomically. Browsers cannot submit readiness, assignment, snapshot data, scoring state, revisions, actors, timestamps, or public fields. Snapshot answers stay private and never enter `publicEvents`; existing `publicSessions` answer authority is unchanged.
 
+The PDF endpoint verifies an ID token, resolves the snapshot from the private event, accepts only allowlisted document settings, and returns a bounded `no-store` PDF. Admins may generate all PDFs. Moderators may generate answer-free team sheets and score tables but are denied the answer key. Anonymous, ordinary authenticated, and projector clients are denied. Questions, answers, options, contacts, media sources, notes, and legacy data are excluded from logs.
+
 ## Public registration
 
 Registration is a callable/HTTP Function rather than a direct Firestore write. It validates fields/types, normalization/limits, contact format, team-size bounds, event state and capacity transactionally, duplicate/idempotency behavior, and abuse controls before launch. Responses reveal no other teams, contacts, or internal capacity details.

@@ -52,6 +52,8 @@ Authoritative event record implemented by Events Foundation: `schemaVersion`, ti
 
 ### `quizSnapshots/{snapshotId}`
 
+The PDF Print Center reads this existing immutable document tree through a trusted Function. It introduces no new persisted collections or fields. Transient typed print models and synthetic `PrintTeam[]` input are not Firestore records.
+
 Immutable, private event quiz source for one exact quiz ID and revision. The root stores source identity/counts and a sanitized preflight summary. Nested `slides` preserve all private presentation fields, correct answers, media, and legacy extensions; nested `rounds` preserve ordered round metadata. Direct client writes are denied. A relock creates a new snapshot rather than modifying the old one.
 
 ### `events/{eventId}/registrations/{registrationId}`
