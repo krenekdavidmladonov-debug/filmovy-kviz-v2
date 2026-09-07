@@ -48,8 +48,18 @@ export function adminCancelRegistration(eventId: string, registrationId: string)
   return invoke<RegistrationMutationResponse>('adminCancelEventRegistration', { eventId, registrationId });
 }
 
+export function adminAddEventTeam(eventId: string, requestId: string, values: RegistrationFormValues) {
+  return invoke<{ registrationId: string; teamName: string }>('adminAddEventTeam', { eventId, requestId, ...values });
+}
+
+export function adminUpdateEventTeam(eventId: string, registrationId: string, expectedRevision: number, values: RegistrationFormValues) {
+  return invoke<{ registrationId: string; teamName: string }>('adminUpdateEventTeam', { eventId, registrationId, expectedRevision, ...values });
+}
+
 export function registrationActionError(error: unknown): string {
   if (error instanceof FunctionsError) {
+    if (error.code === 'functions/aborted') return 'Tým mezitím někdo změnil. Zavřete dialog a obnovte seznam před další úpravou.';
+    if (error.code === 'functions/already-exists' && error.message.startsWith('requestId')) return 'Tento požadavek již byl přijat s jinými údaji. Obnovte seznam týmů; nevytvářejte duplikát.';
     if (error.code === 'functions/already-exists') return 'Tým s tímto názvem už je na akci přihlášený.';
     if (error.code === 'functions/resource-exhausted') return 'Kapacita akce už nestačí pro tento tým.';
     if (error.code === 'functions/not-found') return 'Registrace nebo bezpečný odkaz nejsou platné.';

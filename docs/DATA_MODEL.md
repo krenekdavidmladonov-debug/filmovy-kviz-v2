@@ -58,6 +58,8 @@ The PDF Print Center reads this existing immutable document tree through a trust
 
 Private accepted/cancelled registration with normalized team name, member count, contact email, management-token hash, timestamps, and cancellation audit metadata. Staff reads are allowed; all browser writes are denied.
 
+Manual team records use this same collection with server-owned `source: manual`, nullable `contactEmail`, null `managementTokenHash`, actor fields, revision and immutable request fingerprint. The deterministic ID reserves the add request per event/staff UID, even after cancellation. Missing source means legacy online; no migration is needed. See `EVENT_TEAM_TOOLS.md`.
+
 ### `events/{eventId}/registrationNames/{nameHash}`
 
 Private, server-only uniqueness reservation keyed by a SHA-256 digest of the event-normalized team name. No client can read or write it.

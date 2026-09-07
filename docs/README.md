@@ -48,6 +48,7 @@ Managed exports and extracted documents are local-only under Git-ignored `.local
 - [EVENTS_FOUNDATION_IMPLEMENTATION_REPORT.md](EVENTS_FOUNDATION_IMPLEMENTATION_REPORT.md) — sanitized implementation and verification evidence.
 
 - [REGISTRATIONS.md](REGISTRATIONS.md) — implemented public registration, management links, staff workflow, capacities, and PDF roster contract.
+- [EVENT_TEAM_TOOLS.md](EVENT_TEAM_TOOLS.md) — admin-only manual teams, canonical PDF roster and public registration link/QR.
 - [REGISTRATION_SECURITY.md](REGISTRATION_SECURITY.md) — transaction, token, privacy, and Rules invariants.
 
 Scoring remains deliberately absent.

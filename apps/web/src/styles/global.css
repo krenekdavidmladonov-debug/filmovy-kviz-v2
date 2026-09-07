@@ -48,6 +48,23 @@
   --accent: var(--color-accent);
 }
 
+/* Scoped event team tools; existing editor/projector styles are unchanged. */
+.team-tool-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.team-tool-actions > * { min-height: 46px; }
+.team-tool-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; overflow: auto; border: 1px solid var(--color-border-strong); border-radius: 18px; background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-lg); }
+.team-tool-dialog::backdrop { background: rgb(0 0 0 / 70%); }
+.team-tool-dialog h2 { margin: 0 0 12px; font-size: 24px; }
+.manual-team-fields { display: grid; gap: 16px; min-width: 0; padding: 0; margin: 20px 0; border: 0; }
+.manual-team-fields input { min-height: 46px; }
+.manual-team-fields summary { cursor: pointer; padding: 12px 0; }
+.registration-share-panel { min-width: 0; }
+.registration-share-panel h2 { margin-top: 0; }
+.registration-share-panel .team-tool-actions { margin-top: 16px; }
+.registration-share-url { width: 100%; min-width: 0; overflow-wrap: anywhere; word-break: break-word; resize: none; }
+.qr-dialog img { display: block; width: min(100%, 320px); height: auto; margin: 16px auto; background: white; }
+.registration-table .team-selected { background: #322914; outline: 2px solid var(--color-primary); outline-offset: -2px; }
+@media (max-width: 600px) { .team-tool-dialog { padding: 16px; } .team-tool-actions > * { flex: 1 1 auto; text-align: center; } }
+
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 82% 12%, #30210c 0, transparent 30%), var(--color-background); }
 a { color: inherit; }

@@ -40,13 +40,22 @@ export function requestToken(data: unknown): string {
 }
 
 export function registrationInput(data: unknown): RegistrationInput {
+  return parseTeamInput(data, false) as RegistrationInput;
+}
+
+export function manualTeamInput(data: unknown) {
+  return parseTeamInput(data, true);
+}
+
+function parseTeamInput(data: unknown, optionalEmail: boolean): Omit<RegistrationInput, 'contactEmail'> & { contactEmail: string | null } {
   const value = record(data);
   const teamName = safeText(value.teamName, 'teamName', 2, 80);
   if (!Number.isInteger(value.memberCount) || (value.memberCount as number) < 1 || (value.memberCount as number) > 1_000) {
     throw new HttpsError('invalid-argument', 'memberCount must be a positive integer.');
   }
-  const contactEmail = safeText(value.contactEmail, 'contactEmail', 3, 254).toLocaleLowerCase('en-US');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(contactEmail)) {
+  const absent = value.contactEmail === undefined || value.contactEmail === null || value.contactEmail === '';
+  const contactEmail = optionalEmail && absent ? null : safeText(value.contactEmail, 'contactEmail', 3, 254).toLocaleLowerCase('en-US');
+  if (contactEmail !== null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(contactEmail)) {
     throw new HttpsError('invalid-argument', 'contactEmail is invalid.');
   }
   return {
