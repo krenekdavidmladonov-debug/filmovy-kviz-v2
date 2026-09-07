@@ -50,7 +50,7 @@ try {
   await page.getByRole('button', { name: 'Přihlásit se' }).click();
   await expect(page.getByText('STAGING — pouze syntetická testovací data')).toBeVisible();
   await page.goto(`${STAGING_URL}/admin/events/${seed.events[0]}`);
-  await page.getByRole('link', { name: 'Otevřít registrace' }).click();
+  await page.getByRole('link', { name: 'Spravovat týmy a registrace' }).click();
   await expect(page.getByText('Testovací klapky', { exact: true })).toBeVisible();
   await page.goto(`${STAGING_URL}/admin/events/${seed.events[0]}/print`);
   async function preview(name) {

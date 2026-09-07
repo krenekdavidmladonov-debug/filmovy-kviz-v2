@@ -35,7 +35,7 @@ test('Print Center generates all documents from a locked event and reuses previe
   const detailUrl = page.url();
   const eventId = /\/admin\/events\/([^/]+)$/u.exec(detailUrl)?.[1];
   expect(eventId).toBeTruthy();
-  await page.getByRole('link', { name: 'Otevřít registrace' }).click();
+  await page.getByRole('link', { name: 'Spravovat týmy a registrace' }).click();
   await page.getByLabel('Otevření').fill('2020-01-01T00:00');
   await page.getByLabel('Uzavření').fill('2030-01-01T00:00');
   await page.getByLabel('Zveřejnit registraci').check();
