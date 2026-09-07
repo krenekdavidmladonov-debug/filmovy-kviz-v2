@@ -69,17 +69,26 @@ async function run() {
   assert.equal(locked.lifecycleStatus, 'ready');
 
   await expectPdf(await request(created.eventId, { artifactType: 'answer-key', disposition: 'attachment' }, token), 'attachment');
-  await expectPdf(await request(created.eventId, { artifactType: 'team-sheets', disposition: 'inline', mode: 'generic', teams: [] }, token), 'inline');
+  await expectPdf(await request(created.eventId, { artifactType: 'team-sheets', disposition: 'inline', mode: 'generic' }, token), 'inline');
+  await invoke('configureEventRegistration', {
+    eventId: created.eventId, expectedRevision: 2,
+    registrationOpensAt: new Date(Date.now() - 60_000).toISOString(),
+    registrationClosesAt: new Date(Date.now() + 3_600_000).toISOString(), published: true,
+  });
   await signOut(auth);
+
+  await invoke('createEventRegistration', {
+    eventId: created.eventId, teamName: 'Syntetický tým', memberCount: 4, contactEmail: 'print@example.test',
+  });
 
   token = await login('moderator@example.test');
   const forbiddenKey = await request(created.eventId, { artifactType: 'answer-key', disposition: 'inline' }, token);
   assert.equal(forbiddenKey.status, 403);
-  await expectPdf(await request(created.eventId, { artifactType: 'score-table', disposition: 'inline', teams: [{ name: 'Syntetický tým' }] }, token), 'inline');
+  await expectPdf(await request(created.eventId, { artifactType: 'score-table', disposition: 'inline' }, token), 'inline');
   await signOut(auth);
 
   token = await login('user@example.test');
-  const forbiddenOrdinary = await request(created.eventId, { artifactType: 'team-sheets', disposition: 'inline', mode: 'generic', teams: [] }, token);
+  const forbiddenOrdinary = await request(created.eventId, { artifactType: 'team-sheets', disposition: 'inline', mode: 'generic' }, token);
   assert.equal(forbiddenOrdinary.status, 403);
   const rejectedPayload = await request(created.eventId, { artifactType: 'answer-key', disposition: 'inline', correctAnswers: ['secret'] }, token);
   assert.equal(rejectedPayload.status, 400);

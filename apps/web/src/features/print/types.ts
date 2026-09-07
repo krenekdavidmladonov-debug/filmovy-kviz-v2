@@ -2,6 +2,7 @@ export type PrintArtifactType = 'team-sheets' | 'answer-key' | 'score-table';
 export type TeamSheetMode = 'generic' | 'single' | 'all';
 
 export interface PrintTeam {
+  readonly id: string;
   readonly name: string;
 }
 
@@ -10,7 +11,7 @@ export type PrintOptions =
       readonly artifactType: 'team-sheets';
       readonly disposition: 'inline' | 'attachment';
       readonly mode: TeamSheetMode;
-      readonly teams: readonly PrintTeam[];
+      readonly teamId?: string;
     }
   | {
       readonly artifactType: 'answer-key';
@@ -19,7 +20,6 @@ export type PrintOptions =
   | {
       readonly artifactType: 'score-table';
       readonly disposition: 'inline' | 'attachment';
-      readonly teams: readonly PrintTeam[];
     };
 
 export interface PrintArtifactBlob {

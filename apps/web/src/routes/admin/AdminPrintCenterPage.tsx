@@ -2,14 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
-import { getEvent } from '../../features/events/eventRepository';
-import type { EventRecord } from '../../features/events/types';
+import { getEvent, listEventRegistrations } from '../../features/events/eventRepository';
+import type { EventRecord, RegistrationRecord } from '../../features/events/types';
 import { generatePrintArtifact } from '../../features/print/printApi';
-import type { PrintArtifactType, PrintOptions, PrintTeam, TeamSheetMode } from '../../features/print/types';
+import type { PrintArtifactType, PrintOptions, TeamSheetMode } from '../../features/print/types';
 import { QuizErrorState } from '../../features/quizzes/QuizErrorState';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
 
-const SYNTHETIC_TEAMS = Array.from({ length: 20 }, (_, index) => `Tým ${String(index + 1).padStart(2, '0')}`).join('\n');
 const ARTIFACTS = [
   { type: 'team-sheets', title: 'Hrací archy', description: 'Čisté archy pro ruční odpovědi týmů.' },
   { type: 'answer-key', title: 'Klíč odpovědí', description: 'Privátní přehled správných odpovědí pro administrátora.' },
@@ -18,15 +17,12 @@ const ARTIFACTS = [
 
 interface Preview { readonly url: string; readonly filename: string }
 
-function teamsFromText(value: string): PrintTeam[] {
-  return value.split(/\r?\n/u).map((name) => name.trim()).filter(Boolean).map((name) => ({ name }));
-}
-
-function optionsFor(type: PrintArtifactType, mode: TeamSheetMode, teamText: string): PrintOptions {
+function optionsFor(type: PrintArtifactType, mode: TeamSheetMode, teamId: string): PrintOptions {
   if (type === 'answer-key') return { artifactType: type, disposition: 'inline' };
-  const teams = teamsFromText(teamText);
-  if (type === 'score-table') return { artifactType: type, disposition: 'inline', teams };
-  return { artifactType: type, disposition: 'inline', mode, teams: mode === 'generic' ? [] : mode === 'single' ? teams.slice(0, 1) : teams };
+  if (type === 'score-table') return { artifactType: type, disposition: 'inline' };
+  return mode === 'single'
+    ? { artifactType: type, disposition: 'inline', mode, teamId }
+    : { artifactType: type, disposition: 'inline', mode };
 }
 
 export function AdminPrintCenterPage() {
@@ -34,11 +30,12 @@ export function AdminPrintCenterPage() {
   const { role } = useAuth();
   const previewFrame = useRef<HTMLIFrameElement>(null);
   const [event, setEvent] = useState<EventRecord | null>(null);
+  const [registrations, setRegistrations] = useState<readonly RegistrationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [artifactType, setArtifactType] = useState<PrintArtifactType>('team-sheets');
   const [teamMode, setTeamMode] = useState<TeamSheetMode>('generic');
-  const [teamText, setTeamText] = useState(SYNTHETIC_TEAMS);
+  const [teamId, setTeamId] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [pending, setPending] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -47,7 +44,12 @@ export function AdminPrintCenterPage() {
     if (!eventId) return;
     setLoading(true);
     setLoadError(null);
-    try { setEvent(await getEvent(eventId)); }
+    try {
+      const [nextEvent, nextRegistrations] = await Promise.all([getEvent(eventId), listEventRegistrations(eventId)]);
+      setEvent(nextEvent);
+      setRegistrations(nextRegistrations.filter((item) => item.status === 'accepted'));
+      setTeamId((current) => current || nextRegistrations.find((item) => item.status === 'accepted')?.id || '');
+    }
     catch { setLoadError('Tiskové centrum se nepodařilo načíst.'); }
     finally { setLoading(false); }
   }, [eventId]);
@@ -55,10 +57,11 @@ export function AdminPrintCenterPage() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url); }, [preview]);
 
-  const options = useMemo(() => optionsFor(artifactType, teamMode, teamText), [artifactType, teamMode, teamText]);
-  const teamCount = 'teams' in options ? options.teams.length : 0;
+  const options = useMemo(() => optionsFor(artifactType, teamMode, teamId), [artifactType, teamMode, teamId]);
+  const teamCount = registrations.length;
   const formInvalid = (artifactType === 'score-table' && (teamCount < 1 || teamCount > 30))
-    || (artifactType === 'team-sheets' && teamMode !== 'generic' && (teamCount < 1 || teamCount > 30));
+    || (artifactType === 'team-sheets' && teamMode === 'single' && !teamId)
+    || (artifactType === 'team-sheets' && teamMode === 'all' && (teamCount < 1 || teamCount > 30));
 
   const clearPreview = () => {
     setPreview((current) => { if (current) URL.revokeObjectURL(current.url); return null; });
@@ -109,7 +112,8 @@ export function AdminPrintCenterPage() {
             {artifactType === 'team-sheets' && <fieldset className="print-mode"><legend>Varianta archu</legend>{([
               ['generic', 'Obecný arch'], ['single', 'Jeden tým'], ['all', 'Všechny týmy'],
             ] as const).map(([value, label]) => <label key={value}><input type="radio" name="team-mode" value={value} checked={teamMode === value} onChange={() => { setTeamMode(value); clearPreview(); }} /> {label}</label>)}</fieldset>}
-            {(artifactType === 'score-table' || (artifactType === 'team-sheets' && teamMode !== 'generic')) && <label className="editor-field"><span>{teamMode === 'single' && artifactType === 'team-sheets' ? 'Tým' : 'Týmy — jeden na řádek'}</span><textarea rows={artifactType === 'score-table' || teamMode === 'all' ? 10 : 3} value={teamText} onChange={(change) => { setTeamText(change.target.value); clearPreview(); }} /><small>{teamCount} / 30 týmů. Zatím jde o typed syntetický vstup bez kontaktů.</small></label>}
+            {artifactType === 'team-sheets' && teamMode === 'single' && <label className="editor-field"><span>Tým</span><select value={teamId} onChange={(change) => { setTeamId(change.target.value); clearPreview(); }}><option value="">Vyberte přijatý tým</option>{registrations.map((team) => <option key={team.id} value={team.id}>{team.teamName}</option>)}</select></label>}
+            {(artifactType === 'score-table' || (artifactType === 'team-sheets' && teamMode === 'all')) && <p className="event-muted">Server použije {teamCount} přijatých týmů. Zrušené týmy a kontaktní e-maily do PDF nevstupují.</p>}
             {artifactType === 'answer-key' && <p className="print-private-note">Privátní dokument. Odpovědi načte server ze snapshotu a browser je nikdy neposílá.</p>}
             {formInvalid && <p className="round-editor-error" role="alert">Zadejte 1 až 30 týmů, každý na samostatný řádek.</p>}
             {generationError && <p className="round-editor-error" role="alert">{generationError}</p>}

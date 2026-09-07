@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { PrintCenterError } from '../functions/src/print/errors';
-import { authorizePrintArtifact, parsePrintOptions } from '../functions/src/print/validation';
+import { authorizePrintArtifact, parsePrintOptions, parsePrintRequestOptions } from '../functions/src/print/validation';
 
 describe('Print Center authorization', () => {
   test.each(['team-sheets', 'answer-key', 'score-table'] as const)('allows admin to generate %s', (artifact) => {
@@ -22,7 +22,8 @@ describe('Print Center authorization', () => {
 describe('Print Center request allowlist', () => {
   test('accepts bounded typed team abstractions', () => {
     expect(parsePrintOptions({ artifactType: 'team-sheets', disposition: 'inline', mode: 'generic', teams: [] })).toEqual({ artifactType: 'team-sheets', disposition: 'inline', mode: 'generic', teams: [] });
-    expect(parsePrintOptions({ artifactType: 'score-table', disposition: 'attachment', teams: [{ name: ' Žluťoučký tým ' }] })).toEqual({ artifactType: 'score-table', disposition: 'attachment', teams: [{ name: 'Žluťoučký tým' }] });
+    expect(parsePrintOptions({ artifactType: 'score-table', disposition: 'attachment', teams: [{ id: 'team-1', name: ' Žluťoučký tým ' }] })).toEqual({ artifactType: 'score-table', disposition: 'attachment', teams: [{ id: 'team-1', name: 'Žluťoučký tým' }] });
+    expect(parsePrintRequestOptions({ artifactType: 'team-sheets', disposition: 'inline', mode: 'single', teamId: 'team-1' })).toEqual({ artifactType: 'team-sheets', disposition: 'inline', mode: 'single', teamId: 'team-1' });
   });
 
   test.each([
@@ -34,9 +35,9 @@ describe('Print Center request allowlist', () => {
   });
 
   test('enforces team count, uniqueness, and safe names', () => {
-    const teams = Array.from({ length: 31 }, (_, index) => ({ name: `Tým ${index}` }));
+    const teams = Array.from({ length: 31 }, (_, index) => ({ id: `team-${index}`, name: `Tým ${index}` }));
     expect(() => parsePrintOptions({ artifactType: 'score-table', disposition: 'inline', teams })).toThrowError(PrintCenterError);
-    expect(() => parsePrintOptions({ artifactType: 'score-table', disposition: 'inline', teams: [{ name: 'Tým' }, { name: 'tým' }] })).toThrowError(PrintCenterError);
-    expect(() => parsePrintOptions({ artifactType: 'score-table', disposition: 'inline', teams: [{ name: 'Tým\u0000' }] })).toThrowError(PrintCenterError);
+    expect(() => parsePrintOptions({ artifactType: 'score-table', disposition: 'inline', teams: [{ id: 'team-1', name: 'Tým' }, { id: 'team-2', name: 'tým' }] })).toThrowError(PrintCenterError);
+    expect(() => parsePrintOptions({ artifactType: 'score-table', disposition: 'inline', teams: [{ id: 'team-1', name: 'Tým\u0000' }] })).toThrowError(PrintCenterError);
   });
 });
