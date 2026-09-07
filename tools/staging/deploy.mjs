@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertStagingEnvironment, assertStagingProject, STAGING_PROJECT, STAGING_URL } from './guard.mjs';
 import { stagingWebConfig, stagingClient } from './cloud.mjs';
-import { deploymentMode, assertHostingOnlyConfig, hostingOnlyArgs, assertFrontendFiles } from './hosting-only.mjs';
+import { deploymentMode, assertHostingOnlyConfig, hostingOnlyArgs, assertFrontendFiles, teamToolFunctionArgs } from './hosting-only.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 process.chdir(root);
@@ -15,7 +15,7 @@ const branch = spawnSync('git', ['branch', '--show-current'], { encoding: 'utf8'
 if (branch.status !== 0 || !branch.stdout.trim()) throw new Error('A named Git branch is required.');
 console.log(`Branch: ${branch.stdout.trim()}\nTarget: ${STAGING_PROJECT}`);
 const config = JSON.parse(readFileSync('firebase.staging.json', 'utf8'));
-if (mode === 'hosting-only') assertHostingOnlyConfig(config);
+if (mode !== 'full') assertHostingOnlyConfig(config);
 if (config.hosting.site !== STAGING_PROJECT || config.functions.source !== '.local-data/staging/functions' ||
     config.hosting.public !== 'apps/web/dist' || config.storage || config.functions.predeploy) throw new Error('Unexpected deploy configuration.');
 const sdk = await stagingWebConfig();
@@ -71,7 +71,7 @@ if (mode === 'hosting-only') {
 }
 run(tsc, ['-p', 'packages/quiz-domain/tsconfig.json']);
 run(tsc, ['-p', 'functions/tsconfig.json']);
-run(path.join(root, 'apps/web/node_modules/vite/bin/vite.js'), ['build', '--mode', 'staging'], path.join(root, 'apps/web'));
+if (mode === 'full') run(path.join(root, 'apps/web/node_modules/vite/bin/vite.js'), ['build', '--mode', 'staging'], path.join(root, 'apps/web'));
 
 // Self-contained generated source package. No workspace symlinks, seeds, or local credentials are uploaded.
 const output = path.join(root, config.functions.source);
@@ -88,6 +88,16 @@ writeFileSync(path.join(output, 'package.json'), JSON.stringify(pkg, null, 2));
 cpSync('tools/staging/functions-package-lock.json', path.join(output, 'package-lock.json'));
 const npm = path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
 run(npm, ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], output);
+if (mode === 'team-tools-functions') {
+  const status = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8' });
+  if (status.status !== 0 || status.stdout.trim()) throw new Error('Functions delivery requires a clean commit.');
+  const configPath = path.join(root, '.local-data/staging/team-tools-functions.json');
+  writeFileSync(configPath, JSON.stringify({ functions: { ...config.functions, source: output } }, null, 2));
+  const args = teamToolFunctionArgs(STAGING_PROJECT, env, config, configPath);
+  console.log('Exact scope: ' + args[args.indexOf('--only') + 1]);
+  run(path.join(root, 'node_modules/firebase-tools/lib/bin/firebase.js'), args);
+  process.exit(0);
+}
 run(path.join(root, 'node_modules/firebase-tools/lib/bin/firebase.js'), [
   'deploy', '--project', STAGING_PROJECT, '--config', 'firebase.staging.json',
   '--only', 'firestore:rules,firestore:indexes,functions,hosting', '--non-interactive',
