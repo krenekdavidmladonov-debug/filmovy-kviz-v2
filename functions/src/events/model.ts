@@ -60,7 +60,16 @@ export function buildPublicEventProjection(input: PublicEventProjectionInput): R
     venueName: input.venue.name,
     publicLocation: input.venue.publicLocation,
     registrationStatus: input.registrationStatus,
+    registrationPublished: input.registrationPublished,
     teamSize: { min: input.teamSizeMin, max: input.teamSizeMax },
+    capacity: {
+      teams: { accepted: input.acceptedTeams, maximum: input.teamCapacity },
+      people: { accepted: input.acceptedPeople, maximum: input.peopleCapacity },
+    },
+    registrationWindow: {
+      opensAt: input.registrationOpensAt,
+      closesAt: input.registrationClosesAt,
+    },
     availability: input.registrationStatus,
     revision: input.revision,
     updatedAt: input.updatedAt,

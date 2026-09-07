@@ -43,6 +43,15 @@ export {
 
 export { generatePrintArtifact } from './print/endpoint.js';
 
+export {
+  adminCancelEventRegistration,
+  cancelEventRegistration,
+  configureEventRegistration,
+  createEventRegistration,
+  getEventRegistration,
+  updateEventRegistration,
+} from './registrations/callables.js';
+
 /** Minimal endpoint that does not initialize Admin SDK or access data. */
 export const health = onRequest(
   {

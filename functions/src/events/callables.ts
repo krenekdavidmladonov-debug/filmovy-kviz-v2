@@ -60,7 +60,12 @@ interface StoredEvent {
   readonly peopleCapacity: number;
   readonly teamSizeMin: number;
   readonly teamSizeMax: number;
+  readonly acceptedTeams: number;
+  readonly acceptedPeople: number;
+  readonly registrationOpensAt: unknown;
+  readonly registrationClosesAt: unknown;
   readonly registrationStatus: RegistrationStatus;
+  readonly registrationPublished: boolean;
   readonly lifecycleStatus: EventLifecycleStatus;
   readonly scoring: EventScoringConfiguration;
   readonly revision: number;
@@ -121,7 +126,14 @@ function storedEvent(snapshot: DocumentSnapshot): StoredEvent {
     peopleCapacity: storedPositiveInteger(data, 'peopleCapacity'),
     teamSizeMin: storedPositiveInteger(data, 'teamSizeMin'),
     teamSizeMax: storedPositiveInteger(data, 'teamSizeMax'),
+    acceptedTeams: Number.isInteger(data.acceptedTeams) && (data.acceptedTeams as number) >= 0
+      ? data.acceptedTeams as number : 0,
+    acceptedPeople: Number.isInteger(data.acceptedPeople) && (data.acceptedPeople as number) >= 0
+      ? data.acceptedPeople as number : 0,
+    registrationOpensAt: data.registrationOpensAt ?? null,
+    registrationClosesAt: data.registrationClosesAt ?? null,
     registrationStatus: data.registrationStatus,
+    registrationPublished: data.registrationPublished === true,
     lifecycleStatus: data.lifecycleStatus,
     scoring: {
       unitScale: 2,
@@ -139,7 +151,7 @@ function assertExpectedRevision(event: StoredEvent, requested: number): void {
 }
 
 function publicProjection(
-  event: Pick<StoredEvent, 'title' | 'startsAt' | 'timeZone' | 'venue' | 'registrationStatus' | 'teamSizeMin' | 'teamSizeMax'>,
+  event: Pick<StoredEvent, 'title' | 'startsAt' | 'timeZone' | 'venue' | 'registrationStatus' | 'registrationPublished' | 'teamSizeMin' | 'teamSizeMax' | 'teamCapacity' | 'peopleCapacity' | 'acceptedTeams' | 'acceptedPeople' | 'registrationOpensAt' | 'registrationClosesAt'>,
   revision: number,
   updatedAt: Timestamp,
 ): Record<string, unknown> {
@@ -187,6 +199,11 @@ export const createEvent = onCall(callableOptions, async (request): Promise<Even
     schemaVersion: 1,
     ...configurationFields(configuration),
     registrationStatus,
+    registrationPublished: false,
+    acceptedTeams: 0,
+    acceptedPeople: 0,
+    registrationOpensAt: null,
+    registrationClosesAt: null,
     lifecycleStatus,
     quizAssignment: null,
     scoring: defaultScoringConfiguration,
@@ -207,8 +224,15 @@ export const createEvent = onCall(callableOptions, async (request): Promise<Even
       timeZone: configuration.timeZone,
       venue: configuration.venue,
       registrationStatus,
+      registrationPublished: false,
       teamSizeMin: configuration.teamSizeMin,
       teamSizeMax: configuration.teamSizeMax,
+      teamCapacity: configuration.teamCapacity,
+      peopleCapacity: configuration.peopleCapacity,
+      acceptedTeams: 0,
+      acceptedPeople: 0,
+      registrationOpensAt: null,
+      registrationClosesAt: null,
     }, 1, now));
   });
   return response(eventRef.id, 1, lifecycleStatus, registrationStatus);
@@ -227,17 +251,27 @@ export const updateEvent = onCall(callableOptions, async (request): Promise<Even
     if (!canMutateEvent(current.lifecycleStatus)) {
       throw new HttpsError('failed-precondition', 'This event can no longer be edited.');
     }
+    if (configuration.teamCapacity < current.acceptedTeams
+      || configuration.peopleCapacity < current.acceptedPeople) {
+      throw new HttpsError('failed-precondition', 'Capacity cannot be lower than accepted registrations.');
+    }
     const now = Timestamp.now();
     const revision = current.revision + 1;
     const fields = configurationFields(configuration);
-    transaction.update(eventRef, { ...fields, revision, updatedAt: now, updatedBy: actor.uid });
+    const capacityFull = current.acceptedTeams >= configuration.teamCapacity
+      || current.acceptedPeople >= configuration.peopleCapacity;
+    const registrationStatus = current.registrationStatus === 'open' && capacityFull
+      ? 'full'
+      : current.registrationStatus === 'full' && !capacityFull ? 'open' : current.registrationStatus;
+    transaction.update(eventRef, { ...fields, registrationStatus, revision, updatedAt: now, updatedBy: actor.uid });
     transaction.set(publicRef, publicProjection({
       ...current,
       ...fields,
+      registrationStatus,
       startsAt: fields.startsAt,
       venue: configuration.venue,
     }, revision, now));
-    return response(eventId, revision, current.lifecycleStatus, current.registrationStatus);
+    return response(eventId, revision, current.lifecycleStatus, registrationStatus);
   });
 });
 

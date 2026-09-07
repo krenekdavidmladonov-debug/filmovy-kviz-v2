@@ -7,6 +7,8 @@ import { AdminLoading } from '../routes/admin/AdminLoading';
 import { AdminNoAccessPage } from '../routes/admin/AdminNoAccessPage';
 import { RequireStaff } from '../routes/admin/RequireStaff';
 import { EventsPage } from '../routes/events/EventsPage';
+import { PublicEventPage } from '../routes/events/PublicEventPage';
+import { ManageRegistrationPage } from '../routes/events/ManageRegistrationPage';
 import { NotFoundPage } from '../routes/NotFoundPage';
 import { AdminShell } from './AdminShell';
 import { AppLayout } from './AppLayout';
@@ -56,6 +58,11 @@ const AdminPrintCenterPage = lazy(async () => {
   return { default: module.AdminPrintCenterPage };
 });
 
+const AdminEventRegistrationsPage = lazy(async () => {
+  const module = await import('../routes/admin/AdminEventRegistrationsPage');
+  return { default: module.AdminEventRegistrationsPage };
+});
+
 const LiveControlPage = lazy(async () => {
   const module = await import('../routes/admin/LiveControlPage');
   return { default: module.LiveControlPage };
@@ -95,6 +102,7 @@ export const router = createBrowserRouter([
           { path: 'events/new', element: <LazyAdminRoute><AdminEventCreatePage /></LazyAdminRoute> },
           { path: 'events/:eventId', element: <LazyAdminRoute><AdminEventDetailPage /></LazyAdminRoute> },
           { path: 'events/:eventId/print', element: <LazyAdminRoute><AdminPrintCenterPage /></LazyAdminRoute> },
+          { path: 'events/:eventId/registrations', element: <LazyAdminRoute><AdminEventRegistrationsPage /></LazyAdminRoute> },
         ],
       },
       { path: '*', element: <NotFoundPage /> },
@@ -107,6 +115,8 @@ export const router = createBrowserRouter([
       { path: 'admin/login', element: <AdminLoginPage /> },
       { path: 'admin/no-access', element: <AdminNoAccessPage /> },
       { path: 'events', element: <EventsPage /> },
+      { path: 'events/:eventId', element: <PublicEventPage /> },
+      { path: 'events/:eventId/registration/manage', element: <ManageRegistrationPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

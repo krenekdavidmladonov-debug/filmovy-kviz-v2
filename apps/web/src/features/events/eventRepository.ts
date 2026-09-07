@@ -8,8 +8,8 @@ import {
 } from 'firebase/firestore';
 
 import { getFirebaseFirestore } from '../../services/firebase/firestore';
-import { mapEvent, mapPublicEvent } from './eventMappers';
-import type { EventRecord, PublicEventRecord } from './types';
+import { mapEvent, mapPublicEvent, mapRegistration } from './eventMappers';
+import type { EventRecord, PublicEventRecord, RegistrationRecord } from './types';
 
 export async function listEvents(): Promise<readonly EventRecord[]> {
   const snapshot = await getDocsFromServer(query(
@@ -30,4 +30,17 @@ export async function listPublicEvents(): Promise<readonly PublicEventRecord[]> 
     orderBy('startsAt', 'asc'),
   ));
   return snapshot.docs.map((item) => mapPublicEvent(item.id, item.data()));
+}
+
+export async function getPublicEvent(eventId: string): Promise<PublicEventRecord | null> {
+  const snapshot = await getDocFromServer(doc(getFirebaseFirestore(), 'publicEvents', eventId));
+  return snapshot.exists() ? mapPublicEvent(snapshot.id, snapshot.data()) : null;
+}
+
+export async function listEventRegistrations(eventId: string): Promise<readonly RegistrationRecord[]> {
+  const snapshot = await getDocsFromServer(query(
+    collection(getFirebaseFirestore(), 'events', eventId, 'registrations'),
+    orderBy('createdAt', 'desc'),
+  ));
+  return snapshot.docs.map((item) => mapRegistration(item.id, item.data()));
 }

@@ -6,6 +6,7 @@ import type {
   EventRecord,
   PublicEventRecord,
   RegistrationStatus,
+  RegistrationRecord,
 } from './types';
 
 function object(value: unknown): Record<string, unknown> | undefined {
@@ -29,6 +30,11 @@ function integer(data: Record<string, unknown>, field: string, minimum = 0): num
 function date(value: unknown, field: string): Date {
   if (!(value instanceof Timestamp)) throw new Error(`Neplatné pole akce: ${field}`);
   return value.toDate();
+}
+
+function optionalDate(value: unknown, field: string): Date | undefined {
+  if (value === undefined || value === null) return undefined;
+  return date(value, field);
 }
 
 function registrationStatus(value: unknown): RegistrationStatus {
@@ -66,6 +72,8 @@ export function mapEvent(id: string, value: DocumentData): EventRecord {
   const venue = object(data.venue);
   const scoring = object(data.scoring);
   const assignment = quizAssignment(data.quizAssignment);
+  const registrationOpensAt = optionalDate(data.registrationOpensAt, 'registrationOpensAt');
+  const registrationClosesAt = optionalDate(data.registrationClosesAt, 'registrationClosesAt');
   if (venue === undefined || scoring === undefined || scoring.unitScale !== 2
     || scoring.rankingMode !== 'dense' || typeof scoring.started !== 'boolean') {
     throw new Error('Konfigurace akce je neplatná.');
@@ -80,6 +88,11 @@ export function mapEvent(id: string, value: DocumentData): EventRecord {
     peopleCapacity: integer(data, 'peopleCapacity', 1),
     teamSizeMin: integer(data, 'teamSizeMin', 1),
     teamSizeMax: integer(data, 'teamSizeMax', 1),
+    acceptedTeams: data.acceptedTeams === undefined ? 0 : integer(data, 'acceptedTeams'),
+    acceptedPeople: data.acceptedPeople === undefined ? 0 : integer(data, 'acceptedPeople'),
+    registrationPublished: data.registrationPublished === true,
+    ...(registrationOpensAt === undefined ? {} : { registrationOpensAt }),
+    ...(registrationClosesAt === undefined ? {} : { registrationClosesAt }),
     registrationStatus: registrationStatus(data.registrationStatus),
     lifecycleStatus: lifecycleStatus(data.lifecycleStatus),
     scoring: { unitScale: 2, rankingMode: 'dense', started: scoring.started },
@@ -91,6 +104,12 @@ export function mapEvent(id: string, value: DocumentData): EventRecord {
 export function mapPublicEvent(id: string, value: DocumentData): PublicEventRecord {
   const data = value as Record<string, unknown>;
   const teamSize = object(data.teamSize);
+  const capacity = object(data.capacity);
+  const teams = capacity && object(capacity.teams);
+  const people = capacity && object(capacity.people);
+  const window = object(data.registrationWindow);
+  const registrationOpensAt = window ? optionalDate(window.opensAt, 'registrationWindow.opensAt') : undefined;
+  const registrationClosesAt = window ? optionalDate(window.closesAt, 'registrationWindow.closesAt') : undefined;
   if (teamSize === undefined) throw new Error('Veřejná konfigurace akce je neplatná.');
   return {
     id,
@@ -100,8 +119,32 @@ export function mapPublicEvent(id: string, value: DocumentData): PublicEventReco
     venueName: text(data, 'venueName'),
     publicLocation: text(data, 'publicLocation'),
     registrationStatus: registrationStatus(data.registrationStatus),
+    registrationPublished: data.registrationPublished === true,
     teamSizeMin: integer(teamSize, 'min', 1),
     teamSizeMax: integer(teamSize, 'max', 1),
+    teamCapacity: teams ? integer(teams, 'maximum', 1) : 0,
+    peopleCapacity: people ? integer(people, 'maximum', 1) : 0,
+    acceptedTeams: teams ? integer(teams, 'accepted') : 0,
+    acceptedPeople: people ? integer(people, 'accepted') : 0,
+    ...(registrationOpensAt === undefined ? {} : { registrationOpensAt }),
+    ...(registrationClosesAt === undefined ? {} : { registrationClosesAt }),
     revision: integer(data, 'revision', 1),
+  };
+}
+
+export function mapRegistration(id: string, value: DocumentData): RegistrationRecord {
+  const data = value as Record<string, unknown>;
+  if (data.status !== 'accepted' && data.status !== 'cancelled') throw new Error('Neplatný stav registrace.');
+  const cancelledAt = optionalDate(data.cancelledAt, 'cancelledAt');
+  return {
+    id,
+    eventId: text(data, 'eventId'),
+    teamName: text(data, 'teamName'),
+    memberCount: integer(data, 'memberCount', 1),
+    contactEmail: text(data, 'contactEmail'),
+    status: data.status,
+    createdAt: date(data.createdAt, 'createdAt'),
+    updatedAt: date(data.updatedAt, 'updatedAt'),
+    ...(cancelledAt === undefined ? {} : { cancelledAt }),
   };
 }

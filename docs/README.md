@@ -45,7 +45,10 @@ Managed exports and extracted documents are local-only under Git-ignored `.local
 - [EVENTS_SECURITY.md](EVENTS_SECURITY.md) — event, snapshot, `publicEvents`, Rules, and trusted Function boundary.
 - [EVENTS_FOUNDATION_IMPLEMENTATION_REPORT.md](EVENTS_FOUNDATION_IMPLEMENTATION_REPORT.md) — sanitized implementation and verification evidence.
 
-Registration and scoring are deliberately absent from the implemented Events Foundation.
+- [REGISTRATIONS.md](REGISTRATIONS.md) — implemented public registration, management links, staff workflow, capacities, and PDF roster contract.
+- [REGISTRATION_SECURITY.md](REGISTRATION_SECURITY.md) — transaction, token, privacy, and Rules invariants.
+
+Scoring remains deliberately absent.
 
 ### PDF Print Center
 
