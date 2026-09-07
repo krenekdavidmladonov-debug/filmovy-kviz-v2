@@ -35,9 +35,9 @@ export function AdminEventCreatePage() {
   return (
     <section className="event-editor-page">
       <Link className="back-link" to="/admin/events">← Zpět na akce</Link>
-      <header className="event-page-heading"><p className="eyebrow">Nová akce</p><h1>Vytvořit akci</h1><p className="lead">Registrace zůstávají naplánované; tento krok vytváří pouze bezpečný základ akce.</p></header>
+      <header className="event-page-heading event-form-heading"><h1>Vytvořit akci</h1><p className="lead">Vyplňte základní údaje a kapacitu. Registrace nastavíte v detailu akce.</p></header>
       {error && <p className="round-editor-error" role="alert">{error}</p>}
-      <EventForm values={values} pending={pending} submitLabel="Vytvořit akci" onChange={setValues} onSubmit={() => void submit()} />
+      <EventForm values={values} pending={pending} submitLabel="Vytvořit akci" pendingLabel="Vytvářím…" onChange={setValues} onSubmit={() => void submit()} />
     </section>
   );
 }

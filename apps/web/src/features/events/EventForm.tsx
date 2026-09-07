@@ -6,59 +6,71 @@ interface EventFormProps {
   readonly values: EventFormValues;
   readonly pending: boolean;
   readonly submitLabel: string;
+  readonly pendingLabel?: string;
   readonly onChange: (values: EventFormValues) => void;
   readonly onSubmit: () => void;
 }
 
-export function EventForm({ values, pending, submitLabel, onChange, onSubmit }: EventFormProps) {
+export function EventForm({ values, pending, submitLabel, pendingLabel = 'Ukládám…', onChange, onSubmit }: EventFormProps) {
   const update = <Key extends keyof EventFormValues>(key: Key, value: EventFormValues[Key]) => {
     onChange({ ...values, [key]: value });
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    onSubmit();
+    if (!pending) onSubmit();
   };
   return (
-    <form className="event-form" onSubmit={submit}>
-      <label className="editor-field event-field-wide">
+    <form className="event-form" onSubmit={submit} aria-busy={pending}>
+      <fieldset className="event-form-section" disabled={pending}>
+      <legend>Základní údaje</legend>
+      <div className="event-form-grid">
+      <label className="form-field event-field-wide">
         <span>Název akce</span>
         <input required maxLength={300} value={values.title} onChange={(event) => update('title', event.target.value)} />
       </label>
-      <label className="editor-field">
+      <label className="form-field">
         <span>Datum a čas</span>
         <input required type="datetime-local" value={values.startsAt} onChange={(event) => update('startsAt', event.target.value)} />
       </label>
-      <label className="editor-field">
+      <label className="form-field">
         <span>Časové pásmo</span>
         <input required maxLength={100} value={values.timeZone} onChange={(event) => update('timeZone', event.target.value)} />
       </label>
-      <label className="editor-field event-field-wide">
+      <label className="form-field">
         <span>Místo</span>
         <input required maxLength={300} value={values.venueName} onChange={(event) => update('venueName', event.target.value)} />
       </label>
-      <label className="editor-field event-field-wide">
+      <label className="form-field">
         <span>Veřejné upřesnění místa</span>
         <input required maxLength={500} value={values.publicLocation} onChange={(event) => update('publicLocation', event.target.value)} />
       </label>
-      <label className="editor-field">
-        <span>Max týmů</span>
+      </div>
+      </fieldset>
+      <fieldset className="event-form-section" disabled={pending}>
+      <legend>Kapacita a velikost týmů</legend>
+      <p className="event-muted" id="event-capacity-help">Současně platí limit počtu týmů i celkového počtu účastníků.</p>
+      <div className="event-form-grid" aria-describedby="event-capacity-help">
+      <label className="form-field">
+        <span>Maximální počet týmů</span>
         <input required type="number" min={1} max={10_000} value={values.teamCapacity} onChange={(event) => update('teamCapacity', event.target.valueAsNumber)} />
       </label>
-      <label className="editor-field">
-        <span>Max lidí</span>
+      <label className="form-field">
+        <span>Maximální počet účastníků</span>
         <input required type="number" min={1} max={100_000} value={values.peopleCapacity} onChange={(event) => update('peopleCapacity', event.target.valueAsNumber)} />
       </label>
-      <label className="editor-field">
-        <span>Min členů týmu</span>
+      <label className="form-field">
+        <span>Minimální počet členů týmu</span>
         <input required type="number" min={1} max={1_000} value={values.teamSizeMin} onChange={(event) => update('teamSizeMin', event.target.valueAsNumber)} />
       </label>
-      <label className="editor-field">
-        <span>Max členů týmu</span>
+      <label className="form-field">
+        <span>Maximální počet členů týmu</span>
         <input required type="number" min={values.teamSizeMin || 1} max={1_000} value={values.teamSizeMax} onChange={(event) => update('teamSizeMax', event.target.valueAsNumber)} />
       </label>
-      <div className="event-form-actions event-field-wide">
+      </div>
+      </fieldset>
+      <div className="event-form-actions">
         <button className="primary-button" type="submit" disabled={pending}>
-          {pending ? 'Ukládám…' : submitLabel}
+          {pending ? pendingLabel : submitLabel}
         </button>
       </div>
     </form>

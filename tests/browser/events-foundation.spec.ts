@@ -16,10 +16,10 @@ test('admin creates an event, validates quiz readiness, locks a snapshot, and pu
   await page.getByLabel('Datum a čas').fill('2026-10-20T19:00');
   await page.getByLabel('Místo', { exact: true }).fill('Syntetický kulturní dům');
   await page.getByLabel('Veřejné upřesnění místa').fill('Praha – hlavní sál');
-  await page.getByLabel('Max týmů').fill('24');
-  await page.getByLabel('Max lidí').fill('144');
-  await page.getByLabel('Min členů týmu').fill('2');
-  await page.getByLabel('Max členů týmu').fill('6');
+  await page.getByLabel('Maximální počet týmů', { exact: true }).fill('24');
+  await page.getByLabel('Maximální počet účastníků').fill('144');
+  await page.getByLabel('Minimální počet členů týmu').fill('2');
+  await page.getByLabel('Maximální počet členů týmu').fill('6');
   await page.getByRole('button', { name: 'Vytvořit akci' }).click();
   await expect(page).not.toHaveURL(/\/admin\/events\/new$/u);
   await expect(page).toHaveURL(/\/admin\/events\/[^/]+$/u);
