@@ -54,6 +54,9 @@ jobs:
       - name: Typecheck, lint, and production build
         run: pnpm check
 
+      - name: Staging target and configuration guards (no cloud access)
+        run: node --test tests/staging-guard.test.mjs
+
       - name: Unit and synthetic migration regression tests
         run: pnpm test:unit
 
