@@ -1,3 +1,4 @@
+import { parseResultPage } from '../leaderboard/types';
 import type { DocumentData } from 'firebase/firestore';
 
 import type { MediaPlaybackCommand, MediaPlaybackState, SlidePresentationInput } from '../presentation/types';
@@ -110,6 +111,9 @@ export function mapLiveControlState(id: string, data: DocumentData): LiveControl
   return {
     sessionId: id,
     quizId: requiredString(data, 'quizId'),
+    ...(typeof data.eventId === 'string' ? { eventId: data.eventId } : {}),
+    ...(typeof data.snapshotId === 'string' ? { snapshotId: data.snapshotId } : {}),
+    ...(object(data.interimResults) ? { interimResults: data.interimResults as NonNullable<LiveControlState['interimResults']> } : {}),
     quizTitle: requiredString(data, 'quizTitle'),
     slideCount: requiredNumber(data, 'slideCount'),
     status: status(data),
@@ -155,11 +159,13 @@ export function mapLiveControlSlide(id: string, data: DocumentData): LiveControl
 }
 
 export function mapPublicLiveState(id: string, data: DocumentData): PublicLiveState {
+  if (data.interimResults && (data.status !== "active" || data.answerRevealed || data.mediaPlaybackState !== "idle" || data.revealedAnswer || data.recapQuestionPosition || data.mediaSource)) throw new Error("Unsafe result presentation.");
   return {
     sessionId: id,
     quizTitle: requiredString(data, 'quizTitle'),
     status: status(data),
     slidePosition: requiredNumber(data, 'slidePosition'),
+    ...(data.interimResults === undefined ? {} : { interimResults: parseResultPage(data.interimResults) }),
     ...(optionalString(data, 'slideKind') === undefined ? {} : { slideKind: optionalString(data, 'slideKind') }),
     ...(optionalString(data, 'title') === undefined ? {} : { title: optionalString(data, 'title') }),
     ...(optionalString(data, 'text') === undefined ? {} : { text: optionalString(data, 'text') }),

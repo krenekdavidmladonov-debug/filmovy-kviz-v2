@@ -6,6 +6,9 @@ export type LiveMediaPlaybackState = 'idle' | 'preparing' | 'ready' | 'playing' 
 
 export interface PrivateLiveSession {
   readonly sessionId: string;
+  readonly eventId?: string;
+  readonly snapshotId?: string;
+  readonly interimResults?: { versionId: string; roundNumber: number; page: number; pageCount: number };
   readonly quizId: string;
   readonly quizTitle: string;
   readonly slideCount: number;

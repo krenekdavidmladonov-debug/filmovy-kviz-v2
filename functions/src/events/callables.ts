@@ -1,3 +1,4 @@
+import { closeEventPresentation } from '../live/event-lifecycle.js';
 import {
   mapEditorQuiz,
   mapEditorSlide,
@@ -284,6 +285,7 @@ export const cancelEvent = onCall(callableOptions, async (request): Promise<Even
   return db.runTransaction(async (transaction) => {
     const current = storedEvent(await transaction.get(eventRef));
     assertExpectedRevision(current, requestedRevision);
+    await closeEventPresentation(transaction, eventId, actor.uid);
     if (!canCancelEvent(current.lifecycleStatus)) {
       throw new HttpsError('failed-precondition', 'This event cannot be cancelled.');
     }
@@ -307,6 +309,7 @@ export const archiveEvent = onCall(callableOptions, async (request): Promise<Eve
   return db.runTransaction(async (transaction) => {
     const current = storedEvent(await transaction.get(eventRef));
     assertExpectedRevision(current, requestedRevision);
+    await closeEventPresentation(transaction, eventId, actor.uid);
     if (!canArchiveEvent(current.lifecycleStatus)) {
       throw new HttpsError('failed-precondition', 'Only a cancelled or completed event can be archived.');
     }
@@ -339,6 +342,7 @@ export const lockEventQuiz = onCall(callableOptions, async (request): Promise<Ev
     const slideSnapshot = await transaction.get(quizRef.collection('slides').orderBy('position'));
     const roundSnapshot = await transaction.get(quizRef.collection('rounds').orderBy('position'));
     const event = storedEvent(eventSnapshot);
+    if (eventSnapshot.data()?.liveSessionId) throw new HttpsError("failed-precondition", "Připravený kvíz již používá moderování akce.");
     assertExpectedRevision(event, requestedEventRevision);
     if (!canLockQuiz(event.lifecycleStatus, event.scoring.started)) {
       throw new HttpsError('failed-precondition', 'The event quiz can no longer be replaced.');

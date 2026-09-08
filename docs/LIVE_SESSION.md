@@ -58,3 +58,8 @@ Staff start a quiz from its private detail page through `/admin/quizzes/:quizId/
 `/projector/:sessionId` requires no login and subscribes only to the public document. It renders waiting, active slide, selected recap answer, ended, not-found, loading, and connection-safe states through the shared `SlideRenderer`. Normal AUDIO playback stays on the moderator device and publishes no source to the projector. VIDEO and recap media use the explicit revisioned PLAY/STOP/REPLAY lifecycle described in `MEDIA_ARCHITECTURE.md`. A media ownership/upload subsystem remains intentionally deferred.
 
 Existing `pl` is presented to authorized editors as locked legacy **Pravda / Lež** content. Its storage shape and raw metadata remain private and are never published to the projector.
+
+
+## Event-bound interim results
+
+The event detail can create/open one snapshot-bound session through `createEventLiveSession`. `previewInterimResults` is private/read-only; `controlInterimResults` publishes a reviewed immutable version, selects a manual page, or hides it. The existing projector renders `ResultsTable`; regular navigation/media controls require hiding the table first, while END remains available. Event cancellation/archive also end the bound presentation atomically. The full contract and future deploy dependencies are in [INTERIM_RESULTS.md](INTERIM_RESULTS.md).

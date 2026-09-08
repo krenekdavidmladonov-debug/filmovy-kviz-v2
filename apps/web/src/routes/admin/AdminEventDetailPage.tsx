@@ -1,3 +1,4 @@
+import { EventLiveButton } from '../../features/leaderboard/EventLiveButton';
 import { RefereeAccessPanel } from '../../features/referee/RefereeAccessPanel';
 import { runQuizPreflight, type EditorQuiz, type PreflightResult } from '@filmovy-kviz/quiz-domain';
 import { useCallback, useEffect, useState } from 'react';
@@ -167,6 +168,7 @@ export function AdminEventDetailPage() {
         <Link className="secondary-link" to={`/admin/events/${event.id}/print`}>Otevřít tiskové centrum</Link>
       </section>
 
+      {locked && ['ready', 'live', 'finalizing'].includes(event.lifecycleStatus) && <EventLiveButton eventId={event.id} revision={event.revision} />}
       {admin && !['archived', 'cancelled', 'completed'].includes(event.lifecycleStatus) && <RefereeAccessPanel eventId={event.id} />}
     {admin && <section className="event-section event-danger-zone"><div><p className="eyebrow">Stav akce</p><h2>Bezpečné ukončení</h2></div>{event.lifecycleStatus === 'cancelled' ? <button className="secondary-button" type="button" disabled={pending} onClick={() => void runAction(() => archiveEvent(event.id, event.revision), 'Akce byla archivována.')}>Archivovat akci</button> : event.lifecycleStatus !== 'archived' && event.lifecycleStatus !== 'completed' ? <button className="danger-button" type="button" disabled={pending} onClick={() => { if (window.confirm('Opravdu zrušit tuto akci? Veřejná projekce bude odstraněna.')) void runAction(() => cancelEvent(event.id, event.revision), 'Akce byla zrušena.'); }}>Zrušit akci</button> : null}</section>}
     </article>

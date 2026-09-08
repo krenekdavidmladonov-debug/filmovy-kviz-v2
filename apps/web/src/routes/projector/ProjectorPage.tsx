@@ -1,3 +1,4 @@
+import { ResultsTable } from '../../features/leaderboard/ResultsTable';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
@@ -5,11 +6,9 @@ import { productConfig } from '../../config/product';
 import {
   broadcastPlaybackState,
   openProjectorChannel,
-  parseProjectorChannelMessage,
-  shouldAcceptProjectorFastPath,
   type ProjectorChannel,
 } from '../../features/live/projectorChannel';
-import { subscribePublicLiveState } from '../../features/live/liveRepository';
+import { readPublicLiveStateFromServer, subscribePublicLiveState } from '../../features/live/liveRepository';
 import { projectorFullscreenFailureMessage, requestProjectorFullscreen } from '../../features/live/projectorWindow';
 import type { PublicLiveState } from '../../features/live/types';
 import { SlideRenderer } from '../../features/presentation/SlideRenderer';
@@ -31,6 +30,7 @@ function ProjectorState({ state, onMediaFinished, onMediaPlaybackState }: {
 }) {
   if (state.status === 'waiting') return <ProjectorMessage quizTitle={state.quizTitle} title="Čekáme na první slide" text="Moderátor kvíz připravuje." />;
   if (state.status === 'ended') return <ProjectorMessage quizTitle={state.quizTitle} title="Kvíz skončil" text="Děkujeme za účast." />;
+  if (state.interimResults) return <div className="results-frame" data-version-id={state.interimResults.versionId}><ResultsTable {...state.interimResults} /></div>;
   return (
     <SlideRenderer
       quizTitle={state.quizTitle}
@@ -65,78 +65,52 @@ export function ProjectorPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fullscreenNotice, setFullscreenNotice] = useState<string | null>(null);
-  const stateRef = useRef<PublicLiveState | null>(null);
-  const authoritativeStateRef = useRef<PublicLiveState | null>(null);
-  const authoritativeRevisionRef = useRef(-1);
-  const fastPathRollbackRef = useRef<number | undefined>(undefined);
   const channelRef = useRef<ProjectorChannel | undefined>(undefined);
 
   useEffect(() => {
     if (!sessionId) { setLoading(false); return; }
-    setLoading(true);
+    let active = true, lastRevision = -1;
+    setState(null); setLoading(true); setError(null);
     const channel = openProjectorChannel(sessionId);
     channelRef.current = channel;
-    if (channel) {
-      channel.setMessageHandler((data) => {
-        const message = parseProjectorChannelMessage(data);
-        if (message?.type !== 'public-state') return;
-        const next = message.state;
-        if (!shouldAcceptProjectorFastPath(
-          sessionId,
-          authoritativeRevisionRef.current,
-          stateRef.current?.revision ?? -1,
-          next,
-        )) return;
-        if (fastPathRollbackRef.current !== undefined) window.clearTimeout(fastPathRollbackRef.current);
-        stateRef.current = next;
-        setState(next);
-        setError(null);
-        setLoading(false);
-        fastPathRollbackRef.current = window.setTimeout(() => {
-          const authoritative = authoritativeStateRef.current;
-          if (authoritative === null || authoritative.revision >= next.revision) return;
-          stateRef.current = authoritative;
-          setState(authoritative);
-          fastPathRollbackRef.current = undefined;
-        }, 1_500);
-      });
-    }
-    const markOffline = () => {
-      if (fastPathRollbackRef.current !== undefined) window.clearTimeout(fastPathRollbackRef.current);
-      fastPathRollbackRef.current = undefined;
-      stateRef.current = null;
-      authoritativeStateRef.current = null;
-      authoritativeRevisionRef.current = -1;
-      setState(null);
-      setError('Projektor je offline; z bezpečnostních důvodů nezobrazuje uložený stav.');
-      setLoading(false);
+    // Inbound channel payloads never authorize presentation, including results.
+    // The channel remains available only for outbound player lifecycle reports.
+    const clear = () => {
+      if (!active) return;
+      setState(null); setLoading(false); setError('Projektor není připojen; čeká na aktuální serverový stav.');
     };
-    window.addEventListener('offline', markOffline);
-    const unsubscribe = subscribePublicLiveState(sessionId, (value) => {
-      if (fastPathRollbackRef.current !== undefined) window.clearTimeout(fastPathRollbackRef.current);
-      fastPathRollbackRef.current = undefined;
-      authoritativeStateRef.current = value;
-      authoritativeRevisionRef.current = value?.revision ?? -1;
-      stateRef.current = value;
-      setState(value);
-      setError(null);
-      setLoading(false);
-    }, () => {
-      if (fastPathRollbackRef.current !== undefined) window.clearTimeout(fastPathRollbackRef.current);
-      fastPathRollbackRef.current = undefined;
-      stateRef.current = null;
-      authoritativeStateRef.current = null;
-      authoritativeRevisionRef.current = -1;
-      setState(null);
-      setError('Spojení s projektorem se nezdařilo. Zkontrolujte emulator a připojení.');
-      setLoading(false);
-    });
+    let generation = 0;
+    let unsubscribe: (() => void) | undefined;
+    const accept = (value: PublicLiveState | null) => {
+      if (!active || !navigator.onLine || (value && (value.sessionId !== sessionId || value.revision < lastRevision))) return;
+      if (value) lastRevision = value.revision;
+      setState(value); setError(null); setLoading(false);
+    };
+    const disconnect = () => {
+      generation++;
+      unsubscribe?.(); unsubscribe = undefined;
+      clear();
+    };
+    const connect = () => {
+      const current = ++generation;
+      unsubscribe?.(); unsubscribe = undefined;
+      // Require a fresh server response on reconnect even when the document did not change.
+      void readPublicLiveStateFromServer(sessionId).then(value => {
+        if (!active || current !== generation || !navigator.onLine) return;
+        accept(value);
+        unsubscribe = subscribePublicLiveState(sessionId, next => {
+          if (active && current === generation) accept(next);
+        }, () => { if (current === generation) clear(); });
+      }).catch(() => { if (current === generation) clear(); });
+    };
+    window.addEventListener('offline', disconnect);
+    window.addEventListener('online', connect);
+    if (navigator.onLine) connect(); else clear();
     return () => {
-      window.removeEventListener('offline', markOffline);
-      if (fastPathRollbackRef.current !== undefined) window.clearTimeout(fastPathRollbackRef.current);
-      unsubscribe();
-      channel?.close();
-      channelRef.current = undefined;
+      active = false; generation++;
+      window.removeEventListener('offline', disconnect);
+      window.removeEventListener('online', connect);
+      unsubscribe?.(); channel?.close(); channelRef.current = undefined;
     };
   }, [sessionId]);
 

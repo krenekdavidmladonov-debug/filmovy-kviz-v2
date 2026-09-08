@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, orderBy, query, type Unsubscribe } from 'firebase/firestore';
+import { collection, doc, getDocFromServer, onSnapshot, orderBy, query, type Unsubscribe } from 'firebase/firestore';
 
 import { getFirebaseFirestore } from '../../services/firebase/firestore';
 import { mapLiveControlSlide, mapLiveControlState, mapPublicLiveState } from './liveMappers';
@@ -28,8 +28,9 @@ export function subscribeLiveControlSlides(
   quizId: string,
   onValue: (value: readonly LiveControlSlide[]) => void,
   onError: ErrorHandler,
+  snapshotId?: string,
 ): Unsubscribe {
-  const slides = query(collection(getFirebaseFirestore(), 'quizzes', quizId, 'slides'), orderBy('position'));
+  const slides = query(collection(getFirebaseFirestore(), snapshotId ? 'quizSnapshots' : 'quizzes', snapshotId ?? quizId, 'slides'), orderBy('position'));
   return onSnapshot(slides, (snapshot) => onValue(snapshot.docs.map((item) => mapLiveControlSlide(item.id, item.data()))), onError);
 }
 
@@ -50,4 +51,9 @@ export function subscribePublicLiveState(
     },
     onError,
   );
+}
+
+export async function readPublicLiveStateFromServer(sessionId: string): Promise<PublicLiveState | null> {
+  const snapshot = await getDocFromServer(doc(getFirebaseFirestore(), 'publicSessions', sessionId));
+  return snapshot.exists() ? mapPublicLiveState(snapshot.id, snapshot.data()) : null;
 }

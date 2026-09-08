@@ -72,9 +72,9 @@ export function LiveModeratorView({
   onMediaError,
   onMediaPlayback,
 }: LiveModeratorViewProps) {
-  const pending = pendingAction !== null;
+  const pending = pendingAction !== null || session.interimResults !== undefined;
   const ended = session.status === 'ended';
-  const source = liveMediaSource(presentedSlide);
+  const source = session.interimResults ? undefined : liveMediaSource(presentedSlide);
   const roundLabel = currentRoundLabel(currentSlide);
   const questionLabel = currentQuestionLabel(session, currentSlide, presentedSlide, slides);
   const recapTitle = currentSlide?.roundTitle?.trim() || 'Aktuální kolo';
@@ -86,7 +86,7 @@ export function LiveModeratorView({
       data-presentation-mode={session.presentationMode}
     >
       <header className="focused-live-header">
-        <Link className="live-back-link" to={`/admin/quizzes/${encodeURIComponent(session.quizId)}`}>← Zpět na kvíz</Link>
+        <Link className="live-back-link" to={session.eventId ? `/admin/events/${encodeURIComponent(session.eventId)}` : `/admin/quizzes/${encodeURIComponent(session.quizId)}`}>← Zpět na detail</Link>
         <div className="live-title-context">
           <span>{roundLabel}</span>
           <h1>{session.quizTitle}</h1>
@@ -144,7 +144,7 @@ export function LiveModeratorView({
             </button>
           )}
 
-          {session.presentationMode === 'recap' && (
+          {!session.interimResults && session.presentationMode === 'recap' && (
             <section className="recap-controls" aria-labelledby="recap-controls-title">
               <div><span className="panel-label">Rekapitulace</span><strong id="recap-controls-title">{recapTitle}</strong></div>
               <div className="recap-question-buttons" aria-label="Otázky aktuálního kola">
@@ -197,7 +197,7 @@ export function LiveModeratorView({
 
           <section className="live-danger-area" aria-labelledby="live-danger-title">
             <div><span className="panel-label">Ukončení</span><strong id="live-danger-title">Další možnosti</strong></div>
-            <button className="danger-button" type="button" disabled={pending || ended} onClick={onEnd}>
+            <button className="danger-button" type="button" disabled={pendingAction !== null || ended} onClick={onEnd}>
               {pendingLabel(pendingAction, 'end', 'Ukončit kvíz')}
             </button>
           </section>

@@ -80,7 +80,7 @@ Private live-control state. Required fields are `quizId`, safe display copy `qui
 
 ### `events/{eventId}/scores/{scoreId}`
 
-Implemented internal per-team/per-snapshot-round half-point value and monotonic revision. The stable pair key, append-only history child collection, server-only scoreOperations receipts, null/zero distinction and atomic transaction are specified in EVENT_SCORING.md. All client writes are denied; staff-only reads. No totals or rankings are published.
+Implemented internal per-team/per-snapshot-round half-point value and monotonic revision. The stable pair key, append-only history child collection, server-only scoreOperations receipts, null/zero distinction and atomic transaction are specified in EVENT_SCORING.md. All client writes are denied; staff-only reads. Score mutations do not publish totals or rankings; separate staff confirmation is required.
 
 ### `media/{mediaId}`
 
@@ -98,9 +98,9 @@ Server-generated projector snapshot: `sessionId`, `status`, `quizTitle`, `slideP
 
 Anonymous clients may get one document when they already know its random session ID, but cannot list the collection or write any public state. Every state change replaces the whole public document in the same transaction as the private session update, removing stale reveal fields.
 
-### `publicSessions/{sessionId}/leaderboard/{teamId}`
+### Confirmed interim results
 
-Sanitized team display name, rank, and score when publication is enabled. No registration reference or contact data.
+Event-bound sessions add private eventId/snapshotId and an interimResults version/page pointer. Private session child collections interimVersions and interimOperations hold immutable reviewed totals and idempotent audit receipts. The existing public session document contains only the currently published page of at most eight rank/teamName/halfPoints rows plus version/scope/page metadata. There is no public leaderboard subcollection. Hide/end/cancel/archive remove this payload. See [INTERIM_RESULTS.md](INTERIM_RESULTS.md).
 
 ## Server-only registration flow
 
