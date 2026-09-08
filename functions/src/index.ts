@@ -64,3 +64,4 @@ export const health = onRequest(
     response.status(200).json({ status: 'ok' });
   },
 );
+export { saveEventScore } from './scoring/callables.js';

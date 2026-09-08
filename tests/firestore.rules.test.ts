@@ -7,7 +7,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, test } from 'vitest';
 
 const projectId = 'demo-filmovy-kviz-v2';
@@ -72,6 +72,8 @@ beforeEach(async () => {
     await setDoc(doc(context.firestore(), privateEventPath), {
       title: 'Private event', revision: 1, lifecycleStatus: 'scheduled',
     });
+    await setDoc(doc(context.firestore(), 'events/security-test-event/scores/pair'), { halfPoints: 0, revision: 1 });
+    await setDoc(doc(context.firestore(), 'events/security-test-event/scores/pair/history/1'), { halfPoints: 0, revision: 1 });
     await setDoc(doc(context.firestore(), privateEventChildPath), { secret: true });
     await setDoc(doc(context.firestore(), privateRegistrationPath), { teamName: 'Synthetic team', contactEmail: 'team@example.test' });
     await setDoc(doc(context.firestore(), privateRegistrationNamePath), { registrationId: 'security-registration' });
@@ -261,4 +263,24 @@ test('an unknown path remains denied even for an admin', async () => {
     .authenticatedContext('admin-user', { role: 'admin' })
     .firestore();
   await assertFails(getDoc(doc(db, 'unknown/private-document')));
+});
+
+describe('internal event scoring', () => {
+  for (const role of [null, 'user', 'admin', 'moderator']) {
+    test('score/history access for ' + String(role), async () => {
+      const db = role === null ? testEnvironment.unauthenticatedContext().firestore()
+        : testEnvironment.authenticatedContext('score-' + role, { role, managementToken: 'not-scoring-authority' }).firestore();
+      const staff = role === 'admin' || role === 'moderator';
+      for (const path of ['events/security-test-event/scores/pair', 'events/security-test-event/scores/pair/history/1']) {
+        await (staff ? assertSucceeds : assertFails)(getDoc(doc(db, path)));
+        await assertFails(setDoc(doc(db, path), { halfPoints: 20, revision: 1 }));
+        await assertFails(updateDoc(doc(db, path), { halfPoints: 30 }));
+        await assertFails(deleteDoc(doc(db, path)));
+      }
+      await (staff ? assertSucceeds : assertFails)(getDocs(collection(db, 'events/security-test-event/scores')));
+      await (staff ? assertSucceeds : assertFails)(getDocs(collection(db, 'events/security-test-event/scores/pair/history')));
+      await assertFails(getDoc(doc(db, 'events/security-test-event/scoreOperations/key')));
+      await assertFails(setDoc(doc(db, 'events/security-test-event/scoreOperations/key'), { response: {} }));
+    });
+  }
 });
