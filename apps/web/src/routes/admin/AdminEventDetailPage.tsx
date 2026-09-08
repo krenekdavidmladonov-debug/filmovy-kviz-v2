@@ -113,8 +113,8 @@ export function AdminEventDetailPage() {
   return (
     <article className="event-detail-page">
       <Link className="back-link" to="/admin/events">← Zpět na akce</Link>
-      <header className="event-page-heading">
-        <div><p className="eyebrow">Akce</p><h1>{event.title}</h1><p className="lead">{event.venue.name} · {new Intl.DateTimeFormat('cs-CZ', { dateStyle: 'full', timeStyle: 'short' }).format(event.startsAt)}</p></div>
+      <header className="event-page-heading event-form-heading">
+        <div><h1>{admin ? 'Upravit akci' : 'Detail akce'}</h1><p className="lead">{event.title} · {event.venue.name}</p></div>
         <span className={`quiz-status status-${event.lifecycleStatus}`}>{event.lifecycleStatus === 'ready' ? 'Připraveno' : event.lifecycleStatus}</span>
       </header>
       {error && <p className="round-editor-error" role="alert">{error}</p>}
@@ -127,7 +127,6 @@ export function AdminEventDetailPage() {
       </section>
 
       <section className="event-section">
-        <div className="event-section-heading"><div><p className="eyebrow">Konfigurace</p><h2>Základní údaje</h2></div><span>Revize {event.revision}</span></div>
         {admin ? <EventForm values={values} pending={pending} submitLabel="Uložit změny" onChange={setValues} onSubmit={() => void runAction(() => updateEvent(event.id, event.revision, values), 'Změny akce byly uloženy.')} /> : (
           <dl className="event-readonly-grid"><div><dt>Místo</dt><dd>{event.venue.name}</dd></div><div><dt>Veřejná lokalita</dt><dd>{event.venue.publicLocation}</dd></div><div><dt>Kapacita týmů</dt><dd>{event.teamCapacity}</dd></div><div><dt>Kapacita lidí</dt><dd>{event.peopleCapacity}</dd></div><div><dt>Velikost týmu</dt><dd>{event.teamSizeMin}–{event.teamSizeMax}</dd></div></dl>
         )}
