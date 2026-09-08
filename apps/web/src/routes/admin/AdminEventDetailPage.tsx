@@ -131,6 +131,11 @@ export function AdminEventDetailPage() {
         {addedTeam && <p className="event-notice" role="status">Přidán tým: <Link to={`/admin/events/${event.id}/registrations?team=${addedTeam.id}`}>{addedTeam.name}</Link></p>}
       </section>
 
+      <section className="event-section">
+        <div className="event-section-heading"><div><p className="eyebrow">Interní zápis</p><h2>Bodování</h2></div></div>
+        <p className="event-muted">Body přijatých týmů za kola připraveného kvízu a historie oprav.</p>
+        <Link className="secondary-link" to={`/admin/events/${event.id}/scoring`}>Otevřít bodování</Link>
+      </section>
       <RegistrationSharePanel event={event} />
       {admin && addingTeam && <ManualTeamDialog event={event} onClose={() => setAddingTeam(false)} onSaved={async (id, name) => { setAddedTeam({ id, name }); setEvent(await getEvent(event.id)); }} />}
 

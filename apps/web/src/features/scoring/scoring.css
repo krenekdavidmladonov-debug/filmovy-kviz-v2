@@ -1,0 +1,9 @@
+.score-row { padding: 1.25rem 0; border-top: 1px solid var(--color-border, #dce1e8); }
+.score-row h3 { margin: 0; }
+.score-fields { display: grid; grid-template-columns: minmax(100px, 180px) minmax(160px, 1fr); gap: 1rem; }
+.score-conflict { padding: 1rem; margin: 1rem 0; border: 1px solid #b67a22; border-radius: 12px; background: #fff8e8; color: #583c15; }
+.score-history { overflow-wrap: anywhere; }
+.score-history li { margin-block: 1rem; }
+.score-history span { display: block; font-size: .85rem; opacity: .8; }
+.score-row .team-tool-actions { flex-wrap: wrap; }
+@media (max-width: 560px) { .score-fields { grid-template-columns: 1fr; } }
