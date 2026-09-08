@@ -4,9 +4,9 @@ import { pointsText, parsePoints, scoreLabel, type Score, type ScoreHistory } fr
 
 interface Props {
   eventId: string; snapshotId: string; teamId: string; roundId: string; name: string;
-  stored: Score; disabled: boolean; onDirty: (id: string, dirty: boolean) => void;
+  transport?: { save: typeof saveScore; history: typeof loadHistory }; stored: Score; disabled: boolean; onDirty: (id: string, dirty: boolean) => void;
 }
-export function ScoreRow({ eventId, snapshotId, teamId, roundId, name, stored, disabled, onDirty }: Props) {
+export function ScoreRow({ eventId, snapshotId, teamId, roundId, name, stored, disabled, onDirty, transport }: Props) {
   const [draft, setDraft] = useState<{ text: string; reason: string; base: Score } | null>(null);
   const [pending, setPending] = useState(false);
   const busy = useRef(false);
@@ -41,7 +41,7 @@ export function ScoreRow({ eventId, snapshotId, teamId, roundId, name, stored, d
     retry.current = request;
     busy.current = true; setPending(true); setError(''); setNotice('');
     try {
-      const confirmed = await saveScore(request);
+      const confirmed = await (transport?.save ?? saveScore)(request);
       retry.current = null; setDraft(null); setConflict(confirmed); setHistory(null);
       setNotice('Uložení potvrzeno serverem.');
     } catch (issue) {
@@ -66,11 +66,11 @@ export function ScoreRow({ eventId, snapshotId, teamId, roundId, name, stored, d
         <button className="primary-button" type="submit" disabled={!dirty || pending || disabled || (stale && retry.current === null)}>Uložit</button>
         {current.halfPoints !== null && <button className="secondary-button" type="button" disabled={pending || disabled || stale} onClick={() => void save(true)}>Vrátit na nezadáno</button>}
         {dirty && <button type="button" className="secondary-button" disabled={pending} onClick={() => { if (window.confirm('Zahodit rozepsané změny tohoto týmu?')) { setDraft(null); retry.current = null; setError(''); } }}>Zahodit změny</button>}
-        <button type="button" className="secondary-button" onClick={() => { if (history) setHistory(null); else void loadHistory(eventId, teamId, roundId).then(setHistory).catch(() => setError('Historii se nepodařilo načíst.')); }}>Historie změn</button>
+        <button type="button" disabled={transport !== undefined && disabled} className="secondary-button" onClick={() => { if (history) setHistory(null); else void (transport?.history ?? loadHistory)(eventId, teamId, roundId).then(setHistory).catch(() => setError('Historii se nepodařilo načíst.')); }}>Historie změn</button>
       </div>
     </form>
     {error && <p role="alert" className="round-editor-error">{error}</p>}
     {notice && <p role="status" className="event-notice">{notice}</p>}
-    {history && <div className="score-history">{history.length === 0 ? <p>Žádné zápisy.</p> : <ol>{history.map(item => <li key={item.revision}><strong>{scoreLabel(item.previousHalfPoints)} → {scoreLabel(item.halfPoints)}</strong><span>{item.createdAt} · uživatel {item.actorUid} · revize {item.revision}</span>{item.reason && <p>{item.reason}</p>}</li>)}</ol>}</div>}
+    {history && <div className="score-history">{history.length === 0 ? <p>Žádné zápisy.</p> : <ol>{history.map(item => <li key={item.revision}><strong>{scoreLabel(item.previousHalfPoints)} → {scoreLabel(item.halfPoints)}</strong><span>{item.createdAt} · {item.actorLabel ?? ('uživatel ' + item.actorUid)} · revize {item.revision}</span>{item.reason && <p>{item.reason}</p>}</li>)}</ol>}</div>}
   </section>;
 }

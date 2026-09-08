@@ -109,3 +109,7 @@ The public client calls a Function. The Function validates shape and limits, che
 ## Retention and audit
 
 Contact data needs an explicit retention policy before launch. Important mutations should record server-derived actor and timestamp fields. Avoid indefinite logs containing contact data.
+
+## Referee access extension
+
+events/{eventId}/refereeAccess/{accessId} holds server-only label, expiry, version, revoked status, verifier, issuance fingerprint and organizer audit. refereeRateLimits holds server-only hashed-address request windows. Shared scores/history retain staff actorUid compatibility; referee writes use actorAccessId plus actorLabel, with the same scoreOperations receipts. No parallel scores collection or migration is introduced. See [REFEREE_ACCESS.md](REFEREE_ACCESS.md).

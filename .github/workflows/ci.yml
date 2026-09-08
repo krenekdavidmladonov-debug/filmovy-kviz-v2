@@ -90,3 +90,10 @@ jobs:
           --only auth,firestore,functions,hosting
           --project demo-filmovy-kviz-v2
           "pnpm seed:auth && pnpm seed:quizzes && pnpm test:e2e:registrations-browser && pnpm exec playwright test --config tests/browser/event-team-tools.config.ts"
+
+      - name: Referee access contracts and browser E2E (local emulators only)
+        run: >-
+          pnpm exec firebase emulators:exec
+          --only auth,firestore,functions
+          --project demo-filmovy-kviz-v2
+          "pnpm seed:quizzes && node tools/local-emulator-environment.mjs full tests/e2e/referee-access-emulator.mjs && pnpm exec playwright test --config tests/browser/referee-access.config.ts"
