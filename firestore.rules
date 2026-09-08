@@ -61,6 +61,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Internal scoring is staff-readable; only the callable writes scores/history.
+    match /events/{eventId}/scores/{scoreId} {
+      allow read: if isStaff();
+      allow write: if false;
+      match /history/{entryId} {
+        allow read: if isStaff();
+        allow write: if false;
+      }
+    }
+
     // Every other event child path remains private.
     match /events/{eventId}/{document=**} {
       allow read, write: if false;

@@ -92,3 +92,6 @@ Storage remains fully deny-all. Before additional Firestore or Storage access is
 - Require review for Rules, Functions authorization, and public projection changes.
 - Log security-relevant mutations without secrets or unnecessary contact data.
 - Define backup, retention, deletion, and incident-response procedures before launch.
+
+### Internal event scoring
+The saveEventScore callable rechecks the current Auth user's admin/moderator claim and disabled flag on every invocation, including retries. The existing global staff scope is preserved. New writes require the event's current immutable snapshot, an existing snapshot round, an accepted canonical registration, an operational lifecycle, a safe half-point integer (or null), an exact score revision, and a reason for corrections/clearing. Score, history and actor/event-bound idempotency receipt commit atomically. Rules grant only staff score/history reads and deny all client writes; scoreOperations is server-only. Management tokens grant no scoring authority. Nothing is published and contact access is unchanged. Full contract and emulator tests: EVENT_SCORING.md.

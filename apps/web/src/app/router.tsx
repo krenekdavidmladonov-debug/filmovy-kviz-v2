@@ -38,6 +38,11 @@ const QuizRepairPage = lazy(async () => {
   return { default: module.QuizRepairPage };
 });
 
+const AdminEventScoringPage = lazy(async () => {
+  const module = await import('../routes/admin/AdminEventScoringPage');
+  return { default: module.AdminEventScoringPage };
+});
+
 const AdminEventsPage = lazy(async () => {
   const module = await import('../routes/admin/AdminEventsPage');
   return { default: module.AdminEventsPage };
@@ -100,6 +105,7 @@ export const router = createBrowserRouter([
           { path: 'quizzes/:quizId/readiness/repair', element: <LazyAdminRoute><QuizRepairPage /></LazyAdminRoute> },
           { path: 'events', element: <LazyAdminRoute><AdminEventsPage /></LazyAdminRoute> },
           { path: 'events/new', element: <LazyAdminRoute><AdminEventCreatePage /></LazyAdminRoute> },
+          { path: 'events/:eventId/scoring', element: <LazyAdminRoute><AdminEventScoringPage /></LazyAdminRoute> },
           { path: 'events/:eventId', element: <LazyAdminRoute><AdminEventDetailPage /></LazyAdminRoute> },
           { path: 'events/:eventId/print', element: <LazyAdminRoute><AdminPrintCenterPage /></LazyAdminRoute> },
           { path: 'events/:eventId/registrations', element: <LazyAdminRoute><AdminEventRegistrationsPage /></LazyAdminRoute> },

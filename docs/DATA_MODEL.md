@@ -72,15 +72,15 @@ Private registration: team name, normalized team name, contact person/email/phon
 
 ### `events/{eventId}/teams/{teamId}`
 
-Operational team: display name, check-in state, seat count, scoring state, and private registration reference. It does not duplicate contact details.
+Reserved conceptual path, not used by internal scoring. The canonical team ID for scoring is the existing registration document ID; no parallel team collection is created.
 
 ### `sessions/{sessionId}`
 
 Private live-control state. Required fields are `quizId`, safe display copy `quizTitle`, `slideCount`, `status` (`waiting`, `active`, `ended`), `currentSlidePosition`, optional `currentSlideId`, `answerRevealed`, moderator `mediaCommand`, confirmed `mediaPlaybackState`, monotonic `mediaGeneration`, monotonic `revision`, `createdBy`, `updatedBy`, and lifecycle timestamps. Correct answers and raw slides are not duplicated into this document; trusted Functions load the current private ordered slide server-side. Staff may read sessions for control UI, but all direct client writes are denied.
 
-### `events/{eventId}/sessions/{sessionId}/scores/{teamId}`
+### `events/{eventId}/scores/{scoreId}`
 
-Per-team totals and round breakdown. Writes are staff/server only; final public rankings are projected separately.
+Implemented internal per-team/per-snapshot-round half-point value and monotonic revision. The stable pair key, append-only history child collection, server-only scoreOperations receipts, null/zero distinction and atomic transaction are specified in EVENT_SCORING.md. All client writes are denied; staff-only reads. No totals or rankings are published.
 
 ### `media/{mediaId}`
 
