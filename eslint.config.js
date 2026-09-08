@@ -19,7 +19,7 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
-    files: ['**/*.{js,mjs,cjs}'],
+    files: ['**/*.{js,mjs,cjs}', 'tools/staging/*.d.mts'],
     ...tseslint.configs.disableTypeChecked,
   },
   {

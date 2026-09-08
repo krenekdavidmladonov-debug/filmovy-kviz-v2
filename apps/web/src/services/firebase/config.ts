@@ -25,6 +25,12 @@ export function readFirebaseConfig(): FirebaseRuntimeConfig {
   const allowNonDemoProject = import.meta.env.VITE_FIREBASE_ALLOW_NON_DEMO_PROJECT === 'true';
   const useEmulators = import.meta.env.VITE_FIREBASE_USE_EMULATORS === 'true';
 
+  if (!useEmulators && (import.meta.env.VITE_APP_ENV !== 'staging' || projectId !== 'filmovy-kviz-v2-staging' ||
+      import.meta.env.VITE_FIREBASE_AUTH_DOMAIN !== 'filmovy-kviz-v2-staging.firebaseapp.com' ||
+      import.meta.env.VITE_FIREBASE_APP_ID !== '1:177615774316:web:91aafb858b7cf61a7bee49')) {
+    throw new Error('Cloud access is restricted to the explicitly configured V2 staging environment.');
+  }
+
   if (!projectId) {
     throw new Error('Firebase project ID is missing.');
   }

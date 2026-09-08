@@ -85,6 +85,7 @@ export function AdminShell() {
       </header>
 
       <main className="admin-main" id="main-content">
+        {import.meta.env.VITE_APP_ENV === 'staging' && <div role="note" className="admin-content"><strong>STAGING — pouze syntetická testovací data</strong></div>}
         <div className="admin-content"><Outlet /></div>
       </main>
     </div>

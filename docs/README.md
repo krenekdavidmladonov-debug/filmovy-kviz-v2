@@ -6,6 +6,8 @@ This directory is the source of truth for Filmovy Kviz V2 product, architecture,
 
 ### Development baseline
 
+- [STAGING.md](STAGING.md) — isolated HTTPS V2 staging, guarded deployment and synthetic-only bootstrap.
+
 - [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md) — canonical branch roles, test levels, reasoning policy, and worktree convention.
 - [ROADMAP_V03.md](ROADMAP_V03.md) — implemented baseline, ordered next work, and explicitly deferred scope.
 

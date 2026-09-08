@@ -1,0 +1,19 @@
+{
+  "functions": {
+    "source": ".local-data/staging/functions",
+    "codebase": "default",
+    "runtime": "nodejs22"
+  },
+  "hosting": {
+    "site": "filmovy-kviz-v2-staging",
+    "public": "apps/web/dist",
+    "ignore": ["firebase.staging.json", "**/.*", "**/node_modules/**"],
+    "headers": [{ "source": "**", "headers": [
+      { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+      { "key": "Referrer-Policy", "value": "no-referrer" },
+      { "key": "X-Content-Type-Options", "value": "nosniff" }
+    ] }],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  },
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" }
+}

@@ -84,7 +84,7 @@ The PDF Print Center adds `/admin/events/:eventId/print` and a binary HTTPS Func
 ## Environments
 
 - Local: Firebase Emulator Suite with `demo-filmovy-kviz-v2`.
-- Future staging: a separate non-production Firebase project, added only intentionally.
+- Staging: isolated `filmovy-kviz-v2-staging`, configured through the guarded staging tools; see `STAGING.md`.
 - Production: never targeted without explicit approval.
 
 No production project identifiers or credentials are stored in this repository.

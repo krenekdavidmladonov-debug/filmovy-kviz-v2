@@ -69,7 +69,7 @@ Registration uses callable Functions rather than direct Firestore writes. It val
 
 ## Firebase configuration and secrets
 
-Firebase web configuration is not a secret, but project selection is safety-critical. Local defaults use a `demo-*` project and emulators. The client requires explicit opt-in for a non-demo project ID. Service-account keys and secrets are forbidden in Git.
+Firebase web configuration is not a secret, but project selection is safety-critical. Local defaults use a `demo-*` project and emulators. Cloud access additionally requires explicit staging mode and the exact allowlisted V2 staging project/app/domain. Other cloud and production builds are rejected. Service-account keys and secrets are forbidden in Git. The isolated staging bootstrap uses only operator CLI OAuth in memory and synthetic data; its generated passwords/tokens remain under ignored `.local-data/staging`. See `STAGING.md`.
 
 The local auth seed uses Admin SDK only after two fail-closed checks: the Authentication Emulator must be on local port `9099`, and the project ID must start with `demo-`. It creates three documented development accounts and never loads credentials.
 
