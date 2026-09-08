@@ -1,6 +1,6 @@
 export interface Score { readonly revision: number; readonly halfPoints: number | null }
 export interface ScoreHistory extends Score {
-  readonly previousHalfPoints: number | null; readonly actorUid: string; readonly createdAt: string; readonly reason: string;
+  readonly previousHalfPoints: number | null; readonly actorUid?: string; readonly actorLabel?: string; readonly createdAt: string; readonly reason: string;
 }
 export const emptyScore: Score = { revision: 0, halfPoints: null };
 

@@ -48,7 +48,7 @@ export async function loadHistory(eventId: string, teamId: string, roundId: stri
   return result.docs.map(item => {
     const data = item.data();
     return { revision: data.revision as number, halfPoints: data.halfPoints as number | null,
-      previousHalfPoints: data.previousHalfPoints as number | null, actorUid: String(data.actorUid),
+      previousHalfPoints: data.previousHalfPoints as number | null, actorUid: typeof data.actorUid === 'string' ? data.actorUid : undefined, actorLabel: typeof data.actorLabel === 'string' ? data.actorLabel : undefined,
       reason: String(data.reason), createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toLocaleString('cs-CZ') : 'Neznámý čas' };
   });
 }

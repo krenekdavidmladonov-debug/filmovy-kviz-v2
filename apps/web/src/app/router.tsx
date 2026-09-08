@@ -1,3 +1,4 @@
+import { RefereePage } from '../routes/referee/RefereePage';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
@@ -87,6 +88,7 @@ function LazyProjectorRoute() {
 }
 
 export const router = createBrowserRouter([
+  { path: 'referee/:eventId', element: <RefereePage /> },
   { path: 'projector', element: <LazyProjectorRoute /> },
   { path: 'projector/:sessionId', element: <LazyProjectorRoute /> },
   {
