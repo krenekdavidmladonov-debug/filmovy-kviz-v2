@@ -284,3 +284,16 @@ describe('internal event scoring', () => {
     });
   }
 });
+
+describe('referee grants are server-only, capabilities do not grant Firestore roles', () => {
+  for (const role of [null, 'referee', 'moderator', 'admin']) test('deny grant and limiter paths for ' + String(role), async () => {
+    const db = role === null ? testEnvironment.unauthenticatedContext().firestore() : testEnvironment.authenticatedContext('ref-' + role, { role, refereeAccessId: 'fake', eventId: 'security-test-event' }).firestore();
+    for (const path of ['events/security-test-event/refereeAccess/access', 'refereeRateLimits/ip']) {
+      await assertFails(getDoc(doc(db, path))); await assertFails(setDoc(doc(db, path), { keyHash: 'forged' }));
+      await assertFails(updateDoc(doc(db, path), { revoked: false })); await assertFails(deleteDoc(doc(db, path)));
+    }
+    if (role === 'referee') for (const path of ['events/security-test-event/scores/pair','events/security-test-event/scores/pair/history/1',privateSnapshotPath,privateRegistrationPath]) {
+      await assertFails(getDoc(doc(db,path))); await assertFails(setDoc(doc(db,path),{forged:true}));
+    }
+  });
+});

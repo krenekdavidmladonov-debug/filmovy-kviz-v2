@@ -65,3 +65,5 @@ export const health = onRequest(
   },
 );
 export { saveEventScore } from './scoring/callables.js';
+
+export { listRefereeAccess, issueRefereeAccess, changeRefereeAccess, readRefereeEvent, readRefereeHistory, saveRefereeScore } from './referee/callables.js';
