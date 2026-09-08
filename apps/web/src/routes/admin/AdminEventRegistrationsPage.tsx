@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
+import { ManualTeamDialog } from '../../features/events/ManualTeamDialog';
+import { RegistrationSharePanel } from '../../features/events/RegistrationSharePanel';
 import { adminCancelRegistration, configureEventRegistration, registrationActionError } from '../../features/events/registrationApi';
 import { getEvent, listEventRegistrations } from '../../features/events/eventRepository';
 import type { EventRecord, RegistrationRecord } from '../../features/events/types';
@@ -24,6 +26,9 @@ export function AdminEventRegistrationsPage() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [search] = useSearchParams();
+  const [selectedId, setSelectedId] = useState(search.get('team') ?? '');
+  const [teamDialog, setTeamDialog] = useState<RegistrationRecord | 'new' | null>(null);
   const load = useCallback(async () => {
     if (!eventId) return; setLoading(true);
     try {
@@ -54,7 +59,11 @@ export function AdminEventRegistrationsPage() {
   const admin = role === 'admin';
   return <article className="event-detail-page"><Link className="back-link" to={`/admin/events/${event.id}`}>← Zpět na akci</Link><header className="event-page-heading"><div><p className="eyebrow">Akce · Registrace</p><h1>{event.title}</h1><p className="lead">{event.acceptedTeams} / {event.teamCapacity} týmů · {event.acceptedPeople} / {event.peopleCapacity} osob</p></div><span className={`quiz-status status-${event.registrationStatus}`}>{event.registrationStatus}</span></header>
     {error && <p className="round-editor-error" role="alert">{error}</p>}{notice && <p className="event-notice" role="status">{notice}</p>}
-    <section className="event-section"><h2>Registrační okno</h2>{admin ? <form className="registration-form" onSubmit={(e) => { e.preventDefault(); void configure(); }}><label className="editor-field"><span>Otevření</span><input required type="datetime-local" value={opensAt} onChange={(e) => setOpensAt(e.target.value)} /></label><label className="editor-field"><span>Uzavření</span><input required type="datetime-local" value={closesAt} onChange={(e) => setClosesAt(e.target.value)} /></label><label className="warning-confirmation"><input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} /> Zveřejnit registraci</label><button className="primary-button" disabled={pending}>Uložit nastavení</button></form> : <p>Moderátor má přístup pouze pro čtení.</p>}</section>
-    <section className="event-section"><div className="event-section-heading"><div><p className="eyebrow">Týmy</p><h2>Registrované týmy</h2></div><span>{registrations.length} záznamů</span></div>{registrations.length === 0 ? <p>Zatím bez registrací.</p> : <div className="registration-table-wrap"><table className="registration-table"><thead><tr><th>Tým</th><th>Členů</th><th>Stav</th><th>Vytvořeno</th><th>E-mail</th>{admin && <th>Akce</th>}</tr></thead><tbody>{registrations.map((item) => <tr key={item.id}><td>{item.teamName}</td><td>{item.memberCount}</td><td>{item.status}</td><td>{new Intl.DateTimeFormat('cs-CZ', { dateStyle: 'medium', timeStyle: 'short' }).format(item.createdAt)}</td><td>{item.contactEmail}</td>{admin && <td>{item.status === 'accepted' && <button className="danger-button" type="button" disabled={pending} onClick={() => void cancel(item)}>Zrušit</button>}</td>}</tr>)}</tbody></table></div>}</section>
+    <RegistrationSharePanel event={event} />
+    <section className="event-section"><div className="event-section-heading"><div><p className="eyebrow">Týmy</p><h2>Registrované týmy</h2></div>{admin && <button className="primary-button" type="button" onClick={() => setTeamDialog('new')}>+ Přidat tým</button>}</div>
+      {registrations.length === 0 ? <p>Zatím bez registrací.</p> : <div className="registration-table-wrap"><table className="registration-table"><thead><tr><th>Tým</th><th>Členů</th><th>Stav / původ</th><th>E-mail</th>{admin && <th>Akce</th>}</tr></thead><tbody>{registrations.map((item) => <tr key={item.id} className={item.id === selectedId ? 'team-selected' : ''} aria-selected={item.id === selectedId}><td>{item.teamName}</td><td>{item.memberCount}</td><td>{item.status === 'accepted' ? 'Přijatý' : 'Zrušený'}<br />{item.source === 'manual' ? 'Přidáno pořadatelem' : 'Online'}</td><td>{item.contactEmail ?? 'Neuveden'}</td>{admin && <td>{item.status === 'accepted' && <div className="team-tool-actions">{item.source === 'manual' && <button className="secondary-button" type="button" disabled={pending} onClick={() => setTeamDialog(item)}>Upravit tým</button>}<button className="danger-button" type="button" disabled={pending} onClick={() => void cancel(item)}>Zrušit</button></div>}</td>}</tr>)}</tbody></table></div>}
+    </section>
+    {admin && teamDialog && <ManualTeamDialog event={event} {...(teamDialog === 'new' ? {} : { team: teamDialog })} onClose={() => setTeamDialog(null)} onSaved={async (id, name) => { setTeamDialog(null); setSelectedId(id); setNotice(`Tým ${name} byl uložen.`); await load(); }} />}
+    <section className="event-section" id="registration-settings"><h2>Registrační okno</h2>{admin ? <form className="registration-form" onSubmit={(e) => { e.preventDefault(); void configure(); }}><label className="form-field"><span>Otevření</span><input required type="datetime-local" value={opensAt} onChange={(e) => setOpensAt(e.target.value)} /></label><label className="form-field"><span>Uzavření</span><input required type="datetime-local" value={closesAt} onChange={(e) => setClosesAt(e.target.value)} /></label><label className="warning-confirmation"><input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} /> Zveřejnit registraci</label><button className="primary-button" disabled={pending}>Uložit nastavení</button></form> : <p>Moderátor má přístup pouze pro čtení.</p>}</section>
   </article>;
 }

@@ -63,7 +63,9 @@ export interface RegistrationRecord {
   readonly eventId: string;
   readonly teamName: string;
   readonly memberCount: number;
-  readonly contactEmail: string;
+  readonly contactEmail: string | null;
+  readonly source?: 'manual' | 'online';
+  readonly revision?: number;
   readonly status: 'accepted' | 'cancelled';
   readonly createdAt: Date;
   readonly updatedAt: Date;

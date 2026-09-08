@@ -65,6 +65,8 @@ The PDF endpoint verifies an ID token, resolves the snapshot from the private ev
 
 ## Public registration
 
+Manual team add/edit is admin-only and shares transactional capacity and name reservations with online registrations. Its nullable token verifier never authorizes public access; manual records have no public management capability. Public requests cannot choose manual origin or bypass their email/window requirements. See `EVENT_TEAM_TOOLS.md`.
+
 Registration uses callable Functions rather than direct Firestore writes. It validates fields/types, normalization/limits, contact format, team-size bounds, server-time window, unique names, and both capacities transactionally. Management tokens are random bearer capabilities stored only as SHA-256 verifiers; invalid combinations are non-enumerating. Responses reveal no other teams or contacts. Production abuse controls remain a launch prerequisite.
 
 ## Firebase configuration and secrets

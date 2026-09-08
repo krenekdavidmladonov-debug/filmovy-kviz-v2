@@ -4,7 +4,17 @@ export function deploymentMode(args) {
   assertStagingProject(args[0]);
   if (args.length === 1) return 'full';
   if (args.length === 2 && args[1] === '--hosting-only') return 'hosting-only';
+  if (args.length === 2 && args[1] === '--team-tools-functions') return 'team-tools-functions';
   throw new Error('Only the explicit --hosting-only option is accepted; no resource overrides.');
+}
+
+export const TEAM_TOOL_FUNCTIONS = ['adminAddEventTeam', 'adminUpdateEventTeam'];
+export function teamToolFunctionArgs(project, env, config, configPath) {
+  assertStagingProject(project);
+  assertStagingEnvironment(env);
+  assertHostingOnlyConfig(config);
+  if (config.functions.source !== '.local-data/staging/functions' || config.functions.codebase !== 'default' || config.functions.runtime !== 'nodejs22' || Object.keys(config.functions).some(key => !['source', 'runtime', 'codebase', 'ignore'].includes(key))) throw new Error('Unexpected Functions packaging configuration.');
+  return ['deploy', '--project', project, '--config', configPath, '--only', TEAM_TOOL_FUNCTIONS.map(name => `functions:${name}`).join(','), '--non-interactive'];
 }
 
 export function assertHostingOnlyConfig(config) {

@@ -11,6 +11,8 @@ import {
   updateEvent,
 } from '../../features/events/eventApi';
 import { EventForm } from '../../features/events/EventForm';
+import { ManualTeamDialog } from '../../features/events/ManualTeamDialog';
+import { RegistrationSharePanel } from '../../features/events/RegistrationSharePanel';
 import { getEvent } from '../../features/events/eventRepository';
 import type { EventFormValues, EventRecord } from '../../features/events/types';
 import { getEditorQuiz } from '../../features/editor/editorRepository';
@@ -52,6 +54,8 @@ export function AdminEventDetailPage() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [addingTeam, setAddingTeam] = useState(false);
+  const [addedTeam, setAddedTeam] = useState<{ id: string; name: string } | null>(null);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -123,8 +127,12 @@ export function AdminEventDetailPage() {
       <section className="event-section">
         <div className="event-section-heading"><div><p className="eyebrow">Registrace</p><h2>Týmy a kapacita</h2></div><span>{event.acceptedTeams} / {event.teamCapacity} týmů</span></div>
         <p className="event-muted">Registrační okno, souhrn osob a privátní kontakty týmů.</p>
-        <Link className="secondary-link" to={`/admin/events/${event.id}/registrations`}>Otevřít registrace</Link>
+        <div className="team-tool-actions">{admin && <button className="primary-button" type="button" onClick={() => setAddingTeam(true)}>+ Přidat tým</button>}<Link className="secondary-link" to={`/admin/events/${event.id}/registrations`}>Spravovat týmy a registrace</Link></div>
+        {addedTeam && <p className="event-notice" role="status">Přidán tým: <Link to={`/admin/events/${event.id}/registrations?team=${addedTeam.id}`}>{addedTeam.name}</Link></p>}
       </section>
+
+      <RegistrationSharePanel event={event} />
+      {admin && addingTeam && <ManualTeamDialog event={event} onClose={() => setAddingTeam(false)} onSaved={async (id, name) => { setAddedTeam({ id, name }); setEvent(await getEvent(event.id)); }} />}
 
       <section className="event-section">
         {admin ? <EventForm values={values} pending={pending} submitLabel="Uložit změny" onChange={setValues} onSubmit={() => void runAction(() => updateEvent(event.id, event.revision, values), 'Změny akce byly uloženy.')} /> : (

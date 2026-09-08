@@ -45,6 +45,8 @@ export { generatePrintArtifact } from './print/endpoint.js';
 
 export {
   adminCancelEventRegistration,
+  adminAddEventTeam,
+  adminUpdateEventTeam,
   cancelEventRegistration,
   configureEventRegistration,
   createEventRegistration,

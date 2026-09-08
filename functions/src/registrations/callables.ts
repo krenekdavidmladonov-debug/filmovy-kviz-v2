@@ -7,7 +7,7 @@ import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/
 import { buildPublicEventProjection } from '../events/model.js';
 import { capacityAfter, effectiveRegistrationStatus, hasCapacity } from './domain.js';
 import type { RegistrationCapacity, RegistrationInput } from './types.js';
-import { registrationInput, registrationWindow, requestId, requestToken } from './validation.js';
+import { manualTeamInput, registrationInput, registrationWindow, requestId, requestToken } from './validation.js';
 
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
@@ -114,7 +114,7 @@ function assertWindowOpen(event: EventState, now: Timestamp, allowFull = false):
   }
 }
 
-function assertTeamSize(event: EventState, input: RegistrationInput): void {
+function assertTeamSize(event: EventState, input: Pick<RegistrationInput, 'memberCount'>): void {
   if (input.memberCount < event.teamSizeMin || input.memberCount > event.teamSizeMax) {
     throw new HttpsError('invalid-argument', `Team size must be between ${event.teamSizeMin} and ${event.teamSizeMax}.`);
   }
@@ -356,4 +356,92 @@ export const adminCancelEventRegistration = onCall(callableOptions, async (reque
     undefined,
     false,
   );
+});
+
+function assertManualTeamAllowed(event: EventState): void {
+  // Quiz content locks and the public registration window are deliberately independent.
+  if (!['draft', 'scheduled', 'ready', 'live'].includes(event.lifecycleStatus)) {
+    throw new HttpsError('failed-precondition', 'Event roster cannot be changed in this lifecycle.');
+  }
+}
+
+export const adminAddEventTeam = onCall(callableOptions, async (request) => {
+  const uid = requireAdmin(request.auth);
+  const eventId = requestId(request.data, 'eventId');
+  const operationId = requestId(request.data, 'requestId');
+  if (operationId.length > 100) throw new HttpsError('invalid-argument', 'requestId is too long.');
+  const input = manualTeamInput(request.data);
+  const eventRef = db.collection('events').doc(eventId);
+  // The idempotency reservation stays on the canonical record, including after cancellation.
+  const registrationRef = eventRef.collection('registrations').doc('manual_' + tokenHash(`${uid}:${operationId}`));
+  const fingerprint = tokenHash(JSON.stringify(input));
+  const nameRef = eventRef.collection('registrationNames').doc(nameKey(input.normalizedTeamName));
+  return db.runTransaction(async (transaction) => {
+    const event = eventState(await transaction.get(eventRef));
+    const previous = await transaction.get(registrationRef);
+    if (previous.exists) {
+      const data = record(previous.data());
+      if (data.createdBy !== uid || data.requestFingerprint !== fingerprint || data.source !== 'manual') {
+        throw new HttpsError('already-exists', 'requestId was used with different content.');
+      }
+      return safeResponse(previous.id, data);
+    }
+    assertManualTeamAllowed(event);
+    assertTeamSize(event, input);
+    const reserved = await transaction.get(nameRef);
+    if (reserved.exists) throw new HttpsError('already-exists', 'A team with this name is already registered.');
+    if (!hasCapacity(event.capacity, 1, input.memberCount)) throw new HttpsError('resource-exhausted', 'Registration capacity is full.');
+    const now = Timestamp.now();
+    const capacity = capacityAfter(event.capacity, 1, input.memberCount);
+    const next = { ...event, capacity };
+    const registrationStatus = statusAt(next, now);
+    const data = { schemaVersion: 1, eventId, ...input, status: 'accepted', source: 'manual',
+      managementTokenHash: null, createdBy: uid, updatedBy: uid, requestFingerprint: fingerprint,
+      revision: 1, createdAt: now, updatedAt: now, cancelledAt: null, cancelledBy: null };
+    transaction.create(registrationRef, data);
+    transaction.create(nameRef, { registrationId: registrationRef.id, createdAt: now });
+    transaction.update(eventRef, { acceptedTeams: capacity.acceptedTeams, acceptedPeople: capacity.acceptedPeople,
+      registrationStatus, updatedAt: now, updatedBy: uid });
+    transaction.set(db.collection('publicEvents').doc(eventId), publicProjection(next, registrationStatus, now));
+    return safeResponse(registrationRef.id, data);
+  });
+});
+
+export const adminUpdateEventTeam = onCall(callableOptions, async (request) => {
+  const uid = requireAdmin(request.auth);
+  const eventId = requestId(request.data, 'eventId');
+  const registrationId = requestId(request.data, 'registrationId');
+  const expectedRevision = record(request.data).expectedRevision;
+  if (!Number.isInteger(expectedRevision) || (expectedRevision as number) < 1) throw new HttpsError('invalid-argument', 'expectedRevision is invalid.');
+  const input = manualTeamInput(request.data);
+  const eventRef = db.collection('events').doc(eventId);
+  const registrationRef = eventRef.collection('registrations').doc(registrationId);
+  return db.runTransaction(async (transaction) => {
+    const event = eventState(await transaction.get(eventRef));
+    const snapshot = await transaction.get(registrationRef);
+    if (!snapshot.exists) throw new HttpsError('not-found', 'Registration was not found.');
+    const current = record(snapshot.data());
+    assertManualTeamAllowed(event);
+    if (current.source !== 'manual' || current.status !== 'accepted') throw new HttpsError('failed-precondition', 'Only accepted manual teams can be edited here.');
+    if (current.revision !== expectedRevision) throw new HttpsError('aborted', 'Team changed. Reload and try again.');
+    assertTeamSize(event, input);
+    const oldName = typeof current.normalizedTeamName === 'string' ? current.normalizedTeamName : '';
+    const newNameRef = eventRef.collection('registrationNames').doc(nameKey(input.normalizedTeamName));
+    const reserved = await transaction.get(newNameRef);
+    if (reserved.exists && reserved.data()?.registrationId !== registrationId) throw new HttpsError('already-exists', 'A team with this name is already registered.');
+    const delta = input.memberCount - integer(current.memberCount, 1, 'Registration is malformed.');
+    if (!hasCapacity(event.capacity, 0, delta)) throw new HttpsError('resource-exhausted', 'People capacity is full.');
+    const capacity = capacityAfter(event.capacity, 0, delta);
+    const now = Timestamp.now();
+    const next = { ...event, capacity };
+    const registrationStatus = statusAt(next, now);
+    transaction.update(registrationRef, { ...input, revision: (expectedRevision as number) + 1, updatedAt: now, updatedBy: uid });
+    if (oldName !== input.normalizedTeamName) {
+      transaction.delete(eventRef.collection('registrationNames').doc(nameKey(oldName)));
+      transaction.create(newNameRef, { registrationId, createdAt: now });
+    }
+    transaction.update(eventRef, { acceptedPeople: capacity.acceptedPeople, registrationStatus, updatedAt: now, updatedBy: uid });
+    transaction.set(db.collection('publicEvents').doc(eventId), publicProjection(next, registrationStatus, now));
+    return safeResponse(registrationId, { ...current, ...input });
+  });
 });

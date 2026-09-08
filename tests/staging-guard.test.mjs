@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assertStagingEnvironment, assertStagingProject, STAGING_PROJECT, STAGING_APP } from '../tools/staging/guard.mjs';
 import { readFileSync } from 'node:fs';
-import { deploymentMode, assertHostingOnlyConfig, hostingOnlyArgs, assertFrontendFiles } from '../tools/staging/hosting-only.mjs';
+import { deploymentMode, assertHostingOnlyConfig, hostingOnlyArgs, assertFrontendFiles, teamToolFunctionArgs } from '../tools/staging/hosting-only.mjs';
 
 const valid = { VITE_FIREBASE_PROJECT_ID: STAGING_PROJECT, VITE_APP_ENV: 'staging',
   VITE_FIREBASE_AUTH_DOMAIN: `${STAGING_PROJECT}.firebaseapp.com`, VITE_FIREBASE_APP_ID: STAGING_APP,
@@ -25,6 +25,15 @@ test('mixed, missing, production, and emulator staging configurations fail close
 });
 
 const stagingConfig = JSON.parse(readFileSync(new URL('../firebase.staging.json', import.meta.url), 'utf8'));
+test('team tooling backend deploy accepts only the two exact callables with no hooks or overrides', () => {
+  assert.equal(deploymentMode([STAGING_PROJECT, '--team-tools-functions']), 'team-tools-functions');
+  assert.deepEqual(teamToolFunctionArgs(STAGING_PROJECT, valid, stagingConfig, 'functions.json'), ['deploy', '--project', STAGING_PROJECT, '--config', 'functions.json', '--only', 'functions:adminAddEventTeam,functions:adminUpdateEventTeam', '--non-interactive']);
+  assert.throws(() => deploymentMode([STAGING_PROJECT, '--team-tools-functions', 'functions:health']));
+  assert.throws(() => teamToolFunctionArgs('wrong', valid, stagingConfig, 'x'));
+  assert.throws(() => teamToolFunctionArgs(STAGING_PROJECT, { ...valid, VITE_FIREBASE_USE_EMULATORS: 'true' }, stagingConfig, 'x'));
+  assert.throws(() => teamToolFunctionArgs(STAGING_PROJECT, valid, { ...stagingConfig, functions: { ...stagingConfig.functions, predeploy: ['seed'] } }, 'x'));
+  assert.throws(() => teamToolFunctionArgs(STAGING_PROJECT, valid, { ...stagingConfig, functions: { ...stagingConfig.functions, source: '.' } }, 'x'));
+});
 test('Hosting-only is fixed to the staging site, frontend and official hosting scope', () => {
   assert.equal(deploymentMode([STAGING_PROJECT, '--hosting-only']), 'hosting-only');
   assert.deepEqual(hostingOnlyArgs(STAGING_PROJECT, valid, stagingConfig, 'generated.json'), [
