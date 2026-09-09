@@ -7,17 +7,57 @@ import { assertFinalPayload } from '../e2e/final-payload.mjs';
 async function guard(context) {
   await context.route('**/*', r => ['127.0.0.1', 'localhost'].includes(new URL(r.request().url()).hostname) ? r.continue() : r.abort());
   await context.addInitScript(() => {
-    window.__audioStarts = 0; window.__audioStops = 0; window.__denyAudio = false;
+    window.__audioStarts = 0; window.__audioStops = 0; window.__audioEnded = 0; window.__audioGains = 0; window.__audioMasters = []; window.__denyAudio = false;
     const Original = window.AudioContext;
     window.AudioContext = class extends Original {
       resume() { return window.__denyAudio ? Promise.reject(new DOMException('Synthetic policy denial', 'NotAllowedError')) : super.resume(); }
+      createGain() {
+        const node = super.createGain(), connect = node.connect.bind(node), disconnect = node.disconnect.bind(node);
+        const master = { node, connected: false }; window.__audioGains++;
+        node.connect = (target, ...args) => {
+          const result = connect(target, ...args);
+          if (target === this.destination) { master.connected = true; window.__audioMasters.push(master); }
+          return result;
+        };
+        node.disconnect = (...args) => { const result = disconnect(...args); master.connected = false; return result; };
+        return node;
+      }
       createOscillator() {
         const node = super.createOscillator(), start = node.start.bind(node), stop = node.stop.bind(node);
-        node.start = (...args) => { window.__audioStarts++; start(...args); };
-        node.stop = (...args) => { window.__audioStops++; stop(...args); };
+        // Count only successful native calls, never a spy that bypasses Web Audio.
+        node.start = (...args) => { start(...args); window.__audioStarts++; };
+        node.stop = (...args) => { stop(...args); window.__audioStops++; };
+        node.addEventListener('ended', () => window.__audioEnded++);
         return node;
       }
     };
+  });
+}
+const audioGraph = page => page.evaluate(() => ({
+  starts: window.__audioStarts, gains: window.__audioGains, ended: window.__audioEnded,
+  connected: window.__audioMasters.at(-1)?.connected ?? false,
+  gain: window.__audioMasters.at(-1)?.node.gain.value,
+}));
+// Delay delivery of genuine Firestore bytes only; callable responses and audio
+// remain real. An existing synced listener can otherwise hide this ordering race.
+async function delayFirestoreStream(context) {
+  await context.addInitScript(() => {
+    window.__holdFirestore = false; window.__heldChunks = 0;
+    const nativeFetch = window.fetch.bind(window), releases = [];
+    window.fetch = async (...args) => {
+      const response = await nativeFetch(...args), url = String(args[0] instanceof Request ? args[0].url : args[0]);
+      if (!url.includes('/Listen/channel') || !response.body) return response;
+      const reader = response.body.getReader();
+      const body = new ReadableStream({
+        async pull(controller) {
+          const chunk = await reader.read();
+          if (window.__holdFirestore) { window.__heldChunks++; await new Promise(resolve => releases.push(resolve)); }
+          if (chunk.done) controller.close(); else controller.enqueue(chunk.value);
+        }, cancel(reason) { return reader.cancel(reason); },
+      });
+      return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+    };
+    window.__releaseFirestore = () => { window.__holdFirestore = false; releases.splice(0).forEach(resolve => resolve()); };
   });
 }
 async function login(page, fixture) {
@@ -179,4 +219,72 @@ test('late successful winner response after another panel hides it cannot play; 
     await expect(panel(page).getByRole('alert').filter({ hasText: 'Náhled, verze nebo prezentace se změnily' })).toBeVisible(); expect(await page.evaluate(() => window.__audioStarts)).toBe(0);
     await end(other, projection.page);
   } finally { release?.(); await projection?.context.close(); await f.close(); }
+});
+
+
+test('native output gain, mute, STOP, explicit complete table and END after confirmed finale', async ({page,context,browser}) => {
+  const f = await finalFixture(4); let projection;
+  try {
+    await guard(context); await login(page,f); const other = await context.newPage(); await other.goto('/admin/live/'+f.sessionId);
+    projection = await display(browser,f); const projector = projection.page;
+    await start(page); await expect(projector.getByRole('heading',{name:'Děkujeme za hru'})).toBeVisible();
+    const preview = await f.previewFinal();
+    for (const rank of [3,2,1]) {
+      await reveal(page).click(); await expect.poll(async () => (await f.rawPublic()).finalReveal.rank).toBe(rank);
+      assertFinalPayload(await f.rawPublic(),preview.rows.filter(r=>r.rank===rank),'group');
+    }
+    await expect.poll(async () => (await audioGraph(page)).starts).toBe(7);
+    expect((await audioGraph(page)).gains).toBe(8); expect((await audioGraph(page)).connected).toBe(true);
+    expect(await other.evaluate(()=>window.__audioStarts)).toBe(0); expect(await projector.evaluate(()=>window.__audioStarts)).toBe(0);
+    await expect.poll(async () => (await audioGraph(page)).ended).toBe(7);
+    expect((await f.session()).status).toBe('active'); let starts=7;
+    const manual = panel(page).getByRole('button',{name:'Přehrát fanfáru ručně'}), mute = panel(page).getByLabel('Ztlumit fanfáru',{exact:true});
+    const play = async () => {await manual.click();starts+=7;await expect.poll(async()=>(await audioGraph(page)).starts).toBe(starts);expect((await audioGraph(page)).connected).toBe(true);};
+    const stop = async () => {await panel(page).getByRole('button',{name:'STOP fanfáry'}).click();expect((await audioGraph(page)).connected).toBe(false);};
+    // Each active-gain assertion gets a fresh short graph, not an already-ended node.
+    await play();await panel(page).getByLabel('Hlasitost fanfáry').press('ArrowRight');
+    await expect.poll(async () => (await audioGraph(page)).gain).toBeCloseTo(.13,4);expect((await audioGraph(page)).starts).toBe(starts);await stop();
+    await mute.check();await play();expect((await audioGraph(page)).gain).toBe(0);
+    await mute.uncheck();await expect.poll(async () => (await audioGraph(page)).gain).toBeCloseTo(.13,4);expect((await audioGraph(page)).starts).toBe(starts);await stop();
+    await mute.check();await play();expect((await audioGraph(page)).gain).toBe(0);
+    // Reproduce the old helper's failure: unmute after natural cleanup cannot alter an abandoned gain.
+    await expect.poll(async () => (await audioGraph(page)).connected).toBe(false);
+    await mute.uncheck();expect((await audioGraph(page)).gain).toBe(0);expect((await audioGraph(page)).starts).toBe(starts);
+    await play();expect((await audioGraph(page)).gain).toBeCloseTo(.13,4);await stop();
+    await mute.check();await play();await stop();await mute.uncheck();
+    await panel(page).getByRole('button',{name:'Zobrazit celé konečné pořadí'}).click();
+    await expect(projector.getByRole('article',{name:'Konečné pořadí'})).toBeVisible();assertFinalPayload(await f.rawPublic(),preview.rows,'table');expect((await audioGraph(page)).starts).toBe(starts);
+    await play();await panel(page).getByRole('button',{name:'Skrýt finále'}).click();expect((await audioGraph(page)).connected).toBe(false);
+    await panel(page).getByRole('button',{name:'Pokračovat ve stejné verzi'}).click();await expect(projector.getByRole('article',{name:'Konečné pořadí'})).toBeVisible();expect((await audioGraph(page)).starts).toBe(starts);
+    await play();await end(page,projector);expect((await audioGraph(page)).connected).toBe(false);expect((await f.rawPublic()).finalReveal).toBeUndefined();
+    await page.reload();await projector.reload();await expect(projector.getByRole('heading',{name:'Kvíz skončil'})).toBeVisible();
+    await expect(panel(page).getByText('Session je ukončená. Finále nelze obnovit.')).toBeVisible();expect((await audioGraph(page)).starts).toBe(0);expect((await f.rawPublic()).finalReveal).toBeUndefined();
+  } finally {await projection?.context.close();await f.close();}
+});
+
+for (const superseding of ['none','hide','END','replacement','STOP','table']) test(`winner confirmation with stale Firestore listener: ${superseding}`, async ({page,context,browser}) => {
+  const f=await finalFixture(4);let projection,releaseResponse;
+  try {
+    await delayFirestoreStream(context);await guard(context);await login(page,f);projection=await display(browser,f);
+    await start(page);await expect(projection.page.getByRole('heading',{name:'Děkujeme za hru'})).toBeVisible();
+    for(const rank of [3,2]){await reveal(page).click();await expect.poll(async()=>(await f.rawPublic()).finalReveal.rank).toBe(rank);await expect(panel(page)).toHaveAttribute('aria-busy','false');}
+    let committed=false,winner;const held=new Promise(resolve=>{releaseResponse=resolve;});
+    await page.route('**/controlFinalReveal',async route=>{const response=await route.fetch();winner=(await response.json()).result;committed=true;await held;await route.fulfill({response});});
+    await page.evaluate(()=>{window.__holdFirestore=true;});await reveal(page).click();await expect.poll(()=>committed).toBe(true);expect(winner.winnerRevealed).toBe(true);
+    await expect.poll(()=>page.evaluate(()=>window.__heldChunks)).toBeGreaterThan(0);expect((await audioGraph(page)).starts).toBe(0);
+    if(superseding==='hide')await f.command('hide');
+    if(superseding==='END')await f.call('endLiveSession',{sessionId:f.sessionId,expectedRevision:(await f.session()).revision});
+    if(superseding==='replacement')await f.startFinal(await f.previewFinal(),'replace');
+    if(superseding==='table')await f.command('table');
+    if(superseding==='STOP')await panel(page).getByRole('button',{name:'STOP fanfáry'}).click();
+    const delivered=page.waitForResponse(r=>r.url().endsWith('/controlFinalReveal'));releaseResponse();await delivered;await expect(panel(page)).toHaveAttribute('aria-busy','false');
+    if(superseding==='none') {
+      // This must succeed BEFORE releasing the stale listen, from a genuine server read.
+      await expect.poll(async()=>(await audioGraph(page)).starts).toBe(7);expect((await audioGraph(page)).gains).toBe(8);expect((await f.session()).revision).toBe(winner.revision);
+    }
+    await page.evaluate(()=>window.__releaseFirestore());
+    await expect(panel(page)).toContainText(superseding==='END'?'Session je ukončená':superseding==='replacement'?'odhaleno 0/3':superseding==='hide'?'skrytá':'odhaleno 3/3');
+    if(superseding==='none'){await expect.poll(async()=>(await audioGraph(page)).ended).toBe(7);expect((await audioGraph(page)).starts).toBe(7);}
+    else{await page.waitForTimeout(150);expect((await audioGraph(page)).starts).toBe(0);}
+  } finally {releaseResponse?.();await page.evaluate(()=>window.__releaseFirestore?.()).catch(()=>{});await projection?.context.close();await f.close();}
 });
