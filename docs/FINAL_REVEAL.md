@@ -102,6 +102,23 @@ nový ruční pokus. STOP, hide, END, změna verze a odchod invalidují opoždě
 pokusy a zastaví zvuk. Selhání zvuku neblokuje příkazy ani END. Žádná smyčka.
 Přesně jednou slyšitelný zvuk nelze zaručit za všech síťových/hardwarových podmínek.
 
+HTTP potvrzení callable může předběhnout Firestore stream. Jednorázové
+`getDocFromServer` sdílí existující odběr a může ještě vrátit starší serverovou
+revizi. Před zvukem proto panel provede samostatné serverové čtení v read-only
+transakci. Nečerpá z opožděného listeneru a nemění session ani další data.
+Ověří přesnou revizi/verzi, viditelnost i dokončené odhalení. Novější stav nebo
+lokální STOP/hide/END/nahrazení/unmount pokus zneplatní. Potvrzení nezačne
+přehrávat jen kvůli pozdějšímu doručení snapshotu. Selhání čtení nabídne ruční
+pokus; ochrany se znovu ověřují i po asynchronním resume zvukového kontextu.
+
+Hlasitost a mute mění aktivní výstupní gain. Po dohrání/STOP se tento uzel
+odpojí; změna ovladače se použije v příštím novém audio grafu. QA musí měřit
+připojený výstupní gain, nikoli očekávat změnu hodnoty starého odpojeného uzlu.
+Browserové testy počítají až úspěšná nativní spuštění oscilátorů, sledují osm
+gain uzlů (výstup + sedm obálek), ukončení a odpojení výstupu. Závod revizí
+reprodukují pozdržením skutečných Firestore bajtů proti emulátoru, bez změny
+callable odpovědí nebo nahrazení zvukového enginu.
+
 ## Testy a budoucí nasazení
 
 Doménové/zvukové unit testy, Rules testy privátních verzí a receipt, transakční

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { collection, doc, getDocFromServer, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDocFromServer, onSnapshot, runTransaction } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import type { FinalRevealPage } from '@filmovy-kviz/quiz-domain';
 import { getFirebaseServices } from '../../services/firebase/client';
@@ -70,7 +70,10 @@ export function FinalRevealPanel({ session, ending = false }: { session: LiveCon
       && current.current.revision <= response.revision;
     if (!allowed()) return;
     try {
-      const fresh = await getDocFromServer(doc(getFirebaseFirestore(), 'sessions', session.sessionId));
+      // A shared listener can lag the callable response, even with getDocFromServer.
+      // A read-only transaction verifies the current server document without changing it.
+      const db = getFirebaseFirestore();
+      const fresh = await runTransaction(db, transaction => transaction.get(doc(db, 'sessions', session.sessionId)));
       const value = fresh.exists() ? mapLiveControlState(fresh.id, fresh.data()) : undefined;
       if (!allowed() || value?.revision !== response.revision || value.status !== 'active'
         || value.finalReveal?.versionId !== response.versionId || !value.finalReveal?.visible
