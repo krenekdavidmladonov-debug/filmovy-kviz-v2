@@ -18,6 +18,7 @@ export default defineConfig({
       'tests/printCenter.test.ts',
       'tests/printCenterSecurity.test.ts',
       'tests/registrations.test.ts',
+      'tests/transactionalEmail.test.ts',
       'tests/finalReveal.test.ts', 'tests/fanfare.test.ts', 'tests/interimResults.test.ts', 'tests/refereeAccess.test.ts', 'tests/eventTeamTools.test.ts', 'tests/eventScoring.test.ts', 'tests/eventScoringUi.test.tsx', 'tests/eventScoringNavigation.test.tsx',
       'tests/localEmulatorEnvironment.test.ts',
       'tests/localQaLauncher.test.ts',

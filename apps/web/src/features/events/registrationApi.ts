@@ -28,16 +28,21 @@ export function configureEventRegistration(
   });
 }
 
-export function createEventRegistration(eventId: string, values: RegistrationFormValues) {
-  return invoke<RegistrationMutationResponse>('createEventRegistration', { eventId, ...values });
+export function newRegistrationRetryKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
+}
+
+export function createEventRegistration(eventId: string, values: RegistrationFormValues, requestKey?: string) {
+  return invoke<RegistrationMutationResponse>('createEventRegistration', { eventId, ...values, ...(requestKey ? { requestKey } : {}) });
 }
 
 export function getManagedRegistration(eventId: string, registrationId: string, token: string) {
   return invoke<RegistrationMutationResponse>('getEventRegistration', { eventId, registrationId, token });
 }
 
-export function updateManagedRegistration(eventId: string, registrationId: string, token: string, values: RegistrationFormValues) {
-  return invoke<RegistrationMutationResponse>('updateEventRegistration', { eventId, registrationId, token, ...values });
+export function updateManagedRegistration(eventId: string, registrationId: string, token: string, values: RegistrationFormValues, requestId?: string) {
+  return invoke<RegistrationMutationResponse>('updateEventRegistration', { eventId, registrationId, token, ...values, ...(requestId ? { requestId } : {}) });
 }
 
 export function cancelManagedRegistration(eventId: string, registrationId: string, token: string) {
@@ -59,7 +64,7 @@ export function adminUpdateEventTeam(eventId: string, registrationId: string, ex
 export function registrationActionError(error: unknown): string {
   if (error instanceof FunctionsError) {
     if (error.code === 'functions/aborted') return 'Tým mezitím někdo změnil. Zavřete dialog a obnovte seznam před další úpravou.';
-    if (error.code === 'functions/already-exists' && error.message.startsWith('requestId')) return 'Tento požadavek již byl přijat s jinými údaji. Obnovte seznam týmů; nevytvářejte duplikát.';
+    if (error.code === 'functions/already-exists' && /^request(?:Id|Key)/u.test(error.message)) return 'Tento požadavek již byl přijat s jinými údaji. Nevytvářejte duplikát; použijte původní odkaz pro správu registrace.';
     if (error.code === 'functions/already-exists') return 'Tým s tímto názvem už je na akci přihlášený.';
     if (error.code === 'functions/resource-exhausted') return 'Kapacita akce už nestačí pro tento tým.';
     if (error.code === 'functions/not-found') return 'Registrace nebo bezpečný odkaz nejsou platné.';

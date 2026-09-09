@@ -13,6 +13,9 @@ export default defineConfig({
     baseURL: process.env.BROWSER_E2E_BASE_URL ?? 'http://localhost:5000',
     headless: true,
     launchOptions: executablePath ? { executablePath } : {},
-    trace: 'retain-on-failure',
+    // Registration responses/CTAs contain bearer capabilities, including on failure.
+    trace: 'off',
+    screenshot: 'off',
+    video: 'off',
   },
 });

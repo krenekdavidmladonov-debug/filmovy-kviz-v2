@@ -6,7 +6,7 @@ An administrator configures `registrationOpensAt`, `registrationClosesAt`, and p
 
 The public form requires only team name, member count, and email. Team names are NFC-normalized, trimmed, whitespace-collapsed, and compared case-insensitively within the event. A SHA-256 name reservation document makes uniqueness transaction-safe.
 
-Accepted registrations can be edited or soft-cancelled with the unguessable management link while the registration window is open. The raw token is placed in the URL fragment, which is not sent to Hosting or in HTTP referrers. Cancellation releases both counters atomically and is idempotent. Email delivery is intentionally deferred.
+Accepted registrations can be edited or soft-cancelled with the unguessable management link while the registration window is open. The raw token is placed in the URL fragment, which is not sent to Hosting or in HTTP referrers. Cancellation releases both counters atomically and is idempotent. Public create, actual self-update and self-cancel now commit private transactional email intents; transport remains local capture only. New forms retain in-memory operation retry identifiers, while server-only receipts prevent duplicate operations after response loss. See [TRANSACTIONAL_EMAIL.md](TRANSACTIONAL_EMAIL.md) for the encrypted-token envelope, delivery status, compatibility and cloud prerequisites.
 
 Staff use `/admin/events/:eventId/registrations`. Admins configure and cancel; moderators have read-only access. Contacts never enter `publicEvents` or the PDF `PrintTeam` adapter.
 

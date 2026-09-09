@@ -1,10 +1,12 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type DocumentSnapshot } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 
 import { buildPublicEventProjection } from '../events/model.js';
+import { enqueueRegistrationEmail } from '../email/intent.js';
+import { registrationTokenVault, type TokenEnvelope } from '../email/token-vault.js';
 import { capacityAfter, effectiveRegistrationStatus, hasCapacity } from './domain.js';
 import type { RegistrationCapacity, RegistrationInput } from './types.js';
 import { manualTeamInput, registrationInput, registrationWindow, requestId, requestToken } from './validation.js';
@@ -191,12 +193,31 @@ export const createEventRegistration = onCall(callableOptions, async (request) =
   const eventId = requestId(request.data, 'eventId');
   const input = registrationInput(request.data);
   const rawToken = randomBytes(32).toString('base64url');
-  const registrationRef = db.collection('events').doc(eventId).collection('registrations').doc();
   const eventRef = db.collection('events').doc(eventId);
+  // New clients retain this random retry capability in memory until success.
+  // Legacy clients keep the existing unique-name retry behavior.
+  const retryKey = record(request.data).requestKey === undefined ? undefined : requestToken({ token: record(request.data).requestKey });
+  const operationRef = retryKey === undefined ? undefined : eventRef.collection('registrationOperations').doc('create_' + tokenHash(retryKey));
+  const registrationRef = eventRef.collection('registrations').doc();
+  const intentId = randomUUID();
+  const intentRef = eventRef.collection('emailIntents').doc(intentId);
+  const vault = registrationTokenVault();
+  const envelope = vault.seal(rawToken, intentRef.path);
+  const fingerprint = tokenHash(JSON.stringify(input));
   const nameRef = eventRef.collection('registrationNames').doc(nameKey(input.normalizedTeamName));
   const publicRef = db.collection('publicEvents').doc(eventId);
   return db.runTransaction(async (transaction) => {
     const event = eventState(await transaction.get(eventRef));
+    const previous = operationRef === undefined ? undefined : await transaction.get(operationRef);
+    if (previous?.exists) {
+      const receipt = record(previous.data());
+      if (receipt.fingerprint !== fingerprint) throw new HttpsError('already-exists', 'requestKey was used with different content.');
+      const saved = await transaction.get(eventRef.collection('registrations').doc(receipt.registrationId as string));
+      const savedIntentRef = eventRef.collection('emailIntents').doc(receipt.intentId as string);
+      const protectedLink = await transaction.get(eventRef.collection('emailSecrets').doc(savedIntentRef.id));
+      const savedEnvelope = record(protectedLink.data()).envelope as TokenEnvelope;
+      return safeResponse(saved.id, record(saved.data()), vault.open(savedEnvelope, savedIntentRef.path));
+    }
     const existingName = await transaction.get(nameRef);
     const now = Timestamp.now();
     assertWindowOpen(event, now);
@@ -223,6 +244,9 @@ export const createEventRegistration = onCall(callableOptions, async (request) =
       cancelledBy: null,
     };
     transaction.create(registrationRef, registrationData);
+    transaction.create(eventRef.collection('emailSecrets').doc(intentId), { envelope, createdAt: now });
+    enqueueRegistrationEmail(transaction, eventRef, registrationRef, intentId, 'registration-confirmed', event.data, registrationData, now);
+    if (operationRef) transaction.create(operationRef, { kind: 'create', fingerprint, registrationId: registrationRef.id, intentId, createdAt: now });
     transaction.create(nameRef, { registrationId: registrationRef.id, createdAt: now });
     transaction.update(eventRef, {
       acceptedTeams: capacity.acceptedTeams,
@@ -255,12 +279,22 @@ export const updateEventRegistration = onCall(callableOptions, async (request) =
   const eventRef = db.collection('events').doc(eventId);
   const registrationRef = eventRef.collection('registrations').doc(registrationId);
   const publicRef = db.collection('publicEvents').doc(eventId);
+  const operationId = record(request.data).requestId === undefined ? undefined : requestId(request.data, 'requestId');
+  if (operationId !== undefined && operationId.length > 100) throw new HttpsError('invalid-argument', 'requestId is too long.');
+  const operationRef = operationId === undefined ? undefined : eventRef.collection('registrationOperations').doc('update_' + tokenHash(`${registrationId}:${operationId}`));
+  const fingerprint = tokenHash(JSON.stringify(input));
+  const intentId = randomUUID();
   return db.runTransaction(async (transaction) => {
     const event = eventState(await transaction.get(eventRef));
     const registrationSnapshot = await transaction.get(registrationRef);
     if (!registrationSnapshot.exists) throw new HttpsError('not-found', 'Registration was not found.');
     const current = record(registrationSnapshot.data());
     verifyToken(current.managementTokenHash, token);
+    const previous = operationRef === undefined ? undefined : await transaction.get(operationRef);
+    if (previous?.exists) {
+      if (previous.data()?.fingerprint !== fingerprint) throw new HttpsError('already-exists', 'requestId was used with different content.');
+      return safeResponse(registrationId, current);
+    }
     if (current.status !== 'accepted') throw new HttpsError('failed-precondition', 'Registration is cancelled.');
     const oldNormalized = typeof current.normalizedTeamName === 'string' ? current.normalizedTeamName : '';
     const oldMemberCount = integer(current.memberCount, 1, 'Registration is malformed.');
@@ -270,6 +304,10 @@ export const updateEventRegistration = onCall(callableOptions, async (request) =
     const now = Timestamp.now();
     assertWindowOpen(event, now, true);
     assertTeamSize(event, input);
+    if (current.teamName === input.teamName && current.memberCount === input.memberCount && current.contactEmail === input.contactEmail) {
+      if (operationRef) transaction.create(operationRef, { kind: 'update', registrationId, fingerprint, intentId: null, createdAt: now });
+      return safeResponse(registrationId, current);
+    }
     if (newNameSnapshot?.exists) throw new HttpsError('already-exists', 'A team with this name is already registered.');
     const peopleDelta = input.memberCount - oldMemberCount;
     if (!hasCapacity(event.capacity, 0, peopleDelta)) throw new HttpsError('resource-exhausted', 'People capacity is full.');
@@ -283,6 +321,8 @@ export const updateEventRegistration = onCall(callableOptions, async (request) =
       contactEmail: input.contactEmail,
       updatedAt: now,
     });
+    enqueueRegistrationEmail(transaction, eventRef, registrationRef, intentId, 'registration-updated', event.data, { ...current, ...input }, now);
+    if (operationRef) transaction.create(operationRef, { kind: 'update', registrationId, fingerprint, intentId, createdAt: now });
     if (input.normalizedTeamName !== oldNormalized) {
       transaction.delete(oldNameRef);
       transaction.create(newNameRef, { registrationId, createdAt: now });
@@ -307,6 +347,7 @@ async function cancelRegistration(
   const eventRef = db.collection('events').doc(eventId);
   const registrationRef = eventRef.collection('registrations').doc(registrationId);
   const publicRef = db.collection('publicEvents').doc(eventId);
+  const intentId = randomUUID();
   return db.runTransaction(async (transaction) => {
     const event = eventState(await transaction.get(eventRef));
     const registrationSnapshot = await transaction.get(registrationRef);
@@ -326,6 +367,7 @@ async function cancelRegistration(
     const next = { ...event, capacity };
     const registrationStatus = statusAt(next, now);
     transaction.update(registrationRef, { status: 'cancelled', cancelledAt: now, cancelledBy: actor, updatedAt: now });
+    if (token !== undefined) enqueueRegistrationEmail(transaction, eventRef, registrationRef, intentId, 'registration-cancelled', event.data, current, now);
     transaction.delete(nameRef);
     transaction.update(eventRef, {
       acceptedTeams: capacity.acceptedTeams,

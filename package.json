@@ -23,6 +23,8 @@
     "test:functions:print": "vitest run --config vitest.config.ts tests/printCenter.test.ts tests/printCenterSecurity.test.ts",
     "test:registrations": "vitest run --config vitest.config.ts tests/registrations.test.ts tests/events.test.ts tests/printCenterSecurity.test.ts",
     "test:e2e:registrations": "node tools/local-emulator-environment.mjs full tests/e2e/registrations-emulator.mjs",
+    "test:e2e:registration-email": "node tools/local-emulator-environment.mjs full tests/e2e/registration-email-emulator.mjs",
+    "test:e2e:registration-email-browser": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/registration-email.config.ts",
     "test:e2e:live": "node tools/local-emulator-environment.mjs full tests/e2e/live-session-emulator.mjs",
     "test:e2e:editor": "node tools/local-emulator-environment.mjs full tests/e2e/quiz-editor-emulator.mjs",
     "test:e2e:events": "node tools/local-emulator-environment.mjs full tests/e2e/events-emulator.mjs && pnpm test:e2e:scoring",

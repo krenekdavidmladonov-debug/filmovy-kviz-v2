@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { createEventRegistration, registrationActionError, type RegistrationFormValues } from '../../features/events/registrationApi';
+import { createEventRegistration, newRegistrationRetryKey, registrationActionError, type RegistrationFormValues } from '../../features/events/registrationApi';
 import { getPublicEvent } from '../../features/events/eventRepository';
 import type { PublicEventRecord, RegistrationMutationResponse } from '../../features/events/types';
 import { RegistrationForm } from '../../features/registrations/RegistrationForm';
@@ -15,6 +15,8 @@ export function PublicEventPage() {
   const [created, setCreated] = useState<RegistrationMutationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
+  const inFlight = useRef(false);
+  const [requestKey] = useState(newRegistrationRetryKey);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -41,16 +43,18 @@ export function PublicEventPage() {
     ? `/events/${event.id}/registration/manage#registration=${encodeURIComponent(created.registrationId)}&token=${encodeURIComponent(created.managementToken)}`
     : '';
   const submit = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setPending(true); setError(null);
-    try { setCreated(await createEventRegistration(event.id, values)); }
+    try { setCreated(await createEventRegistration(event.id, values, requestKey)); }
     catch (reason) { setError(registrationActionError(reason)); }
-    finally { setPending(false); }
+    finally { inFlight.current = false; setPending(false); }
   };
   return <article className="public-event-detail">
     <Link className="back-link" to="/events">← Zpět na akce</Link>
     <header><p className="eyebrow">Veřejná registrace</p><h1>{event.title}</h1><p className="lead">{event.venueName} · {new Intl.DateTimeFormat('cs-CZ', { dateStyle: 'full', timeStyle: 'short', timeZone: event.timeZone }).format(event.startsAt)}</p><p>{event.publicLocation}</p></header>
     <section className="event-section registration-summary"><h2>{open ? 'Registrace je otevřená' : event.registrationStatus === 'full' ? 'Kapacita je naplněna' : 'Registrace není otevřená'}</h2><p>Týmy: {event.acceptedTeams} / {event.teamCapacity} · Lidé: {event.acceptedPeople} / {event.peopleCapacity}</p><p>Velikost týmu: {event.teamSizeMin}–{event.teamSizeMax} členů.</p></section>
-    {created ? <section className="event-section registration-success" role="status"><h2>Děkujeme, tým byl přihlášen.</h2><p><strong>{created.teamName}</strong> · {created.memberCount} lidí · {event.title}</p><p>Tento odkaz si uschovejte. Umožňuje registraci upravit nebo zrušit.</p><Link className="primary-button" to={managementPath}>Spravovat registraci</Link></section>
+    {created ? <section className="event-section registration-success" role="status"><h2>{created.status === 'cancelled' ? 'Registrace je zrušená' : 'Děkujeme, tým byl přihlášen.'}</h2><p><strong>{created.teamName}</strong> · {created.memberCount} lidí · {event.title}</p><p>{created.status === 'cancelled' ? 'Tým již není aktivně přihlášen. Odkaz zobrazí stav registrace.' : 'Tento odkaz si uschovejte. Umožňuje registraci upravit nebo zrušit.'}</p><Link className="primary-button" to={managementPath}>Spravovat registraci</Link></section>
       : open ? <section className="event-section"><h2>Přihlásit tým</h2>{error && <p className="round-editor-error" role="alert">{error}</p>}<RegistrationForm values={{ ...values, memberCount: values.memberCount || event.teamSizeMin }} minimum={event.teamSizeMin} maximum={event.teamSizeMax} pending={pending} submitLabel="Přihlásit tým" onChange={setValues} onSubmit={() => void submit()} /></section>
         : <p className="event-public-state">Novou registraci teď nelze vytvořit.</p>}
   </article>;
