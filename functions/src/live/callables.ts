@@ -130,6 +130,7 @@ export function parseSession(snapshot: DocumentSnapshot): PrivateLiveSession {
     sessionId: snapshot.id,
     ...(typeof data.eventId === "string" ? { eventId: data.eventId } : {}),
     ...(typeof data.snapshotId === "string" ? { snapshotId: data.snapshotId } : {}),
+    ...(isObject(data.finalReveal) ? { finalReveal: data.finalReveal as unknown as NonNullable<PrivateLiveSession["finalReveal"]> } : {}),
     ...(isObject(data.interimResults) ? { interimResults: data.interimResults as unknown as NonNullable<PrivateLiveSession["interimResults"]> } : {}),
     quizId: requiredString(data, 'quizId', 'Live session'),
     quizTitle: requiredString(data, 'quizTitle', 'Live session'),
@@ -251,7 +252,7 @@ async function mutateSession(request: CallableRequest<unknown>, kind: MutationKi
       if (finishGeneration !== undefined && finishGeneration !== session.mediaGeneration) {
         throw new LiveSessionError('aborted', 'A stale media callback was ignored.');
       }
-      if (session.interimResults && kind !== 'end-session') throw new HttpsError('failed-precondition', 'Nejprve skryjte průběžné výsledky.');
+      if ((session.interimResults || session.finalReveal?.visible) && kind !== 'end-session') throw new HttpsError('failed-precondition', 'Nejprve skryjte výsledky nebo finále.');
       let slide: PrivateSlide | undefined;
       let action: LiveSessionAction;
       if (kind === 'end-session') action = { type: kind };
@@ -302,7 +303,7 @@ export const reportMediaPlayback = onCall(callableOptions, async (request): Prom
         const event = (await transaction.get(db.doc('events/' + session.eventId))).data();
         if (!event || event.liveSessionId !== sessionId || !isObject(event.quizAssignment) || event.quizAssignment.snapshotId !== session.snapshotId || !['ready', 'live', 'finalizing'].includes(event.lifecycleStatus as string)) throw new HttpsError('failed-precondition', 'Akce není dostupná.');
       }
-      if (session.interimResults || session.status !== 'active' || generation !== session.mediaGeneration) {
+      if (session.interimResults || session.finalReveal?.visible || session.status !== 'active' || generation !== session.mediaGeneration) {
         throw new LiveSessionError('aborted', 'A stale media callback was ignored.');
       }
       const position = session.presentationMode === 'recap' ? session.recapQuestionPosition : session.currentSlidePosition;

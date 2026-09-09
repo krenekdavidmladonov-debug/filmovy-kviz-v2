@@ -9,6 +9,7 @@ export interface PrivateLiveSession {
   readonly eventId?: string;
   readonly snapshotId?: string;
   readonly interimResults?: { versionId: string; roundNumber: number; page: number; pageCount: number };
+  readonly finalReveal?: FinalRevealState;
   readonly quizId: string;
   readonly quizTitle: string;
   readonly slideCount: number;
@@ -116,3 +117,4 @@ export type LiveSessionAction =
   | { readonly type: 'finish-media' }
   | { readonly type: 'start-intro' }
   | { readonly type: 'end-session' };
+import type { FinalRevealState } from '@filmovy-kviz/quiz-domain';

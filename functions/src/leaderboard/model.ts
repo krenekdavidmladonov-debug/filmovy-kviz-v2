@@ -24,17 +24,17 @@ export interface ResultScore {
 }
 export const fingerprint = scoreHash;
 const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
-export function calculateResults(rounds: ResultRound[], throughRoundId: string, teams: ResultTeam[], scores: ResultScore[]) {
+export function calculateResults(rounds: ResultRound[], throughRoundId: string, teams: ResultTeam[], scores: ResultScore[], scope: 'interim' | 'final' = 'interim') {
     const ordered = [...rounds].sort((a, b) => a.position - b.position || compare(a.id, b.id));
     if (ordered.some((r, i) => !Number.isSafeInteger(r.position) || r.position < 1 || (i > 0 && r.position === ordered[i - 1]!.position)))
         throw new HttpsError('failed-precondition', 'Pořadí kol není jednoznačné.');
     const index = ordered.findIndex(r => r.id === throughRoundId);
     if (index < 0)
         throw new HttpsError('invalid-argument', 'Kolo nepatří do připraveného kvízu.');
-    if (index === ordered.length - 1)
+    if (scope === 'interim' && index === ordered.length - 1)
         throw new HttpsError('failed-precondition', ordered.length === 1 ? 'Jednokolová akce nemá průběžné výsledky mezi koly.' : 'Poslední kolo patří budoucímu finálnímu vyhlášení.');
     if (teams.length > 1000)
-        throw new HttpsError('resource-exhausted', 'Průběžné výsledky podporují nejvýše 1000 přijatých týmů.');
+        throw new HttpsError('resource-exhausted', 'Výsledky podporují nejvýše 1000 přijatých týmů.');
     const included = ordered.slice(0, index + 1);
     const missing: {
         teamId: string;
@@ -71,4 +71,9 @@ export function calculateResults(rounds: ResultRound[], throughRoundId: string, 
     return { throughRoundId, roundNumber: index + 1, includedRounds: included, rows, missing,
         complete: teams.length > 0 && missing.length === 0,
         sourceFingerprint: fingerprint([included, canonicalTeams, sources]) };
+}
+export function calculateFinalResults(rounds: ResultRound[], teams: ResultTeam[], scores: ResultScore[]) {
+    const last = [...rounds].sort((a, b) => b.position - a.position)[0];
+    if (!last) throw new HttpsError('failed-precondition', 'Připravený kvíz nemá kola.');
+    return calculateResults(rounds, last.id, teams, scores, 'final');
 }

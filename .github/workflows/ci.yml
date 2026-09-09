@@ -104,3 +104,10 @@ jobs:
           --only auth,firestore,functions
           --project demo-filmovy-kviz-v2
           "node tools/local-emulator-environment.mjs full tests/e2e/interim-results-emulator.mjs && node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/interim-results.config.ts"
+
+      - name: Final reveal contracts and browser E2E (local emulators only)
+        run: >-
+          pnpm exec firebase emulators:exec
+          --only auth,firestore,functions
+          --project demo-filmovy-kviz-v2
+          "node tools/local-emulator-environment.mjs full tests/e2e/final-reveal-emulator.mjs && node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/final-reveal.config.ts"

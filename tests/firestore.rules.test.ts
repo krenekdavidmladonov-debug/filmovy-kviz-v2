@@ -304,7 +304,7 @@ describe('interim result versions and publication authority', () => {
       const db = role === null ? testEnvironment.unauthenticatedContext().firestore()
         : testEnvironment.authenticatedContext('leaderboard-' + role, { role, managementToken: 'not-staff', refereeAccessId: 'not-staff' }).firestore();
       const staff = role === 'admin' || role === 'moderator';
-      for (const child of ['interimVersions', 'interimOperations']) {
+      for (const child of ['interimVersions', 'interimOperations', 'finalVersions', 'finalOperations']) {
         const path = `${privateSessionPath}/${child}/version`;
         await testEnvironment.withSecurityRulesDisabled(async context => {
           await setDoc(doc(context.firestore(), path), { rows: [{ teamName: 'Private' }], actorUid: 'staff', eventId: 'security-test-event' });

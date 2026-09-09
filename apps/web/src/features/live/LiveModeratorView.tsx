@@ -72,9 +72,9 @@ export function LiveModeratorView({
   onMediaError,
   onMediaPlayback,
 }: LiveModeratorViewProps) {
-  const pending = pendingAction !== null || session.interimResults !== undefined;
+  const pending = pendingAction !== null || session.interimResults !== undefined || session.finalReveal?.visible === true;
   const ended = session.status === 'ended';
-  const source = session.interimResults ? undefined : liveMediaSource(presentedSlide);
+  const source = session.interimResults || session.finalReveal?.visible ? undefined : liveMediaSource(presentedSlide);
   const roundLabel = currentRoundLabel(currentSlide);
   const questionLabel = currentQuestionLabel(session, currentSlide, presentedSlide, slides);
   const recapTitle = currentSlide?.roundTitle?.trim() || 'Aktuální kolo';
@@ -219,6 +219,8 @@ export function LiveModeratorView({
               <div className="live-preview-message"><h2>Projektor čeká</h2><p>Tlačítkem Další zobrazíte první obsah.</p></div>
             ) : ended ? (
               <div className="live-preview-message"><h2>Kvíz byl ukončen</h2><p>Projektor zobrazuje závěrečný stav.</p></div>
+            ) : session.finalReveal?.visible ? (
+              <div className="live-preview-message"><h2>Finální vyhlášení</h2><p>Aktuální náhled projektoru a ovládání jsou v panelu Finální vyhlášení.</p></div>
             ) : presentedSlide ? (
               <SlideRenderer
                 compact

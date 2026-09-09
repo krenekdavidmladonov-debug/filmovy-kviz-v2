@@ -1,3 +1,4 @@
+import { parseFinalPage } from '../final-reveal/types';
 import { parseResultPage } from '../leaderboard/types';
 import type { DocumentData } from 'firebase/firestore';
 
@@ -113,6 +114,7 @@ export function mapLiveControlState(id: string, data: DocumentData): LiveControl
     quizId: requiredString(data, 'quizId'),
     ...(typeof data.eventId === 'string' ? { eventId: data.eventId } : {}),
     ...(typeof data.snapshotId === 'string' ? { snapshotId: data.snapshotId } : {}),
+    ...(object(data.finalReveal) ? { finalReveal: data.finalReveal as NonNullable<LiveControlState["finalReveal"]> } : {}),
     ...(object(data.interimResults) ? { interimResults: data.interimResults as NonNullable<LiveControlState['interimResults']> } : {}),
     quizTitle: requiredString(data, 'quizTitle'),
     slideCount: requiredNumber(data, 'slideCount'),
@@ -159,9 +161,11 @@ export function mapLiveControlSlide(id: string, data: DocumentData): LiveControl
 }
 
 export function mapPublicLiveState(id: string, data: DocumentData): PublicLiveState {
-  if (data.interimResults && (data.status !== "active" || data.answerRevealed || data.mediaPlaybackState !== "idle" || data.revealedAnswer || data.recapQuestionPosition || data.mediaSource)) throw new Error("Unsafe result presentation.");
+  if ((data.interimResults || data.finalReveal) && (data.status !== "active" || data.answerRevealed || data.mediaPlaybackState !== "idle" || data.revealedAnswer || data.recapQuestionPosition || data.mediaSource)) throw new Error("Unsafe result presentation.");
+  if (data.finalReveal && data.interimResults) throw new Error("Conflicting result presentation.");
   return {
     sessionId: id,
+    ...(data.finalReveal === undefined ? {} : { finalReveal: parseFinalPage(data.finalReveal) }),
     quizTitle: requiredString(data, 'quizTitle'),
     status: status(data),
     slidePosition: requiredNumber(data, 'slidePosition'),

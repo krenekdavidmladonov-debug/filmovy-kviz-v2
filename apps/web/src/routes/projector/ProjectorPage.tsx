@@ -1,3 +1,4 @@
+import { FinalRevealView } from '../../features/final-reveal/FinalRevealView';
 import { ResultsTable } from '../../features/leaderboard/ResultsTable';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
@@ -30,6 +31,7 @@ function ProjectorState({ state, onMediaFinished, onMediaPlaybackState }: {
 }) {
   if (state.status === 'waiting') return <ProjectorMessage quizTitle={state.quizTitle} title="Čekáme na první slide" text="Moderátor kvíz připravuje." />;
   if (state.status === 'ended') return <ProjectorMessage quizTitle={state.quizTitle} title="Kvíz skončil" text="Děkujeme za účast." />;
+  if (state.finalReveal) return <div className="results-frame" data-version-id={state.finalReveal.versionId}><FinalRevealView {...state.finalReveal} /></div>;
   if (state.interimResults) return <div className="results-frame" data-version-id={state.interimResults.versionId}><ResultsTable {...state.interimResults} /></div>;
   return (
     <SlideRenderer

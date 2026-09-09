@@ -37,7 +37,7 @@ Detekce výpadku není okamžitá; do jejího zjištění může zařízení dr�
 
 `tests/interimResults.test.ts`, rozšířená Rules sada, `tests/e2e/interim-results-emulator.mjs` a `tests/browser/interim-results.spec.ts` pokrývají výpočet, oprávnění, transakční souběh, soukromí a skutečné ovládání tří klientů. Browser mění skóre přes skutečnou referee stránku, testuje 12 týmů, ruční stránky, 1920×1080, 1280×720, moderátora 768 px, podvržené channel zprávy a hide během odpojení. Standardní CI obsahuje samostatný krok pro nové kontrakty a browser. Fixtures fail-closed vyžadují lokální emulátory a `demo-*`; browser blokuje nelokální síťové požadavky.
 
-Limit této implementace je 1000 přijatých týmů, osm řádků na stránku. Extrémně dlouhý název se vizuálně zkrátí s výpustkou. Event má jednu navázanou session; po jejím END tato iterace nenabízí restart. Nový obecný reportovací model, uzamykání kol, finální vyhlašování, vítězná hudba a nový END nejsou součástí.
+Limit této implementace je 1000 přijatých týmů, osm řádků na stránku. Extrémně dlouhý název se vizuálně zkrátí s výpustkou. Event má jednu navázanou session; po jejím END tato iterace nenabízí restart. Nový obecný reportovací model a uzamykání kol nejsou součástí průběžných výsledků. Finální vyhlášení a lokální vítězná fanfára navazují samostatně ve [FINAL_REVEAL.md](FINAL_REVEAL.md); dosavadní END zůstává ruční.
 
 ## Budoucí nasazovací závislosti — nyní nenasazeno
 
