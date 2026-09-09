@@ -78,10 +78,10 @@ test('local capture deduplicates an accepted message after a lost response', asy
   const capture = new CaptureEmailTransport();
   const message = { idempotencyKey: 'logical-message', to: 'synthetic@example.test', ...registrationEmail('registration-updated', content) };
   capture.nextFailure = 'before-accept';
-  await expect(capture.send(message)).rejects.toThrow('Synthetic delivery failure.');
+  await expect(capture.send(message)).rejects.toThrow('provider-unavailable');
   expect(capture.messages.size).toBe(0);
   capture.nextFailure = 'after-accept';
-  await expect(capture.send(message)).rejects.toThrow('Synthetic lost response.');
+  await expect(capture.send(message)).rejects.toThrow('outcome-unknown');
   await capture.send(message);
   expect(capture.messages.size).toBe(1);
   await expect(capture.send({ ...message, subject: 'Different retry payload' })).rejects.toThrow('Synthetic idempotency payload mismatch.');

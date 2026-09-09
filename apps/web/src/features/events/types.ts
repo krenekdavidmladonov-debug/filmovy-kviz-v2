@@ -64,7 +64,7 @@ export interface RegistrationRecord {
   readonly teamName: string;
   readonly memberCount: number;
   readonly contactEmail: string | null;
-  readonly emailDelivery?: { readonly status: 'pending' | 'sent' | 'failed'; readonly updatedAt: Date };
+  readonly emailDelivery?: { readonly status: 'pending' | 'processing' | 'sent' | 'failed'; readonly updatedAt: Date };
   readonly source?: 'manual' | 'online';
   readonly revision?: number;
   readonly status: 'accepted' | 'cancelled';
