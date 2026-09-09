@@ -3,12 +3,10 @@ import { Timestamp, type DocumentReference, type Transaction } from 'firebase-ad
 import type { RegistrationEmailContent, RegistrationEmailType } from './templates.js';
 
 export type DeliveryStatus = 'pending' | 'processing' | 'sent' | 'failed';
-export interface RegistrationEmailIntent {
+interface EmailIntentState {
   readonly eventId: string;
   readonly registrationId: string;
-  readonly type: RegistrationEmailType;
   readonly recipient: string;
-  readonly content: RegistrationEmailContent;
   readonly status: DeliveryStatus;
   readonly attempts: number;
   readonly createdAt: Timestamp;
@@ -19,6 +17,16 @@ export interface RegistrationEmailIntent {
   readonly leaseId: string | null;
   readonly leaseUntil: Timestamp | null;
 }
+
+export interface RegistrationEmailIntent extends EmailIntentState {
+  readonly type: RegistrationEmailType;
+  readonly content: RegistrationEmailContent;
+}
+export interface EventTeamEmailIntent extends EmailIntentState {
+  readonly type: 'event-team-message';
+  readonly campaignId: string;
+}
+export type EmailIntent = RegistrationEmailIntent | EventTeamEmailIntent;
 
 // Called only after the domain transaction has authorized and validated its operation.
 // No raw token, full URL, provider body or client-supplied destination enters the audit.

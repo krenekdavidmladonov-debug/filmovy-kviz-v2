@@ -32,7 +32,7 @@ describe('transactional registration email privacy', () => {
     test('only server owns intents, encrypted capabilities and receipts: ' + String(role), async () => {
       const db = role === null ? testEnvironment.unauthenticatedContext().firestore()
         : testEnvironment.authenticatedContext('email-' + role, { role }).firestore();
-      for (const child of ['emailIntents', 'emailSecrets', 'registrationOperations']) {
+      for (const child of ['emailIntents', 'emailSecrets', 'emailCampaigns', 'registrationOperations']) {
         const path = `${privateEventPath}/${child}/synthetic`;
         await testEnvironment.withSecurityRulesDisabled(async context => { await setDoc(doc(context.firestore(), path), { status: 'pending' }); });
         await assertFails(getDoc(doc(db, path)));

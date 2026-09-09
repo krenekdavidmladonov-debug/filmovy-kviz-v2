@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Timestamp, type DocumentReference, type Firestore } from 'firebase-admin/firestore';
 
 import { EmailDeliveryError, type DeliveryErrorCode } from './errors.js';
-import type { RegistrationEmailIntent } from './intent.js';
+import type { EmailIntent } from './intent.js';
+import { eventTeamMessage, messageCopy, teamMessageEventTitle, type TeamMessageContent } from './team-message.js';
 import { managementUrl, registrationEmail, type EmailBody } from './templates.js';
 import type { TokenEnvelope, TokenVault } from './token-vault.js';
 
@@ -23,7 +24,7 @@ export function retryDelayMillis(attempt: number): number { return Math.min(600_
 type Resolve<T> = T | (() => T);
 const resolve = <T>(value: Resolve<T>): T => typeof value === 'function' ? (value as () => T)() : value;
 
-export async function readProtectedEnvelope(read: () => Promise<TokenEnvelope | undefined>): Promise<TokenEnvelope | undefined> {
+export async function readProtectedEnvelope<T = TokenEnvelope>(read: () => Promise<T | undefined>): Promise<T | undefined> {
   try { return await read(); }
   catch (error) {
     const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
@@ -42,27 +43,28 @@ export async function deliverRegistrationEmail(db: Firestore, ref: DocumentRefer
   const claimed = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) return { result: 'unchanged' as const };
-    const intent = snapshot.data() as RegistrationEmailIntent;
+    const intent = snapshot.data() as EmailIntent;
     if (intent.status === 'sent' || intent.status === 'failed') return { result: 'unchanged' as const };
     const now = Timestamp.fromMillis(clock());
     if (intent.leaseUntil && intent.leaseUntil.toMillis() > now.toMillis()) return { result: 'busy' as const };
     if (intent.nextAttemptAt && intent.nextAttemptAt.toMillis() > now.toMillis()) return { result: 'pending' as const };
     const valid = intent.eventId === ref.parent.parent?.id && typeof intent.registrationId === 'string'
       && /^[a-zA-Z0-9_-]{1,150}$/u.test(intent.registrationId) && Number.isInteger(intent.attempts) && intent.attempts >= 0
-      && intent.createdAt instanceof Timestamp && ['registration-confirmed', 'registration-updated', 'registration-cancelled'].includes(intent.type);
+      && intent.createdAt instanceof Timestamp && (['registration-confirmed', 'registration-updated', 'registration-cancelled'].includes(intent.type)
+        || (intent.type === 'event-team-message' && /^[a-f0-9]{64}$/u.test(intent.campaignId)));
     if (!valid) {
       transaction.update(ref, { status: 'failed', lastError: 'configuration-invalid', leaseId: null, leaseUntil: null, updatedAt: now });
       return { result: 'failed' as const };
     }
-    const registrationRef = ref.parent.parent.collection('registrations').doc(intent.registrationId);
-    const registration = await transaction.get(registrationRef);
-    const summary = registration.data()?.emailDelivery as { intentId?: string } | undefined;
+    const registrationRef = intent.type === 'event-team-message' ? null : ref.parent.parent.collection('registrations').doc(intent.registrationId);
+    const registration = registrationRef ? await transaction.get(registrationRef) : null;
+    const summary = registration?.data()?.emailDelivery as { intentId?: string } | undefined;
     const exhausted = intent.attempts >= MAX_EMAIL_ATTEMPTS || now.toMillis() - intent.createdAt.toMillis() >= MAX_EMAIL_AGE_MS;
     const status = exhausted ? 'failed' : 'processing';
     transaction.update(ref, exhausted
       ? { status, lastError: 'attempts-exhausted', leaseId: null, leaseUntil: null, nextAttemptAt: null, updatedAt: now }
       : { status, attempts: intent.attempts + 1, updatedAt: now, leaseId, leaseUntil: Timestamp.fromMillis(now.toMillis() + EMAIL_LEASE_MS), nextAttemptAt: null });
-    if (summary?.intentId === ref.id) transaction.update(registrationRef, { emailDelivery: { intentId: ref.id, type: intent.type, status, updatedAt: now } });
+    if (registrationRef && summary?.intentId === ref.id) transaction.update(registrationRef, { emailDelivery: { intentId: ref.id, type: intent.type, status, updatedAt: now } });
     return exhausted ? { result: 'failed' as const } : { intent, registrationRef };
   });
   if (!claimed.intent) return claimed.result;
@@ -71,17 +73,26 @@ export async function deliverRegistrationEmail(db: Firestore, ref: DocumentRefer
   let lastError: DeliveryErrorCode | null = null;
   try {
     // Resolve secrets only after a claim. Missing configuration becomes terminal.
-    const selectedVault = resolve(vault);
-    const selectedOrigin = resolve(origin);
     const selectedTransport = resolve(transport);
-    let link: string | undefined;
-    if (intent.type === 'registration-confirmed') {
-      const envelope = await readProtectedEnvelope(async () => (await ref.parent.parent!.collection('emailSecrets').doc(ref.id).get()).data()?.envelope as TokenEnvelope | undefined);
-      if (!envelope) throw new EmailDeliveryError('configuration-invalid', false);
-      link = managementUrl(selectedOrigin, intent.eventId, intent.registrationId, selectedVault.open(envelope, ref.path));
+    let body: EmailBody;
+    if (intent.type === 'event-team-message') {
+      const campaign = await readProtectedEnvelope(async () => (await ref.parent.parent!.collection('emailCampaigns').doc(intent.campaignId).get()).data());
+      if (!campaign || campaign.eventId !== intent.eventId || !campaign.content) throw new EmailDeliveryError('configuration-invalid', false);
+      const content = campaign.content as TeamMessageContent;
+      body = eventTeamMessage({ ...messageCopy({ subject: content.subject, message: content.message }), eventTitle: teamMessageEventTitle(content.eventTitle) });
+    } else {
+      const selectedVault = resolve(vault);
+      const selectedOrigin = resolve(origin);
+      let link: string | undefined;
+      if (intent.type === 'registration-confirmed') {
+        const envelope = await readProtectedEnvelope(async () => (await ref.parent.parent!.collection('emailSecrets').doc(ref.id).get()).data()?.envelope as TokenEnvelope | undefined);
+        if (!envelope) throw new EmailDeliveryError('configuration-invalid', false);
+        link = managementUrl(selectedOrigin, intent.eventId, intent.registrationId, selectedVault.open(envelope, ref.path));
+      }
+      body = registrationEmail(intent.type, intent.content, link);
     }
     await selectedTransport.send({ idempotencyKey: ref.path, to: intent.recipient, createdAtMillis: intent.createdAt.toMillis(),
-      ...registrationEmail(intent.type, intent.content, link) });
+      ...body });
   } catch (error) {
     lastError = error instanceof EmailDeliveryError ? error.code : 'delivery-unavailable';
     status = error instanceof EmailDeliveryError && error.retryable && intent.attempts + 1 < MAX_EMAIL_ATTEMPTS
@@ -89,13 +100,13 @@ export async function deliverRegistrationEmail(db: Firestore, ref: DocumentRefer
   }
   const recorded = await db.runTransaction(async (transaction) => {
     const current = await transaction.get(ref);
-    const registration = await transaction.get(registrationRef);
+    const registration = registrationRef ? await transaction.get(registrationRef) : null;
     if (current.data()?.leaseId !== leaseId) return false;
     const now = Timestamp.fromMillis(clock());
     transaction.update(ref, { status, updatedAt: now, sentAt: status === 'sent' ? now : null, lastError,
       leaseId: null, leaseUntil: null, nextAttemptAt: status === 'pending' ? Timestamp.fromMillis(now.toMillis() + retryDelayMillis(intent.attempts + 1)) : null });
-    const summary = registration.data()?.emailDelivery as { intentId?: string } | undefined;
-    if (summary?.intentId === ref.id) transaction.update(registrationRef, { emailDelivery: { intentId: ref.id, type: intent.type, status, updatedAt: now } });
+    const summary = registration?.data()?.emailDelivery as { intentId?: string } | undefined;
+    if (registrationRef && summary?.intentId === ref.id) transaction.update(registrationRef, { emailDelivery: { intentId: ref.id, type: intent.type, status, updatedAt: now } });
     // Keep encrypted envelope/receipt for create-response recovery after acceptance.
     return true;
   });

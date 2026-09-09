@@ -1,0 +1,75 @@
+import { strict as assert } from 'node:assert';
+import { randomUUID } from 'node:crypto';
+import { emailFixture } from './registration-email-fixture.mjs';
+import { processEmailTask } from '../../functions/lib/email/task.js';
+let fixture, phase = 'setup';
+const deny = (promise, code) => assert.rejects(promise, error => error.code === 'functions/' + code);
+try {
+  fixture = await emailFixture({ gmail: true });
+  const { eventId, eventRef, adminCall, publicCall, capture } = fixture;
+  const copy = { eventId, subject: 'Zítra od 18:00', message: 'Registrace od 17:30. Čaj & <b>káva</b>.' };
+  const team = await publicCall('createEventRegistration', { eventId, teamName: 'Online první', memberCount: 3, contactEmail: 'same@example.test' });
+  const manual = await adminCall('adminAddEventTeam', { eventId, requestId: randomUUID(), teamName: 'Ruční druhý', memberCount: 2, contactEmail: 'same@example.test' });
+  await adminCall('adminAddEventTeam', { eventId, requestId: randomUUID(), teamName: 'Bez emailu', memberCount: 2 });
+  await eventRef.collection('registrations').doc('cancelled-synthetic').set({ eventId, status: 'cancelled', contactEmail: 'cancel@example.test' });
+  await eventRef.collection('registrations').doc('waiting-synthetic').set({ eventId, status: 'pending', contactEmail: 'wait@example.test' });
+  const registrationSummary = (await eventRef.collection('registrations').doc(team.registrationId).get()).data().emailDelivery;
+  phase = 'roles and input';
+  const calls = [publicCall, await fixture.roleCall(null), await fixture.roleCall('moderator'), await fixture.roleCall('referee')];
+  for (const call of calls) {
+    await deny(call('previewEventTeamMessage', copy), 'permission-denied');
+    await deny(call('createEventTeamMessage', { ...copy, requestId: randomUUID(), previewFingerprint: 'a'.repeat(64), confirmed: true }), 'permission-denied');
+    await deny(call('listEventTeamMessages', { eventId }), 'permission-denied');
+    await deny(call('getEventTeamMessage', { eventId, campaignId: 'a'.repeat(64) }), 'permission-denied');
+  }
+  await fixture.setAdminRole('moderator'); await deny(adminCall('previewEventTeamMessage', copy), 'permission-denied'); await fixture.setAdminRole('admin');
+  await deny(adminCall('previewEventTeamMessage', { ...copy, recipients: ['attack@example.test'] }), 'invalid-argument');
+  console.log('PASS: public/unprivileged/moderator/referee/current revoked role denied; recipient injection denied');
+  phase = 'preview changes';
+  const preview = await adminCall('previewEventTeamMessage', copy); assert.equal(preview.total, 2); assert.equal('recipients' in preview, false);
+  const request = { ...copy, requestId: randomUUID(), previewFingerprint: preview.previewFingerprint, confirmed: true };
+  await eventRef.collection('registrations').doc(manual.registrationId).update({ contactEmail: 'changed@example.test' });
+  await deny(adminCall('createEventTeamMessage', request), 'aborted');
+  assert.equal((await eventRef.collection('emailCampaigns').get()).size, 0);
+  await eventRef.collection('registrations').doc(manual.registrationId).update({ contactEmail: 'same@example.test' });
+  console.log('PASS: exact accepted roster, exclusions, shared mailbox, changed address invalidates preview without partial writes');
+  phase = 'atomic idempotence';
+  const [first, duplicate] = await Promise.all([adminCall('createEventTeamMessage', request), adminCall('createEventTeamMessage', request)]);
+  assert.equal(first.campaignId, duplicate.campaignId); assert.equal((await eventRef.collection('emailCampaigns').get()).size, 1);
+  await deny(adminCall('createEventTeamMessage', { ...request, subject: 'Changed' }), 'already-exists');
+  const campaignIntents = (await eventRef.collection('emailIntents').where('campaignId', '==', first.campaignId).get()).docs;
+  assert.equal(campaignIntents.length, 2);
+  await eventRef.collection('registrations').doc(team.registrationId).update({ contactEmail: 'later@example.test', status: 'cancelled' });
+  await eventRef.update({ lifecycleStatus: 'completed' });
+  assert.equal((await adminCall('createEventTeamMessage', request)).campaignId, first.campaignId);
+  await deny(adminCall('previewEventTeamMessage', copy), 'failed-precondition');
+  const status = () => adminCall('getEventTeamMessage', { eventId, campaignId: first.campaignId });
+  assert.equal((await status()).pending, 2);
+  console.log('PASS: concurrent confirmation has one receipt, changed payload denied, snapshot/replay survives roster and lifecycle changes');
+  phase = 'shared worker';
+  const unavailable = () => { throw new Error('No vault or public origin for organizational messages'); };
+  const deliver = doc => processEmailTask({ eventId, intentId: doc.id }, { db: fixture.db, transport: capture, vault: unavailable, origin: unavailable, clock: fixture.clock });
+  await deliver(campaignIntents[0]);
+  capture.nextFailure = 'rate-limit'; await assert.rejects(deliver(campaignIntents[1]));
+  assert.equal((await status()).pending, 1); fixture.advance(); await deliver(campaignIntents[1]);
+  await Promise.all(campaignIntents.map(deliver));
+  assert.equal(capture.messages.size, 2); assert.equal(capture.submissions.length, 2);
+  for (const message of capture.messages.values()) { assert.equal(message.to, 'same@example.test'); assert.equal(message.subject, copy.subject); assert.ok(message.html.includes('&lt;b&gt;')); assert.ok(!message.text.includes('registration/manage')); }
+  const sent = await status(); assert.equal(sent.total, 2); assert.equal(sent.sent, 2); assert.equal(sent.pending, 0); assert.equal(sent.failed, 0);
+  assert.deepEqual((await eventRef.collection('registrations').doc(team.registrationId).get()).data().emailDelivery, registrationSummary);
+  assert.equal('recipients' in sent, false); assert.equal((await adminCall('listEventTeamMessages', { eventId })).length, 1);
+  console.log('PASS: shared fake Gmail task, retry, immutable destinations, no token dependency/CTA, safe status and confirmation unchanged');
+  phase = 'atomic upper bound';
+  await eventRef.update({ lifecycleStatus: 'draft' });
+  const old = await eventRef.collection('registrations').get(); const clean = fixture.db.batch(); for (const doc of old.docs) clean.delete(doc.ref); await clean.commit();
+  const seed = fixture.db.batch(); for (let i = 0; i < 451; i++) seed.set(eventRef.collection('registrations').doc('bound-' + i), { eventId, status: 'accepted', contactEmail: 'synthetic@example.test' }); await seed.commit();
+  await deny(adminCall('previewEventTeamMessage', copy), 'resource-exhausted');
+  await deny(adminCall('createEventTeamMessage', { ...request, requestId: randomUUID() }), 'resource-exhausted');
+  assert.equal((await eventRef.collection('emailCampaigns').get()).size, 1);
+  await eventRef.collection('registrations').doc('bound-450').delete();
+  const bound = await adminCall('previewEventTeamMessage', copy); assert.equal(bound.total, 450);
+  const big = await adminCall('createEventTeamMessage', { ...request, requestId: randomUUID(), previewFingerprint: bound.previewFingerprint });
+  assert.equal((await eventRef.collection('emailIntents').where('campaignId', '==', big.campaignId).get()).size, 450);
+  console.log('PASS: 451 rejected with zero partial writes; 450 creates the complete atomic snapshot');
+} catch { throw new Error('Event team email contract failed during: ' + phase + '. Sensitive diagnostics suppressed.'); }
+finally { if (fixture) await fixture.dispose(); }

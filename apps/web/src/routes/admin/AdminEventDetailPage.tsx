@@ -1,3 +1,4 @@
+import { EventTeamMessagePanel } from '../../features/events/EventTeamMessagePanel';
 import { EventLiveButton } from '../../features/leaderboard/EventLiveButton';
 import { RefereeAccessPanel } from '../../features/referee/RefereeAccessPanel';
 import { runQuizPreflight, type EditorQuiz, type PreflightResult } from '@filmovy-kviz/quiz-domain';
@@ -44,7 +45,7 @@ function formValues(event: EventRecord): EventFormValues {
 
 export function AdminEventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const { role } = useAuth();
+  const { role, currentUser } = useAuth();
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [values, setValues] = useState<EventFormValues | null>(null);
   const [quizzes, setQuizzes] = useState<readonly QuizSummary[]>([]);
@@ -138,6 +139,7 @@ export function AdminEventDetailPage() {
         <p className="event-muted">Body přijatých týmů za kola připraveného kvízu a historie oprav.</p>
         <Link className="secondary-link" to={`/admin/events/${event.id}/scoring`}>Otevřít bodování</Link>
       </section>
+      {admin && <EventTeamMessagePanel key={event.id + ':' + currentUser?.uid} eventId={event.id} actorId={currentUser!.uid} canCreate={['draft', 'scheduled', 'ready', 'live'].includes(event.lifecycleStatus)} />}
       <RegistrationSharePanel event={event} />
       {admin && addingTeam && <ManualTeamDialog event={event} onClose={() => setAddingTeam(false)} onSaved={async (id, name) => { setAddedTeam({ id, name }); setEvent(await getEvent(event.id)); }} />}
 

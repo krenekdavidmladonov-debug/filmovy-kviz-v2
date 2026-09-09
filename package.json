@@ -50,7 +50,9 @@
     "typecheck": "pnpm --filter @filmovy-kviz/quiz-domain build && tsc -p tsconfig.tests.json --noEmit --pretty false && pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
     "check": "pnpm typecheck && pnpm lint && pnpm build",
-    "test:e2e:gmail-delivery": "node tools/local-emulator-environment.mjs full tests/e2e/gmail-delivery-emulator.mjs"
+    "test:e2e:gmail-delivery": "node tools/local-emulator-environment.mjs full tests/e2e/gmail-delivery-emulator.mjs",
+    "test:e2e:event-team-email": "node tools/local-emulator-environment.mjs full tests/e2e/event-team-email-emulator.mjs",
+    "test:e2e:event-team-email-browser": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/event-team-email.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
