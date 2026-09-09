@@ -5,26 +5,26 @@ import { authorizeStaff, parseSession, loadSlide } from '../live/callables.js';
 import { buildPublicSessionState } from '../live/publication.js';
 import { applyLiveSessionAction } from '../live/session-machine.js';
 import type { PrivateLiveSession } from '../live/types.js';
-import { calculateResults, fingerprint, RESULTS_PAGE_SIZE, type ResultRow } from './model.js';
+import { calculateResults, calculateFinalResults, fingerprint, RESULTS_PAGE_SIZE, type ResultRow } from './model.js';
 const options = { region: 'europe-west1', cors: true, maxInstances: 10 };
 const db = () => getFirestore();
-function object(value: unknown): Record<string, unknown> {
+export function object(value: unknown): Record<string, unknown> {
     if (!value || typeof value !== 'object' || Array.isArray(value))
         throw new HttpsError('invalid-argument', 'Neplatný požadavek.');
     return value as Record<string, unknown>;
 }
-function id(data: Record<string, unknown>, key: string): string {
+export function id(data: Record<string, unknown>, key: string): string {
     const value = data[key];
     if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,150}$/u.test(value))
         throw new HttpsError('invalid-argument', 'Neplatný identifikátor.');
     return value;
 }
-function revision(data: Record<string, unknown>): number {
+export function revision(data: Record<string, unknown>): number {
     if (!Number.isSafeInteger(data.expectedRevision) || (data.expectedRevision as number) < 0)
         throw new HttpsError('invalid-argument', 'Neplatná revize.');
     return data.expectedRevision as number;
 }
-async function staff(request: CallableRequest) {
+export async function staff(request: CallableRequest) {
     const actor = authorizeStaff(request.auth);
     const current = await getAuth().getUser(actor.uid).catch(() => null);
     if (!current || current.disabled || !['admin', 'moderator'].includes(current.customClaims?.role as string))
@@ -37,7 +37,7 @@ async function eventIn(tx: Transaction, eventId: string) {
         throw new HttpsError('failed-precondition', 'Akce není dostupná pro moderování.');
     return event;
 }
-async function bound(tx: Transaction, eventId: string, sessionId: string) {
+export async function bound(tx: Transaction, eventId: string, sessionId: string) {
     const event = await eventIn(tx, eventId);
     const session = parseSession(await tx.get(db().doc('sessions/' + sessionId)));
     if (session.eventId !== eventId || event.liveSessionId !== sessionId || session.snapshotId !== object(event.quizAssignment).snapshotId || session.status === 'ended')
@@ -76,12 +76,15 @@ export const createEventLiveSession = onCall(options, async (request) => {
         return { sessionId: sessionRef.id };
     });
 });
-async function previewIn(tx: Transaction, eventId: string, sessionId: string, throughRoundId: string) {
+export async function previewIn(tx: Transaction, eventId: string, sessionId: string, throughRoundId: string | null) {
     const { session } = await bound(tx, eventId, sessionId);
     const rounds = await tx.get(db().collection(`quizSnapshots/${session.snapshotId}/rounds`));
     const teams = await tx.get(db().collection(`events/${eventId}/registrations`).where('status', '==', 'accepted'));
     const scores = await tx.get(db().collection(`events/${eventId}/scores`));
-    const result = calculateResults(rounds.docs.map(d => ({ id: d.id, title: String(d.data().title), position: Number(d.data().position) })), throughRoundId, teams.docs.map(d => ({ id: d.id, name: String(d.data().teamName), revision: Number(d.data().revision ?? 0) })), scores.docs.filter(d => d.data().snapshotId === session.snapshotId).map(d => ({ teamId: String(d.data().teamId), roundId: String(d.data().roundId), halfPoints: d.data().halfPoints as number | null, revision: Number(d.data().revision) })));
+    const roundValues = rounds.docs.map(d => ({ id: d.id, title: String(d.data().title), position: Number(d.data().position) }));
+    const teamValues = teams.docs.map(d => ({ id: d.id, name: String(d.data().teamName), revision: Number(d.data().revision ?? 0) }));
+    const scoreValues = scores.docs.filter(d => d.data().snapshotId === session.snapshotId).map(d => ({ teamId: String(d.data().teamId), roundId: String(d.data().roundId), halfPoints: d.data().halfPoints as number | null, revision: Number(d.data().revision) }));
+    const result = throughRoundId === null ? calculateFinalResults(roundValues, teamValues, scoreValues) : calculateResults(roundValues, throughRoundId, teamValues, scoreValues);
     return { session, result: { ...result, sourceFingerprint: fingerprint([eventId, session.snapshotId, result.sourceFingerprint]) } };
 }
 export const previewInterimResults = onCall(options, async (request) => {
@@ -124,6 +127,8 @@ export const controlInterimResults = onCall(options, async (request) => {
             throw new HttpsError('aborted', 'Prezentace se změnila. Načtěte nový náhled.');
         if (session.status !== 'active')
             throw new HttpsError('failed-precondition', 'Nejprve spusťte prezentaci.');
+        if (session.finalReveal?.visible)
+            throw new HttpsError('failed-precondition', 'Nejprve skryjte finále.');
         const now = Timestamp.now();
         let updated: PrivateLiveSession;
         let publication: Record<string, unknown> | undefined;

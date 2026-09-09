@@ -102,3 +102,6 @@ Referee access is a separate per-event bearer capability, not a staff role or Fi
 
 
 Interim result publication rechecks the current Auth role on every transaction attempt, event/session/snapshot binding, accepted roster, included scores and source fingerprint. Public output is a fresh allowlist of only the reviewed current page; private versions/audit and scores retain staff-only reads and deny every client write. Referee and registration management capabilities confer no publication access. See [INTERIM_RESULTS.md](INTERIM_RESULTS.md).
+
+
+Final reveal extends the same event-bound live session with private immutable finalVersions, revisioned finalOperations and an explicitly revealed public page. Staff confirmation, corrections, closure and moderator-only synthetic sound are documented in [FINAL_REVEAL.md](FINAL_REVEAL.md). No Rules, indexes or cloud data change is required by this implementation.

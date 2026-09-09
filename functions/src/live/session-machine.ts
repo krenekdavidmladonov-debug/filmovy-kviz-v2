@@ -54,7 +54,7 @@ export function applyLiveSessionAction(
   const common = { revision: session.revision + 1, updatedAt: now, updatedBy: actorUid };
   if (action.type === 'end-session') {
     return {
-      ...withoutRecapSelection(session), ...common, status: 'ended', answerRevealed: false, presentationMode: 'slide',
+      ...withoutRecapSelection(session), ...(session.finalReveal ? { finalReveal: { ...session.finalReveal, visible: false } } : {}), ...common, status: 'ended', answerRevealed: false, presentationMode: 'slide',
       mediaCommand: 'idle', mediaPlaybackState: 'idle', mediaGeneration: session.mediaGeneration + 1, endedAt: now,
     };
   }

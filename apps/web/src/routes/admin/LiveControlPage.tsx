@@ -1,3 +1,4 @@
+import { FinalRevealPanel } from '../../features/final-reveal/FinalRevealPanel';
 import { InterimResultsPanel } from '../../features/leaderboard/InterimResultsPanel';
 import { FirebaseError } from 'firebase/app';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -214,6 +215,7 @@ export function LiveControlPage() {
   return (
     <>
     {session.eventId && session.snapshotId && <InterimResultsPanel key={session.sessionId} session={session} />}
+    {session.eventId && session.snapshotId && <FinalRevealPanel key={session.sessionId} session={session} ending={pendingAction === 'end'} />}
     <LiveModeratorView
       session={session}
       slides={slides}

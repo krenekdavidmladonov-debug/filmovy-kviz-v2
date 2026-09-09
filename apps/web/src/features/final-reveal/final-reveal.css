@@ -1,0 +1,16 @@
+.final-canvas { box-sizing: border-box; width: 100%; height: 100%; aspect-ratio: 16/9; background: radial-gradient(ellipse at top right, #24334b, #111827 65%); color: #fff; padding: 3cqw 4cqw; display: flex; flex-direction: column; overflow: hidden; }
+.final-canvas header p { margin: 0; color: #cbd5e1; font-size: 1.5cqw; }
+.final-canvas h1 { margin: .6cqw 0; font-size: 4.4cqw; line-height: 1.1; }
+.final-canvas.is-winner h1 { color: #fbbf24; }
+.final-canvas header .final-intro { font-size: 2.4cqw; margin-top: 4cqw; }
+.final-canvas ul { list-style: none; padding: 0; margin: 1.5cqw 0 0; display: grid; gap: .25cqw; }
+.final-canvas li { display: flex; align-items: center; gap: 2cqw; border-bottom: 1px solid #465063; padding: .6cqw 0; font-size: 2.2cqw; line-height: 1.25; }
+.final-canvas li strong { min-width: 0; flex: 1; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.final-canvas li span { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: #fcd34d; }
+.final-canvas footer { margin-top: auto; padding-top: 1cqw; font-size: 1.25cqw; color: #cbd5e1; }
+.final-panel .sound-controls { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; padding: .75rem 0; }
+.final-panel .sound-controls label { display: flex; gap: .5rem; align-items: center; }
+.final-panel .results-frame { margin: 1rem 0; }
+.final-panel .version-state { overflow-wrap: anywhere; }
+
+.final-canvas.is-large li { font-size: 1.6cqw; padding: .25cqw 0; line-height: 1.2; }

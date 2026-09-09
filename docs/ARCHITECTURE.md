@@ -103,3 +103,6 @@ The separate /referee/:eventId surface uses event-scoped bearer grants and minim
 
 
 Event-bound moderation and explicitly reviewed cumulative result versions use the existing live/projector routes. See [INTERIM_RESULTS.md](INTERIM_RESULTS.md) for binding, transactional confirmation, pagination, closure and deployment dependencies.
+
+
+Final reveal extends the same event-bound live session with private immutable finalVersions, revisioned finalOperations and an explicitly revealed public page. Staff confirmation, corrections, closure and moderator-only synthetic sound are documented in [FINAL_REVEAL.md](FINAL_REVEAL.md). No Rules, indexes or cloud data change is required by this implementation.
