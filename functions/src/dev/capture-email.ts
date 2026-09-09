@@ -1,3 +1,4 @@
+import { EmailDeliveryError } from '../email/errors.js';
 import type { EmailMessage, EmailTransport } from '../email/delivery.js';
 import { requireEmailEmulator } from '../email/token-vault.js';
 
@@ -14,9 +15,9 @@ export class CaptureEmailTransport implements EmailTransport {
     this.nextFailure = null;
     const accepted = this.messages.get(message.idempotencyKey);
     if (accepted && JSON.stringify(accepted) !== JSON.stringify(message)) return Promise.reject(new Error('Synthetic idempotency payload mismatch.'));
-    if (failure === 'before-accept') return Promise.reject(new Error('Synthetic delivery failure.'));
+    if (failure === 'before-accept') return Promise.reject(new EmailDeliveryError('provider-unavailable', true));
     if (!this.messages.has(message.idempotencyKey)) this.messages.set(message.idempotencyKey, { ...message });
-    if (failure === 'after-accept') return Promise.reject(new Error('Synthetic lost response.'));
+    if (failure === 'after-accept') return Promise.reject(new EmailDeliveryError('outcome-unknown', true));
     return Promise.resolve();
   }
 }

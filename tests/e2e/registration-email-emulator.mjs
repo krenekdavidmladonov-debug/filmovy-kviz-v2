@@ -1,12 +1,13 @@
 import { strict as assert } from 'node:assert';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+import { EmailDeliveryError } from '../../functions/lib/email/errors.js';
 import { emailFixture } from './registration-email-fixture.mjs';
 
 let fixture;
 let phase = 'setup';
 const secrets = [];
-const check = (condition, label) => assert.ok(condition, label);
+const check = (condition, label) => { if (!condition) phase = label; assert.ok(condition, label); };
 const denied = (promise, code) => assert.rejects(promise, error => error.code === `functions/${code}`);
 try {
   fixture = await emailFixture();
@@ -33,9 +34,10 @@ try {
 
   phase = 'provider failure independent of registration, safe error and retry';
   check(team.status === 'accepted' && confirmed.data().status === 'pending', 'Registration accepted before any transport');
-  const leakingProvider = { send: message => Promise.reject(new Error(message.text)) };
-  check(await fixture.deliver(confirmed.ref, undefined, leakingProvider) === 'failed', phase);
-  check((await confirmed.ref.get()).data().lastError === 'delivery-unavailable' && (await record(team)).emailDelivery.status === 'failed', 'Safe failed status');
+  const leakingProvider = { send: () => Promise.reject(new EmailDeliveryError('provider-unavailable', true)) };
+  check(await fixture.deliver(confirmed.ref, undefined, leakingProvider) === 'pending', phase);
+  check((await confirmed.ref.get()).data().lastError === 'provider-unavailable' && (await record(team)).emailDelivery.status === 'pending', 'Safe failed status');
+  fixture.advance();
   check(await fixture.deliver(confirmed.ref) === 'sent', 'Successful retry');
   check(await fixture.deliver(confirmed.ref) === 'unchanged', 'Repeated delivery is a no-op');
   const delivered = (await confirmed.ref.get()).data();
@@ -78,7 +80,8 @@ try {
   const otherConfirmation = (await list(other))[0];
   const priorCaptureCount = capture.messages.size;
   capture.nextFailure = 'after-accept';
-  check(await fixture.deliver(otherConfirmation.ref) === 'failed', 'Lost response is safe retryable failure');
+  check(await fixture.deliver(otherConfirmation.ref) === 'pending', 'Lost response is safe retryable failure');
+  fixture.advance();
   check(await fixture.deliver(otherConfirmation.ref) === 'sent', 'Lost-response reconciliation');
   check(capture.messages.size === priorCaptureCount + 1 && (await otherConfirmation.ref.get()).data().attempts === 2, 'One logical accepted message');
   console.log('PASS: accepted email with lost response retries without a duplicate');
@@ -92,14 +95,14 @@ try {
   check(cancellation.data().recipient === 'updated@example.test', 'Cancel recipient is current server email');
   const update = all.find(doc => doc.data().type === 'registration-updated');
   const timestamp = update.data().createdAt.constructor;
-  await update.ref.update({ leaseId: 'synthetic-crashed-worker', leaseUntil: timestamp.fromMillis(Date.now() + 60_000), attempts: 1 });
-  check(await fixture.deliver(update.ref) === 'unchanged', 'Active crash lease blocks another worker');
-  await update.ref.update({ leaseUntil: timestamp.fromMillis(Date.now() - 1) });
+  await update.ref.update({ leaseId: 'synthetic-crashed-worker', leaseUntil: timestamp.fromMillis(fixture.clock() + 60_000), attempts: 1 });
+  check(await fixture.deliver(update.ref) === 'busy', 'Active crash lease blocks another worker');
+  await update.ref.update({ leaseUntil: timestamp.fromMillis(fixture.clock() - 1) });
   await fixture.deliver(update.ref);
   check((await update.ref.get()).data().status === 'sent' && (await update.ref.get()).data().attempts === 2, 'Expired crash lease is recoverable');
   check((await record(team)).emailDelivery.intentId === cancellation.id && (await record(team)).emailDelivery.status === 'pending', 'Older attempt cannot hide newer pending message');
   const parallel = await Promise.all([fixture.deliver(cancellation.ref), fixture.deliver(cancellation.ref)]);
-  check(parallel.filter(result => result === 'sent').length === 1 && parallel.filter(result => result === 'unchanged').length === 1, 'Concurrent workers share lease');
+  check(parallel.filter(result => result === 'sent').length === 1 && parallel.filter(result => result === 'busy' || result === 'unchanged').length === 1, 'Concurrent workers share lease');
   check(capture.messages.get(cancellation.ref.path).text.includes('Tým již není aktivně přihlášen'), 'Cancellation wording');
   const cancelledReplay = await create('Emailový tým', retryKey);
   check(cancelledReplay.registrationId === team.registrationId && cancelledReplay.status === 'cancelled' && (await list(team)).length === 4, 'Create retry after rename/cancel does not register again');

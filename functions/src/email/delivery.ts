@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-
 import { Timestamp, type DocumentReference, type Firestore } from 'firebase-admin/firestore';
 
+import { EmailDeliveryError, type DeliveryErrorCode } from './errors.js';
 import type { RegistrationEmailIntent } from './intent.js';
 import { managementUrl, registrationEmail, type EmailBody } from './templates.js';
 import type { TokenEnvelope, TokenVault } from './token-vault.js';
@@ -9,63 +9,95 @@ import type { TokenEnvelope, TokenVault } from './token-vault.js';
 export interface EmailMessage extends EmailBody {
   readonly idempotencyKey: string;
   readonly to: string;
+  readonly createdAtMillis?: number;
 }
-
 export interface EmailTransport {
-  // Must deduplicate accepted mail by this key, including an accepted request whose
-  // response was lost. A bare SMTP adapter cannot satisfy this contract.
+  // One logical intent, bounded submissions. Provider acceptance may be unknown after
+  // response loss; Gmail does NOT guarantee deduplication from a stable Message-ID.
   send(message: EmailMessage): Promise<void>;
 }
+export const MAX_EMAIL_ATTEMPTS = 5;
+export const MAX_EMAIL_AGE_MS = 24 * 60 * 60 * 1000;
+export const EMAIL_LEASE_MS = 120_000;
+export function retryDelayMillis(attempt: number): number { return Math.min(600_000, 30_000 * 2 ** (attempt - 1)); }
+type Resolve<T> = T | (() => T);
+const resolve = <T>(value: Resolve<T>): T => typeof value === 'function' ? (value as () => T)() : value;
 
-// Server-internal worker primitive. Deliberately not exported as a callable/trigger.
-// Recipient and content always come from a committed, server-owned domain intent.
-export async function deliverRegistrationEmail(db: Firestore, ref: DocumentReference, transport: EmailTransport, vault: TokenVault, origin: string) {
+export async function readProtectedEnvelope(read: () => Promise<TokenEnvelope | undefined>): Promise<TokenEnvelope | undefined> {
+  try { return await read(); }
+  catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+    if ([4, 8, 10, 13, 14, 'deadline-exceeded', 'resource-exhausted', 'aborted', 'internal', 'unavailable'].includes(code as string | number)) {
+      throw new EmailDeliveryError('provider-unavailable', true);
+    }
+    throw new EmailDeliveryError('configuration-invalid', false);
+  }
+}
+
+// Recipient/content always come from the committed server-owned intent, never a task.
+export async function deliverRegistrationEmail(db: Firestore, ref: DocumentReference, transport: Resolve<EmailTransport>,
+  vault: Resolve<TokenVault>, origin: Resolve<string>, clock: () => number = Date.now) {
   if (!/^events\/[^/]+\/emailIntents\/[^/]+$/u.test(ref.path)) throw new Error('Invalid email intent path.');
   const leaseId = randomUUID();
   const claimed = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
-    if (!snapshot.exists) return null;
+    if (!snapshot.exists) return { result: 'unchanged' as const };
     const intent = snapshot.data() as RegistrationEmailIntent;
-    const now = Timestamp.now();
-    if (intent.status === 'sent' || (intent.leaseUntil && intent.leaseUntil.toMillis() > now.toMillis())) return null;
-    const registrationRef = db.collection('events').doc(intent.eventId).collection('registrations').doc(intent.registrationId);
+    if (intent.status === 'sent' || intent.status === 'failed') return { result: 'unchanged' as const };
+    const now = Timestamp.fromMillis(clock());
+    if (intent.leaseUntil && intent.leaseUntil.toMillis() > now.toMillis()) return { result: 'busy' as const };
+    if (intent.nextAttemptAt && intent.nextAttemptAt.toMillis() > now.toMillis()) return { result: 'pending' as const };
+    const valid = intent.eventId === ref.parent.parent?.id && typeof intent.registrationId === 'string'
+      && /^[a-zA-Z0-9_-]{1,150}$/u.test(intent.registrationId) && Number.isInteger(intent.attempts) && intent.attempts >= 0
+      && intent.createdAt instanceof Timestamp && ['registration-confirmed', 'registration-updated', 'registration-cancelled'].includes(intent.type);
+    if (!valid) {
+      transaction.update(ref, { status: 'failed', lastError: 'configuration-invalid', leaseId: null, leaseUntil: null, updatedAt: now });
+      return { result: 'failed' as const };
+    }
+    const registrationRef = ref.parent.parent.collection('registrations').doc(intent.registrationId);
     const registration = await transaction.get(registrationRef);
     const summary = registration.data()?.emailDelivery as { intentId?: string } | undefined;
-    transaction.update(ref, { status: 'pending', attempts: intent.attempts + 1, updatedAt: now, leaseId, leaseUntil: Timestamp.fromMillis(now.toMillis() + 120_000) });
-    if (summary?.intentId === ref.id) transaction.update(registrationRef, { emailDelivery: { intentId: ref.id, type: intent.type, status: 'pending', updatedAt: now } });
-    return intent;
+    const exhausted = intent.attempts >= MAX_EMAIL_ATTEMPTS || now.toMillis() - intent.createdAt.toMillis() >= MAX_EMAIL_AGE_MS;
+    const status = exhausted ? 'failed' : 'processing';
+    transaction.update(ref, exhausted
+      ? { status, lastError: 'attempts-exhausted', leaseId: null, leaseUntil: null, nextAttemptAt: null, updatedAt: now }
+      : { status, attempts: intent.attempts + 1, updatedAt: now, leaseId, leaseUntil: Timestamp.fromMillis(now.toMillis() + EMAIL_LEASE_MS), nextAttemptAt: null });
+    if (summary?.intentId === ref.id) transaction.update(registrationRef, { emailDelivery: { intentId: ref.id, type: intent.type, status, updatedAt: now } });
+    return exhausted ? { result: 'failed' as const } : { intent, registrationRef };
   });
-  if (!claimed) return 'unchanged' as const;
-  const registrationRef = db.collection('events').doc(claimed.eventId).collection('registrations').doc(claimed.registrationId);
-  const secretRef = db.collection('events').doc(claimed.eventId).collection('emailSecrets').doc(ref.id);
-  let status: 'sent' | 'failed' = 'sent';
+  if (!claimed.intent) return claimed.result;
+  const { intent, registrationRef } = claimed;
+  let status: 'sent' | 'failed' | 'pending' = 'sent';
+  let lastError: DeliveryErrorCode | null = null;
   try {
+    // Resolve secrets only after a claim. Missing configuration becomes terminal.
+    const selectedVault = resolve(vault);
+    const selectedOrigin = resolve(origin);
+    const selectedTransport = resolve(transport);
     let link: string | undefined;
-    if (claimed.type === 'registration-confirmed') {
-      const envelope = (await secretRef.get()).data()?.envelope as TokenEnvelope | undefined;
-      if (!envelope) throw new Error();
-      const token = vault.open(envelope, ref.path);
-      link = managementUrl(origin, claimed.eventId, claimed.registrationId, token);
+    if (intent.type === 'registration-confirmed') {
+      const envelope = await readProtectedEnvelope(async () => (await ref.parent.parent!.collection('emailSecrets').doc(ref.id).get()).data()?.envelope as TokenEnvelope | undefined);
+      if (!envelope) throw new EmailDeliveryError('configuration-invalid', false);
+      link = managementUrl(selectedOrigin, intent.eventId, intent.registrationId, selectedVault.open(envelope, ref.path));
     }
-    const body = registrationEmail(claimed.type, claimed.content, link);
-    await transport.send({ idempotencyKey: ref.path, to: claimed.recipient, ...body });
-  } catch {
-    // No exception interpolation: provider errors may contain the entire secret email.
-    status = 'failed';
+    await selectedTransport.send({ idempotencyKey: ref.path, to: intent.recipient, createdAtMillis: intent.createdAt.toMillis(),
+      ...registrationEmail(intent.type, intent.content, link) });
+  } catch (error) {
+    lastError = error instanceof EmailDeliveryError ? error.code : 'delivery-unavailable';
+    status = error instanceof EmailDeliveryError && error.retryable && intent.attempts + 1 < MAX_EMAIL_ATTEMPTS
+      && clock() - intent.createdAt.toMillis() < MAX_EMAIL_AGE_MS ? 'pending' : 'failed';
   }
   const recorded = await db.runTransaction(async (transaction) => {
     const current = await transaction.get(ref);
     const registration = await transaction.get(registrationRef);
     if (current.data()?.leaseId !== leaseId) return false;
-    const now = Timestamp.now();
-    transaction.update(ref, { status, updatedAt: now, sentAt: status === 'sent' ? now : null,
-      lastError: status === 'failed' ? 'delivery-unavailable' : null, leaseId: null, leaseUntil: null });
+    const now = Timestamp.fromMillis(clock());
+    transaction.update(ref, { status, updatedAt: now, sentAt: status === 'sent' ? now : null, lastError,
+      leaseId: null, leaseUntil: null, nextAttemptAt: status === 'pending' ? Timestamp.fromMillis(now.toMillis() + retryDelayMillis(intent.attempts + 1)) : null });
     const summary = registration.data()?.emailDelivery as { intentId?: string } | undefined;
-    // Finishing older mail must not overwrite a newer operation's organizer status.
-    if (summary?.intentId === ref.id) transaction.update(registrationRef, { emailDelivery: { intentId: ref.id, type: claimed.type, status, updatedAt: now } });
-    // Retain the protected envelope for a lost create-response retry. It is never
-    // readable by staff; cloud rollout must define coordinated receipt/key retention.
+    if (summary?.intentId === ref.id) transaction.update(registrationRef, { emailDelivery: { intentId: ref.id, type: intent.type, status, updatedAt: now } });
+    // Keep encrypted envelope/receipt for create-response recovery after acceptance.
     return true;
   });
-  return recorded ? status : 'unchanged';
+  return recorded ? status : 'busy';
 }

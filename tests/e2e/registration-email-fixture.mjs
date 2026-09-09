@@ -4,11 +4,13 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
 import { requireFullEmulatorEnvironment } from '../../tools/local-emulator-environment.mjs';
+import { FakeGmailProvider } from '../../functions/lib/dev/fake-gmail.js';
+import { processEmailTask } from '../../functions/lib/email/task.js';
 import { CaptureEmailTransport } from '../../functions/lib/dev/capture-email.js';
 import { emulatorTokenVault } from '../../functions/lib/email/token-vault.js';
 import { deliverRegistrationEmail } from '../../functions/lib/email/delivery.js';
 
-export async function emailFixture() {
+export async function emailFixture({ gmail = false } = {}) {
   const env = requireFullEmulatorEnvironment(process.env, 'Registration email fixture');
   const require = createRequire(new URL('../../functions/package.json', import.meta.url));
   const adminSdk = require('firebase-admin/app');
@@ -37,13 +39,18 @@ export async function emailFixture() {
   await admin.call('configureEventRegistration', { eventId, expectedRevision: 1, published: true,
     registrationOpensAt: '2020-01-01T00:00:00Z', registrationClosesAt: '2030-01-01T00:00:00Z' });
   const eventRef = db.collection('events').doc(eventId);
-  const capture = new CaptureEmailTransport();
+  const capture = gmail ? new FakeGmailProvider() : new CaptureEmailTransport();
+  let clockMillis = Date.now();
+  const clock = () => clockMillis;
   const vault = emulatorTokenVault();
   return {
     db, eventId, eventRef, loginEmail, loginPassword, capture,
+    advance: (millis = 600001) => { clockMillis += millis; },
+    clock, vault,
     publicCall: anonymous.call, adminCall: admin.call,
     intents: async registrationId => (await eventRef.collection('emailIntents').where('registrationId', '==', registrationId).get()).docs,
-    deliver: (ref, origin = 'http://127.0.0.1:5196', transport = capture) => deliverRegistrationEmail(db, ref, transport, vault, origin),
+    deliver: (ref, origin = 'http://127.0.0.1:5196', transport = capture) => deliverRegistrationEmail(db, ref, transport, vault, origin, clock),
+    deliverTask: (ref, origin = 'http://127.0.0.1:5196') => processEmailTask({ eventId, intentId: ref.id }, { db, transport: capture, vault, origin, clock }),
     async dispose() {
       // This random fixture event and user exist only behind the strict demo/local guard.
       requireFullEmulatorEnvironment(process.env, 'Registration email cleanup');

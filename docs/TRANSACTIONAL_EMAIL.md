@@ -1,6 +1,6 @@
 # Registration transactional email
 
-This slice implements durable registration email intents, Czech templates, a trusted delivery primitive and organizer status. There is **no cloud transport, provider configuration, API key, scheduler, trigger or email callable**. No email is sent outside the local capture process. This is not a deploy-ready email service.
+This slice implements durable registration email intents, Czech templates, a shared delivery worker and organizer status. Gmail delivery is now cloud-ready in code, with Secret Manager bindings and a private Firebase task queue. **No real OAuth credentials/key values, deployment, mailbox changes or internet email sends have been performed.** See [GMAIL_DELIVERY.md](GMAIL_DELIVERY.md) for setup prerequisites and the real delivery guarantee.
 
 ## Domain operations
 
@@ -22,7 +22,7 @@ The server still issues a random 256-bit management token. Existing authorizatio
 
 Previously the raw token existed only at issuance, so a delivery retry could not reconstruct the same CTA. We now seal that **same token**, without issuing a second kind of management capability, into AES-256-GCM ciphertext in `events/{eventId}/emailSecrets/{intentId}`. A fresh 96-bit nonce and the exact intent path as authenticated additional data bind the envelope to its intended event/message. The envelope contains only version, key ID, nonce, ciphertext and authentication tag. It is separate from registration records and email audit and denied to **all** Firestore client roles. Only the trusted vault reconstructs the transient link. Its fragment keeps the token out of HTTP request paths and referrers.
 
-`TokenVault` accepts injected key material. This PR wires only a clearly synthetic, project-bound emulator fixture, behind **both** a `demo-*` project and an explicit localhost Firestore endpoint guard. That public test fixture is not a cloud encryption key. Cloud create fails closed with a generic precondition until a real key resolver is implemented and explicitly configured. There is no fallback key and no production/staging key provisioning in this PR. A provider outage is independent of this prerequisite: a configured vault lets registration commit pending mail without contacting a transport.
+`TokenVault` accepts injected key material. The synthetic fixture remains behind **both** a `demo-*` project and an explicit localhost Firestore endpoint guard. Cloud create/replay resolves a protected versioned keyring from its Secret Manager binding. Missing/malformed keys fail closed with a generic precondition, with no plaintext or synthetic-key fallback. Retaining old key IDs permits decryption of existing receipts while new envelopes use the active key. No real key has been provisioned. A configured vault lets registration commit pending mail without contacting Gmail.
 
 ## Operation idempotence and response loss
 
@@ -34,13 +34,13 @@ Old callers may omit the new optional retry fields: create retains unique-name p
 
 ## Audit and delivery
 
-`events/{eventId}/emailIntents/{intentId}` is server-only. It holds type, event/registration binding, operation-time recipient/content snapshot, `pending | sent | failed`, attempt count, generic last error, creation/update/sent timestamps and an expiring worker lease. There is **no raw management token, full management URL, provider payload, key or full provider response** in this audit.
+`events/{eventId}/emailIntents/{intentId}` is server-only. It holds type, event/registration binding, operation-time recipient/content snapshot, `pending | processing | sent | failed`, attempt count, generic last error, creation/update/sent timestamps and an expiring worker lease. There is **no raw management token, full management URL, provider payload, key or full provider response** in this audit.
 
-The registration's `emailDelivery` contains only the latest intent ID/type/status/server timestamp. Existing staff-only registration reads expose it to the organizer UI; the mapper/UI show status and time. Legacy/manual teams without a message show a dash. No resend/recipient override/relay API exists. All direct client status/intent writes and audit/secret reads are denied, including to admins and moderators.
+The registration's `emailDelivery` contains only the latest intent ID/type/status/server timestamp. Existing staff-only registration reads expose it to the organizer UI; the mapper/UI show status and time. Legacy/manual teams without a message show a dash. No public resend/recipient override/relay API exists. All direct client status/intent writes and audit/secret reads are denied, including to admins and moderators.
 
-`deliverRegistrationEmail` is an internal, explicitly injected worker primitive, not an exported Firebase endpoint. It claims a two-minute lease transactionally, increments attempts, reconstructs content in memory, and calls `EmailTransport.send` with a stable intent-path idempotency key. Success records `sent`; any transport/crypto error records only `delivery-unavailable` and `failed`. Provider exception text is never logged or persisted. Expired leases allow crash recovery. Competing workers cannot finalize each other's lease, and finishing an older message cannot overwrite a newer organizer summary. Delivery retry never creates a new intent.
+`deliverRegistrationEmail` remains the one injected worker primitive. A Firestore creation trigger enqueues an ID-only task; the private task function loads the committed intent. The worker claims a two-minute lease, records processing, increments attempts and reconstructs MIME in memory. Gmail acceptance records sent; transient provider/network/Firestore failures return to pending with bounded backoff, while permanent configuration/credentials failures become terminal failed. At most five provider attempts and a 24-hour intent age are allowed. Provider exception text is never logged or persisted. Queue replays cannot resend terminal intents. Expired leases allow recovery; active leases request task retry. Older workers cannot finalize a newer lease or replace the latest organizer summary.
 
-The transport contract **requires durable deduplication of accepted messages**, including acceptance followed by a lost response. Plain SMTP without reconciliation cannot meet it. This is one logical message per intent, not an unconditional claim of exactly-once physical delivery by arbitrary providers. The eventual adapter must prove its deduplication retention window covers all allowed retries, keep the configured link origin stable, and reconcile uncertain acceptance before resending. `sent` means transport acceptance, not inbox delivery, opening or absence of later bounce.
+The transport contract is now **one logical intent with bounded submissions**, not provider exactly-once delivery. Gmail has no send idempotency key or reconciliation available under gmail.send. A stable RFC Message-ID aids correlation but does not guarantee deduplication. Lost/malformed send responses, a crash after Gmail acceptance or failed Firestore finalization may cause duplicate physical messages on retry. The fake Gmail explicitly exercises this possibility. Sent means Gmail API acceptance, never inbox delivery, opening or absence of bounce. Operation snapshots may arrive out of order; no new ordering system is introduced.
 
 ## Local verification
 
@@ -48,16 +48,8 @@ The transport contract **requires durable deduplication of accepted messages**, 
 
 Unit tests cover templates, HTML/header injection, authenticated encryption and emulator guards. Rules tests cover all client roles. The emulator contract suite invokes real callable transactions, tests concurrent/delayed retries, wrong tokens, admin exclusions, delivery failure/retry/leases and scans persisted documents/runtime logs for raw capabilities. The versioned browser scenario registers a synthetic team, captures confirmation, opens its real CTA, edits, captures the update, cancels and captures cancellation. It also verifies organizer pending/failed/sent states.
 
-The standard Quality gate runs both email contracts and browser capture on local Auth/Firestore/Functions emulators. No provider, SMTP, cloud credentials or deploy step is used. Browser trace/video/screenshots are disabled for capability-bearing flows; secret-phase errors are replaced with stage-only diagnostics and captured messages are never attached to reports.
+The standard Quality gate runs registration contracts, Gmail worker contracts and the browser scenario through a fake Gmail HTTP adapter on local Auth/Firestore/Functions emulators. CaptureEmailTransport remains available for its deterministic local dedup tests, but its extra guarantee is not attributed to Gmail. No internet provider, SMTP, cloud credentials or deploy step is used. Browser trace/video/screenshots are disabled for capability-bearing flows; secret-phase errors are replaced with stage-only diagnostics and captured messages are never attached to reports.
 
-## Separate future staging/provider task
+## Separate future staging task
 
-Before any cloud rollout, explicitly authorize and implement:
-
-1. Real protected key provisioning/resolution and key rotation (retain decryption of old pending/receipt envelopes); never use the emulator fixture. The current cloud registration precondition must be replaced with this reviewed integration before deploying create.
-2. A provider adapter with acceptance reconciliation/deduplication, verified sender/domain and secrets available only to the trusted worker; a fixed allowlisted V2 link origin.
-3. A bounded dispatch schedule, retry/backoff/maximum age, ordering policy for older operation snapshots and monitoring of safe statuses. No automatic worker is active yet.
-4. Coordinated retention/deletion of contact snapshots, encrypted capabilities, retry receipts and old keys; do not delete a receipt and accidentally recreate a completed operation on replay.
-5. Public registration abuse limits and mailbox/delivery policy, bounce handling, permissions and separately authorized synthetic staging verification.
-
-This task makes no deployment, migration, remote data change or actual email send. The project estimate remains **88%**.
+Use the explicit prerequisites in [GMAIL_DELIVERY.md](GMAIL_DELIVERY.md). Real OAuth consent, secret values, private queue/service IAM, sender/domain verification, retention and public abuse controls still require operator decisions and separate authorization. No backfill, migration or historical email enqueue is implemented. The project estimate remains **88%**.

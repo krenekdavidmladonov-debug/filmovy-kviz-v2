@@ -71,3 +71,5 @@ export { listRefereeAccess, issueRefereeAccess, changeRefereeAccess, readReferee
 export { createEventLiveSession, previewInterimResults, controlInterimResults } from './leaderboard/callables.js';
 
 export { previewFinalResults, controlFinalReveal } from './final-reveal/callables.js';
+
+export { dispatchRegistrationEmail, deliverEmailTask } from './email/worker.js';

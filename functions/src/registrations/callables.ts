@@ -6,7 +6,8 @@ import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/
 
 import { buildPublicEventProjection } from '../events/model.js';
 import { enqueueRegistrationEmail } from '../email/intent.js';
-import { registrationTokenVault, type TokenEnvelope } from '../email/token-vault.js';
+import type { TokenEnvelope } from '../email/token-vault.js';
+import { registrationTokenVault, registrationEmailSecrets } from '../email/config.js';
 import { capacityAfter, effectiveRegistrationStatus, hasCapacity } from './domain.js';
 import type { RegistrationCapacity, RegistrationInput } from './types.js';
 import { manualTeamInput, registrationInput, registrationWindow, requestId, requestToken } from './validation.js';
@@ -188,7 +189,7 @@ export const configureEventRegistration = onCall(callableOptions, async (request
   });
 });
 
-export const createEventRegistration = onCall(callableOptions, async (request) => {
+export const createEventRegistration = onCall({ ...callableOptions, secrets: registrationEmailSecrets }, async (request) => {
   requirePublicCaller(request.auth);
   const eventId = requestId(request.data, 'eventId');
   const input = registrationInput(request.data);

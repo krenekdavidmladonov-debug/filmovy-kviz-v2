@@ -98,12 +98,12 @@ jobs:
           --project demo-filmovy-kviz-v2
           "pnpm seed:quizzes && node tools/local-emulator-environment.mjs full tests/e2e/referee-access-emulator.mjs && pnpm exec playwright test --config tests/browser/referee-access.config.ts"
 
-      - name: Registration email contracts and capture browser E2E (local emulators only)
+      - name: Registration email, Gmail worker contracts and fake browser E2E (local emulators only)
         run: >-
           pnpm exec firebase emulators:exec
           --only auth,firestore,functions
           --project demo-filmovy-kviz-v2
-          "pnpm test:e2e:registration-email && pnpm test:e2e:registration-email-browser"
+          "pnpm test:e2e:registration-email && pnpm test:e2e:gmail-delivery && pnpm test:e2e:registration-email-browser"
 
       - name: Interim leaderboard contracts and browser E2E (local emulators only)
         run: >-

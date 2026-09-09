@@ -49,7 +49,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm --filter @filmovy-kviz/quiz-domain build && tsc -p tsconfig.tests.json --noEmit --pretty false && pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
-    "check": "pnpm typecheck && pnpm lint && pnpm build"
+    "check": "pnpm typecheck && pnpm lint && pnpm build",
+    "test:e2e:gmail-delivery": "node tools/local-emulator-environment.mjs full tests/e2e/gmail-delivery-emulator.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
