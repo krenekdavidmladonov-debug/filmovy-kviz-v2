@@ -73,3 +73,5 @@ export { createEventLiveSession, previewInterimResults, controlInterimResults } 
 export { previewFinalResults, controlFinalReveal } from './final-reveal/callables.js';
 
 export { dispatchRegistrationEmail, deliverEmailTask } from './email/worker.js';
+
+export { previewEventTeamMessage, createEventTeamMessage, listEventTeamMessages, getEventTeamMessage } from './email/team-callables.js';

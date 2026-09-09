@@ -20,7 +20,7 @@ export async function emailFixture({ gmail = false } = {}) {
   const loginEmail = 'email-' + randomUUID() + '@example.test', loginPassword = randomUUID();
   const user = await auth.createUser({ email: loginEmail, password: loginPassword });
   await auth.setCustomUserClaims(user.uid, { role: 'admin' });
-  const clients = [];
+  const clients = [], extraUsers = [];
   const client = () => {
     const app = initializeApp({ projectId: env.projectId, apiKey: 'demo-api-key' }, randomUUID());
     clients.push(app);
@@ -45,6 +45,14 @@ export async function emailFixture({ gmail = false } = {}) {
   const vault = emulatorTokenVault();
   return {
     db, eventId, eventRef, loginEmail, loginPassword, capture,
+    setAdminRole: role => auth.setCustomUserClaims(user.uid, { role }),
+    async roleCall(role) {
+      const email = 'role-' + randomUUID() + '@example.test', password = randomUUID();
+      const person = await auth.createUser({ email, password }); extraUsers.push(person.uid);
+      if (role) await auth.setCustomUserClaims(person.uid, { role });
+      const session = client(); await signInWithEmailAndPassword(session.auth, email, password);
+      return session.call;
+    },
     advance: (millis = 600001) => { clockMillis += millis; },
     clock, vault,
     publicCall: anonymous.call, adminCall: admin.call,
@@ -57,6 +65,7 @@ export async function emailFixture({ gmail = false } = {}) {
       await db.recursiveDelete(eventRef);
       await db.collection('publicEvents').doc(eventId).delete();
       await auth.deleteUser(user.uid);
+      await Promise.all(extraUsers.map(uid => auth.deleteUser(uid)));
       await Promise.all(clients.map(app => deleteApp(app)));
       await adminSdk.deleteApp(app);
     },
