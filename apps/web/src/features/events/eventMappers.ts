@@ -136,6 +136,9 @@ export function mapRegistration(id: string, value: DocumentData): RegistrationRe
   const data = value as Record<string, unknown>;
   if (data.status !== 'accepted' && data.status !== 'cancelled') throw new Error('Neplatný stav registrace.');
   const cancelledAt = optionalDate(data.cancelledAt, 'cancelledAt');
+  const delivery = data.emailDelivery as { status?: unknown; updatedAt?: unknown } | undefined;
+  const emailDelivery: RegistrationRecord['emailDelivery'] = delivery && (delivery.status === 'pending' || delivery.status === 'sent' || delivery.status === 'failed')
+    ? { status: delivery.status, updatedAt: date(delivery.updatedAt, 'emailDelivery.updatedAt') } : undefined;
   return {
     id,
     eventId: text(data, 'eventId'),
@@ -148,5 +151,6 @@ export function mapRegistration(id: string, value: DocumentData): RegistrationRe
     createdAt: date(data.createdAt, 'createdAt'),
     updatedAt: date(data.updatedAt, 'updatedAt'),
     ...(cancelledAt === undefined ? {} : { cancelledAt }),
+    ...(emailDelivery === undefined ? {} : { emailDelivery }),
   };
 }

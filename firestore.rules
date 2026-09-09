@@ -61,6 +61,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Only the trusted registration transaction/worker owns email data. Staff
+    // read just the safe emailDelivery summary on their existing registration.
+    match /events/{eventId}/emailIntents/{intentId} {
+      allow read, write: if false;
+    }
+    match /events/{eventId}/emailSecrets/{intentId} {
+      allow read, write: if false;
+    }
+
     // Internal scoring is staff-readable; only the callable writes scores/history.
     match /events/{eventId}/scores/{scoreId} {
       allow read: if isStaff();

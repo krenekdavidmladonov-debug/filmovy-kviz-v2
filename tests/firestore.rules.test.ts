@@ -27,6 +27,25 @@ const publicEventPath = 'publicEvents/security-test-event';
 
 let testEnvironment: RulesTestEnvironment;
 
+describe('transactional registration email privacy', () => {
+  for (const role of [null, 'user', 'moderator', 'admin']) {
+    test('only server owns intents, encrypted capabilities and receipts: ' + String(role), async () => {
+      const db = role === null ? testEnvironment.unauthenticatedContext().firestore()
+        : testEnvironment.authenticatedContext('email-' + role, { role }).firestore();
+      for (const child of ['emailIntents', 'emailSecrets', 'registrationOperations']) {
+        const path = `${privateEventPath}/${child}/synthetic`;
+        await testEnvironment.withSecurityRulesDisabled(async context => { await setDoc(doc(context.firestore(), path), { status: 'pending' }); });
+        await assertFails(getDoc(doc(db, path)));
+        await assertFails(getDocs(collection(db, `${privateEventPath}/${child}`)));
+        await assertFails(setDoc(doc(db, `${privateEventPath}/${child}/forged`), { recipient: 'forged@example.test' }));
+        await assertFails(updateDoc(doc(db, path), { status: 'sent' }));
+        await assertFails(deleteDoc(doc(db, path)));
+      }
+      await assertFails(updateDoc(doc(db, privateRegistrationPath), { emailDelivery: { status: 'sent' } }));
+    });
+  }
+});
+
 beforeAll(async () => {
   testEnvironment = await initializeTestEnvironment({
     projectId,

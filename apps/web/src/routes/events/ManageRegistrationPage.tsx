@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
 import { cancelManagedRegistration, getManagedRegistration, registrationActionError, updateManagedRegistration, type RegistrationFormValues } from '../../features/events/registrationApi';
@@ -16,6 +16,8 @@ export function ManageRegistrationPage() {
   const [event, setEvent] = useState<PublicEventRecord | null>(null);
   const [values, setValues] = useState<RegistrationFormValues>({ teamName: '', memberCount: 1, contactEmail: '' });
   const [pending, setPending] = useState(false);
+  const inFlight = useRef(false);
+  const operation = useRef<{ fingerprint: string; id: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -31,14 +33,18 @@ export function ManageRegistrationPage() {
     return () => { active = false; };
   }, [eventId, registrationId, token]);
   const save = async () => {
-    if (!eventId) return; setPending(true); setError(null); setMessage(null);
-    try { const result = await updateManagedRegistration(eventId, registrationId, token, values); setRegistration(result); setMessage('Registrace byla upravena.'); }
-    catch (reason) { setError(registrationActionError(reason)); } finally { setPending(false); }
+    if (!eventId || inFlight.current) return;
+    inFlight.current = true;
+    const fingerprint = JSON.stringify([eventId, registrationId, values]);
+    if (operation.current?.fingerprint !== fingerprint) operation.current = { fingerprint, id: crypto.randomUUID() };
+    setPending(true); setError(null); setMessage(null);
+    try { const result = await updateManagedRegistration(eventId, registrationId, token, values, operation.current.id); setRegistration(result); operation.current = null; setMessage('Registrace byla upravena.'); }
+    catch (reason) { setError(registrationActionError(reason)); } finally { inFlight.current = false; setPending(false); }
   };
   const cancel = async () => {
-    if (!eventId || !window.confirm('Opravdu zrušit registraci týmu?')) return; setPending(true); setError(null);
+    if (!eventId || inFlight.current || !window.confirm('Opravdu zrušit registraci týmu?')) return; inFlight.current = true; setPending(true); setError(null);
     try { const result = await cancelManagedRegistration(eventId, registrationId, token); setRegistration(result); setMessage('Registrace byla zrušena.'); }
-    catch (reason) { setError(registrationActionError(reason)); } finally { setPending(false); }
+    catch (reason) { setError(registrationActionError(reason)); } finally { inFlight.current = false; setPending(false); }
   };
   return <article className="public-event-detail"><Link className="back-link" to={eventId ? `/events/${eventId}` : '/events'}>← Zpět na akci</Link><header><p className="eyebrow">Bezpečný management link</p><h1>Správa registrace</h1></header>
     {error && <p className="round-editor-error" role="alert">{error}</p>}{message && <p className="event-notice" role="status">{message}</p>}
