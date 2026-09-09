@@ -14,7 +14,7 @@
 
 The projector reads only one `publicSessions/{sessionId}` document. The trusted `buildPublicSessionState` allowlist builds this projection from private quiz data. In ordinary question mode it copies only explicitly safe title/text/options, normalized visual media, and presentation controls; AUDIO source is omitted entirely. In explicit recap mode it adds only the selected question's display-form `revealedAnswer` and allowed answer image—not the private slide or question. Hiding an answer in React state, CSS, a network response, an error, or an unread UI branch is not acceptable.
 
-The same-device `BroadcastChannel` is not a second publication boundary. It rebuilds its message from `PublicLiveState` with another explicit allowlist and never receives a private editor/live slide. Its receiver uses a strict runtime parser and rejects unknown fields, malformed command/playback combinations, answer fields without an authorized reveal/selected recap, wrong sessions, and non-next revisions. A channel state expires back to the latest Firestore state unless that revision is confirmed. It uses neither URL state nor localStorage. Projector media lifecycle events contain only session ID, generation, and an allowlisted state and cannot mutate server state without an authenticated staff Function call.
+The projector ignores inbound BroadcastChannel presentation state entirely. Only Firestore may supply a slide or an explicitly reviewed interim-results page. The projector rejects cache-only data, stale revisions and foreign sessions, invalidates old callbacks, and performs a fresh server read on reconnect. Channel player lifecycle reports contain only session ID, generation and an allowlisted state; authenticated staff and the trusted Function still validate them.
 
 Every navigation, reveal, hide, and end operation replaces the entire public document in the same transaction as the private update. Navigation resets `answerRevealed`; therefore old answer fields cannot survive through merge semantics. The projector rejects Firestore cache-only snapshots and clears itself on browser offline events so a disconnected client does not continue showing an old revealed answer.
 
@@ -99,3 +99,6 @@ The saveEventScore callable rechecks the current Auth user's admin/moderator cla
 ## Referee capabilities
 
 Referee access is a separate per-event bearer capability, not a staff role or Firestore claim. Grants and rate-limit counters remain server-only. Every protected transaction checks current grant validity and event state; revocation conflicts with in-flight score transactions. See [REFEREE_ACCESS.md](REFEREE_ACCESS.md) for delivery limits, payload allowlists, expiry and tests.
+
+
+Interim result publication rechecks the current Auth role on every transaction attempt, event/session/snapshot binding, accepted roster, included scores and source fingerprint. Public output is a fresh allowlist of only the reviewed current page; private versions/audit and scores retain staff-only reads and deny every client write. Referee and registration management capabilities confer no publication access. See [INTERIM_RESULTS.md](INTERIM_RESULTS.md).

@@ -1,3 +1,4 @@
+import type { ResultPage } from '../leaderboard/types';
 import type { MediaPlaybackCommand, MediaPlaybackState, SlidePresentationInput } from '../presentation/types';
 
 export type LiveSessionStatus = 'waiting' | 'active' | 'ended';
@@ -6,6 +7,9 @@ export type LiveRenderMode = 'question' | 'recap' | 'roundIntro' | 'agenda' | 'r
 
 export interface LiveControlState {
   readonly sessionId: string;
+  readonly eventId?: string;
+  readonly snapshotId?: string;
+  readonly interimResults?: Omit<ResultPage, 'rows'>;
   readonly quizId: string;
   readonly quizTitle: string;
   readonly slideCount: number;
@@ -61,6 +65,7 @@ export interface PublicMedia {
 }
 
 export interface PublicLiveState {
+  readonly interimResults?: ResultPage;
   readonly sessionId: string;
   readonly quizTitle: string;
   readonly status: LiveSessionStatus;

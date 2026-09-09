@@ -109,7 +109,7 @@ function optionalInteger(data: Record<string, unknown>, field: string): number |
   return Number.isInteger(value) && (value as number) >= 0 ? value as number : undefined;
 }
 
-function parseSession(snapshot: DocumentSnapshot): PrivateLiveSession {
+export function parseSession(snapshot: DocumentSnapshot): PrivateLiveSession {
   if (!snapshot.exists) throw new LiveSessionError('not-found', 'Live session was not found.');
   const data = snapshotData(snapshot, 'Live session');
   const status = data.status;
@@ -128,6 +128,9 @@ function parseSession(snapshot: DocumentSnapshot): PrivateLiveSession {
   const recapQuestionPosition = optionalInteger(data, 'recapQuestionPosition');
   return {
     sessionId: snapshot.id,
+    ...(typeof data.eventId === "string" ? { eventId: data.eventId } : {}),
+    ...(typeof data.snapshotId === "string" ? { snapshotId: data.snapshotId } : {}),
+    ...(isObject(data.interimResults) ? { interimResults: data.interimResults as unknown as NonNullable<PrivateLiveSession["interimResults"]> } : {}),
     quizId: requiredString(data, 'quizId', 'Live session'),
     quizTitle: requiredString(data, 'quizTitle', 'Live session'),
     slideCount: requiredNumber(data, 'slideCount', 'Live session'),
@@ -176,8 +179,8 @@ function parseSlide(snapshot: DocumentSnapshot): PrivateSlide {
   };
 }
 
-async function loadSlide(transaction: Transaction, quizId: string, position: number): Promise<PrivateSlide> {
-  const query = db.collection('quizzes').doc(quizId).collection('slides').where('position', '==', position).limit(2);
+export async function loadSlide(transaction: Transaction, quizId: string, position: number, snapshotId?: string): Promise<PrivateSlide> {
+  const query = db.collection(snapshotId ? 'quizSnapshots' : 'quizzes').doc(snapshotId ?? quizId).collection('slides').where('position', '==', position).limit(2);
   const snapshot = await transaction.get(query);
   if (snapshot.size !== 1) throw new LiveSessionError('failed-precondition', 'Quiz slide position is missing or ambiguous.');
   return parseSlide(snapshot.docs[0]!);
@@ -241,9 +244,14 @@ async function mutateSession(request: CallableRequest<unknown>, kind: MutationKi
     const publicRef = db.collection('publicSessions').doc(sessionId);
     return await db.runTransaction(async (transaction) => {
       const session = parseSession(await transaction.get(sessionRef));
+      if (session.eventId) {
+        const event = (await transaction.get(db.doc('events/' + session.eventId))).data();
+        if (!event || event.liveSessionId !== sessionId || !isObject(event.quizAssignment) || event.quizAssignment.snapshotId !== session.snapshotId || !['ready', 'live', 'finalizing'].includes(event.lifecycleStatus as string)) throw new HttpsError('failed-precondition', 'Akce není dostupná.');
+      }
       if (finishGeneration !== undefined && finishGeneration !== session.mediaGeneration) {
         throw new LiveSessionError('aborted', 'A stale media callback was ignored.');
       }
+      if (session.interimResults && kind !== 'end-session') throw new HttpsError('failed-precondition', 'Nejprve skryjte průběžné výsledky.');
       let slide: PrivateSlide | undefined;
       let action: LiveSessionAction;
       if (kind === 'end-session') action = { type: kind };
@@ -252,14 +260,14 @@ async function mutateSession(request: CallableRequest<unknown>, kind: MutationKi
         if (!Number.isInteger(position) || position < 1 || position > session.slideCount) {
           throw new LiveSessionError('invalid-argument', 'Slide position is outside the quiz range.');
         }
-        slide = await loadSlide(transaction, session.quizId, position);
+        slide = await loadSlide(transaction, session.quizId, position, session.snapshotId);
         action = kind === 'go-to-slide' ? { type: kind, position, slideId: slide.id } : { type: kind, slideId: slide.id };
       } else if (kind === 'select-recap-question') {
         if (session.presentationMode !== 'recap' || session.currentSlidePosition < 1) {
           throw new LiveSessionError('failed-precondition', 'Recap mode is not active.');
         }
-        const recap = await loadSlide(transaction, session.quizId, session.currentSlidePosition);
-        slide = await loadSlide(transaction, session.quizId, requested!);
+        const recap = await loadSlide(transaction, session.quizId, session.currentSlidePosition, session.snapshotId);
+        slide = await loadSlide(transaction, session.quizId, requested!, session.snapshotId);
         if (recap.kind.toLowerCase() !== 'recap' || !slide.isQuestion || slide.position >= recap.position
           || (recap.roundId !== undefined && slide.roundId !== recap.roundId)) {
           throw new LiveSessionError('failed-precondition', 'Question does not belong to the active recap.');
@@ -268,10 +276,11 @@ async function mutateSession(request: CallableRequest<unknown>, kind: MutationKi
       } else {
         const position = session.presentationMode === 'recap' ? session.recapQuestionPosition : session.currentSlidePosition;
         if (position === undefined || position < 1) throw new LiveSessionError('failed-precondition', 'There is no active presentation slide.');
-        slide = await loadSlide(transaction, session.quizId, position);
+        slide = await loadSlide(transaction, session.quizId, position, session.snapshotId);
         action = { type: kind };
       }
-      const updated = applyLiveSessionAction(session, action, revision, actor.uid, Timestamp.now(), slide);
+      const { interimResults, ...presentationSession } = session; void interimResults;
+      const updated = applyLiveSessionAction(presentationSession, action, revision, actor.uid, Timestamp.now(), slide);
       transaction.set(sessionRef, updated);
       transaction.set(publicRef, buildPublicSessionState(updated, slide));
       return response(updated);
@@ -289,12 +298,16 @@ export const reportMediaPlayback = onCall(callableOptions, async (request): Prom
     const publicRef = db.collection('publicSessions').doc(sessionId);
     return await db.runTransaction(async (transaction) => {
       const session = parseSession(await transaction.get(sessionRef));
-      if (session.status !== 'active' || generation !== session.mediaGeneration) {
+      if (session.eventId) {
+        const event = (await transaction.get(db.doc('events/' + session.eventId))).data();
+        if (!event || event.liveSessionId !== sessionId || !isObject(event.quizAssignment) || event.quizAssignment.snapshotId !== session.snapshotId || !['ready', 'live', 'finalizing'].includes(event.lifecycleStatus as string)) throw new HttpsError('failed-precondition', 'Akce není dostupná.');
+      }
+      if (session.interimResults || session.status !== 'active' || generation !== session.mediaGeneration) {
         throw new LiveSessionError('aborted', 'A stale media callback was ignored.');
       }
       const position = session.presentationMode === 'recap' ? session.recapQuestionPosition : session.currentSlidePosition;
       if (position === undefined || position < 1) throw new LiveSessionError('failed-precondition', 'There is no active presentation slide.');
-      const slide = await loadSlide(transaction, session.quizId, position);
+      const slide = await loadSlide(transaction, session.quizId, position, session.snapshotId);
       if (!['audio', 'music', 'video', 'youtube'].includes(slide.kind.toLowerCase())) {
         throw new LiveSessionError('failed-precondition', 'The active slide has no playable media.');
       }

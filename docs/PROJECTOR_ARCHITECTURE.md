@@ -18,13 +18,11 @@ The normalized roles are distinct:
 - `mediaSource`: AUDIO/VIDEO source interpreted by a provider adapter;
 - `clipStartSeconds` / `clipEndSeconds`: ordinary question segment bounds.
 
-## Public state and same-device fast path
+## Public state and player reports
 
 Firestore `publicSessions/{sessionId}` remains authoritative. A callable transaction replaces the complete document whenever slide, recap selection, media command, intro command, reveal compatibility state, or lifecycle state changes.
 
-`BroadcastChannel` is a same-origin latency optimization only. The moderator subscribes to the public Firestore document and rebuilds an allowlisted channel object from that already-sanitized model. A strict runtime parser validates every key, nested media/presentation value, command/playback pairing, recap selection, and answer semantic; unknown or malformed receiver fields reject the whole message.
-
-The fast path is accepted only after an authoritative Firestore snapshot, only for the same session, and only for exactly the next revision. Equal, stale, and future revisions are rejected. A fast-path state has a 1.5-second confirmation window; if Firestore does not publish that revision, the projector rolls back to its last authoritative state. Any Firestore snapshot or connection failure cancels the speculative state immediately. Firestore therefore remains authoritative after reconnect and cannot be permanently outranked by a channel message.
+The projector ignores inbound `BroadcastChannel` presentation messages. It renders only server-confirmed Firestore state, including reviewed interim result pages. On reconnect it reads the document from the server before resubscribing, even if the revision did not change. Obsolete callbacks, foreign sessions, lower revisions and cache-only data cannot restore an old view. Browser offline events clear the visible state; network failure detection may be delayed. Previously delivered data cannot be recalled.
 
 Projector playback reports are non-sensitive channel events containing only session ID, media generation, and an allowlisted lifecycle value. An authenticated moderator tab validates them against current state and invokes the trusted Function. On different devices, local VIDEO error fallback still protects the audience view, while the moderator retains explicit REPLAY/STOP/next controls.
 
@@ -38,4 +36,4 @@ Legacy reveal/hide callables remain only for compatibility. They are absent from
 
 ## Future modules
 
-Results will need a separate public model for manual last-to-first reveal, explicit tie ranking, configurable winner music, and a final animation. Events/registration, print/PDF, referee tooling, live scoring, digital answering without speed bonus, media upload, and full offline operation are separate future modules and are not implied by this foundation.
+Interim cumulative results now use the existing projector and shared `ResultsTable` with manual pages; see [INTERIM_RESULTS.md](INTERIM_RESULTS.md). Final results will separately need manual last-to-first reveal, winner music, and explicit END. Events/registration, print/PDF, referee tooling, live scoring, digital answering without speed bonus, media upload, and full offline operation are separate future modules and are not implied by this foundation.

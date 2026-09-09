@@ -1,3 +1,4 @@
+import { InterimResultsPanel } from '../../features/leaderboard/InterimResultsPanel';
 import { FirebaseError } from 'firebase/app';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -86,8 +87,8 @@ export function LiveControlPage() {
 
   useEffect(() => {
     if (!session?.quizId) return;
-    return subscribeLiveControlSlides(session.quizId, setSlides, () => setError(loadingError('slides')));
-  }, [session?.quizId]);
+    return subscribeLiveControlSlides(session.quizId, setSlides, () => setError(loadingError('slides')), session.snapshotId);
+  }, [session?.quizId, session?.snapshotId]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -211,6 +212,8 @@ export function LiveControlPage() {
   }
 
   return (
+    <>
+    {session.eventId && session.snapshotId && <InterimResultsPanel key={session.sessionId} session={session} />}
     <LiveModeratorView
       session={session}
       slides={slides}
@@ -233,5 +236,6 @@ export function LiveControlPage() {
       onMediaError={(generation) => void reportPlayback(generation, 'error')}
       onMediaPlayback={(generation, playbackState) => void reportPlayback(generation, playbackState)}
     />
+    </>
   );
 }

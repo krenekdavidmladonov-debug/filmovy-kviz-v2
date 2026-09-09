@@ -297,3 +297,28 @@ describe('referee grants are server-only, capabilities do not grant Firestore ro
     }
   });
 });
+
+describe('interim result versions and publication authority', () => {
+  for (const role of [null, 'user', 'referee', 'moderator', 'admin']) {
+    test('private versions and read-only publication for ' + String(role), async () => {
+      const db = role === null ? testEnvironment.unauthenticatedContext().firestore()
+        : testEnvironment.authenticatedContext('leaderboard-' + role, { role, managementToken: 'not-staff', refereeAccessId: 'not-staff' }).firestore();
+      const staff = role === 'admin' || role === 'moderator';
+      for (const child of ['interimVersions', 'interimOperations']) {
+        const path = `${privateSessionPath}/${child}/version`;
+        await testEnvironment.withSecurityRulesDisabled(async context => {
+          await setDoc(doc(context.firestore(), path), { rows: [{ teamName: 'Private' }], actorUid: 'staff', eventId: 'security-test-event' });
+        });
+        await (staff ? assertSucceeds : assertFails)(getDoc(doc(db, path)));
+        await (staff ? assertSucceeds : assertFails)(getDocs(collection(db, `${privateSessionPath}/${child}`)));
+        await assertFails(setDoc(doc(db, path), { rows: [] }));
+        await assertFails(updateDoc(doc(db, path), { rows: [] }));
+        await assertFails(deleteDoc(doc(db, path)));
+      }
+      await assertSucceeds(getDoc(doc(db, publicSessionPath)));
+      await assertFails(getDocs(collection(db, 'publicSessions')));
+      await assertFails(setDoc(doc(db, publicSessionPath), { interimResults: { rows: [] } }));
+      await assertFails(getDoc(doc(db, `${publicSessionPath}/interimVersions/version`)));
+    });
+  }
+});
