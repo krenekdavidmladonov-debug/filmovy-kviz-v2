@@ -23,6 +23,8 @@ export interface SourceArtifact {
 export function createSourceArtifact(snapshot: V1LibrarySnapshot, sourceProject: string, now = new Date()): SourceArtifact {
   const clean = sanitizeLibrary(snapshot);
   const normalized = normalizeV1Library(clean); validateNormalizedInput(normalized);
+  // functions/src/editor/callables.ts::maximumSlideCount; do not publish an uneditable quiz.
+  if (normalized.some(q => q.slides.length > 400)) throw new MigrationValidationError('Quiz exceeds current editor limit of 400 slides; import blocked.');
   if (normalized.some(q => q.slides.some(isUnknownSlideType))) throw new MigrationValidationError('UNMAPPED source type; export blocked.');
   const transformed = transformLibrary(normalized, now); validateOutput(normalized, transformed);
   const body = { schemaVersion: 2 as const, transformVersion: 2 as const, sourceProject, sourceCollection: 'library' as const,

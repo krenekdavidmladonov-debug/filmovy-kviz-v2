@@ -41,6 +41,8 @@ inspect-target-cloud reads only quizzes and their private slides/rounds/question
 Any conflict blocks the plan before the first write. Inventory and decisions are reread before import and each quiz. Conditional document creation closes existence races. Existing imports never receive set/merge/update/delete. Use a maintenance window preventing other tools from manufacturing new provenance aliases during import; create preconditions protect document paths, not arbitrary concurrent writes to a different ID.
 
 ## Atomic and multi-batch safety
+Cloud validation rejects more than 400 source slides, matching functions/src/editor/callables.ts::maximumSlideCount. This keeps imported quizzes within the existing editor transaction contract; no runtime limit is raised.
+
 Small quizzes use one atomic create batch. The implementation conservatively limits batches to 400 documents / 6 MB estimated JSON and individual documents to 800 KB; Firestore may reject tighter backend/index limits atomically. [Commit semantics](https://docs.cloud.google.com/firestore/docs/reference/rest/v1/projects.databases.documents/commit).
 
 For larger quizzes:

@@ -81,6 +81,10 @@ describe('cloud migration safety without cloud', () => {
     expect(() => sanitizeLibrary(input)).toThrow(/Ambiguous/u);
     expect(() => sanitizeLibrary({ ...fixture(), documents: [{ id: '../bad', data: { slides: [] } }] })).toThrow(/Unsafe/u);
   });
+  test('blocks a dataset above the current editor slide limit', () => {
+    expect(() => artifact(401)).toThrow(/editor limit/u);
+    expect(artifact(400).counts.slides).toBe(400);
+  });
   test('immutable export has verified schema, counts and hash; alteration rejected', () => {
     const a = artifact(); expect(validateSourceArtifact(a, selection)).toEqual(a);
     expect(() => validateSourceArtifact({ ...a, counts: {} }, selection)).toThrow(/artifact/u);
