@@ -355,3 +355,15 @@ describe('owned quiz asset metadata', () => {
     });
   }
 });
+
+for (const role of [null, 'user', 'moderator', 'admin']) {
+  test('migration journals stay server-only: ' + String(role), async () => {
+    const db = role === null ? testEnvironment.unauthenticatedContext().firestore()
+      : testEnvironment.authenticatedContext('migration-' + role, { role }).firestore();
+    for (const suffix of ['', '/state/complete']) {
+      const ref = doc(db, 'migrationV1Imports/synthetic' + suffix);
+      await assertFails(getDoc(ref));
+      await assertFails(setDoc(ref, { state: 'complete' }));
+    }
+  });
+}

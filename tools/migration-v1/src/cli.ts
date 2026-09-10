@@ -1,3 +1,4 @@
+import { cloudModes, runCloudCli } from './cloud-cli.js';
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -37,6 +38,12 @@ async function assertNoSymlinkEscape(inputPath: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  if (cloudModes.includes(process.argv[2] ?? '')) {
+    const result = await runCloudCli(process.argv.slice(2));
+    console.log(JSON.stringify(result));
+    if (result.status !== 'PASS') process.exitCode = 1;
+    return;
+  }
   const options = parseArguments(process.argv.slice(2));
   await assertNoSymlinkEscape(options.inputPath);
   const report = await runMigration(options);
@@ -45,7 +52,7 @@ async function main(): Promise<void> {
 
 void main().catch((error: unknown) => {
   const name = error instanceof Error ? error.name : 'Error';
-  const message = error instanceof Error ? error.message : 'Unknown migration failure.';
+  const message = error instanceof Error && ['MigrationSafetyError', 'MigrationValidationError'].includes(error.name) ? error.message : 'Migration failed; private payload and credential details suppressed.';
   console.error(JSON.stringify({ status: 'FAILED', error: name, message }, null, 2));
   process.exitCode = 1;
 });

@@ -1,10 +1,14 @@
 # V1 library migration
 
+## Cloud extension (version 2)
+
+The existing pipeline now has an explicit, separately guarded staging path. See [CLOUD_IMPORT.md](../tools/migration-v1/CLOUD_IMPORT.md) for allowlists, read-only source credentials, immutable artifacts, dry-run, create-only writes and incomplete-import recovery. No real cloud migration is performed by development or CI. The emulator commands below retain their original safety guards.
+
 ## Scope and safety
 
-The tool migrates only V1 `library` documents into the private V2 model. It does not read a remote Firebase project, deploy, migrate events/registrations/live state, download media, or create public/projector documents. Managed export bytes, extracted JSON, and detailed inventories remain under Git-ignored `.local-data/`.
+The tool migrates only V1 `library` documents into the private V2 model. The original emulator workflow does not read a remote Firebase project. The explicit cloud extension reads only library content and creates private staging copies; neither workflow deploys, migrates events/registrations/live state, downloads media, or creates public/projector documents. Managed export bytes, extracted JSON, and detailed inventories remain under Git-ignored `.local-data/`.
 
-Both extraction and writing fail closed unless `FIRESTORE_EMULATOR_HOST` is an exact local host and port and the project ID begins with `demo-`. The writer also requires an empty dedicated emulator target.
+Emulator extraction and writing fail closed unless `FIRESTORE_EMULATOR_HOST` is an exact local host and port and the project ID begins with `demo-`. The writer also requires an empty dedicated emulator target.
 
 ## Managed export format and extraction
 
@@ -48,13 +52,13 @@ The JSON adapter accepts schema version 1 and `collection: "library"`. Each docu
 - The observed `pl` type is retained as a private `legacy` question because its product meaning is not established.
 - `correct` and `correctAnswer` map to private `correctAnswer`. The first non-empty variant is used; conflicting non-empty variants fail closed.
 - Options, moderator notes, images, audio/video references, answer/background images, timing, trigger, overlays, source numbering, and recap overrides are preserved.
-- Every source slide remains canonically preserved in private `legacy.raw`; quiz metadata remains in `legacy.metadata`. Unknown data is never discarded.
+- Supported source fields are projected through an explicit allowlist into private `legacy.raw` and `legacy.metadata`. Unknown fields are excluded; unsupported structured content and unknown cloud slide types block rather than being guessed.
 
 External media is classified and validated as a reference only. No network download or Storage write occurs.
 
 ## Validation and write behavior
 
-Validation compares quiz/slide/round/question counts, ordering, answer presence and exact values, canonical raw records, mapped prompt/options/media/presentation fields, source positions, and aggregate media counts. Any mismatch aborts before WRITE.
+Validation compares quiz/slide/round/question counts, ordering, answer presence and exact values, canonical allowlisted legacy records, mapped prompt/options/media/presentation fields, source positions, and aggregate media counts. Any mismatch aborts before WRITE.
 
 Each quiz is written in one Firestore batch and must remain below the 500-document batch limit. The set of quizzes is not globally atomic, so a failed multi-quiz run must be discarded by restarting a fresh emulator. A preflight refuses any target that already contains quiz, slide, round, or question migration data. The independent verifier reads the emulator back and compares IDs, order, correct answers, and media.
 

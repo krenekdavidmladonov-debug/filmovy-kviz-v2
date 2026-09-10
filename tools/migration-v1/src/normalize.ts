@@ -1,3 +1,4 @@
+import { sanitizeSlide, sanitizeMetadata } from './sanitize.js';
 import { MigrationValidationError } from './errors.js';
 import type {
   JsonObject,
@@ -166,7 +167,8 @@ function normalizeOptions(slide: JsonObject): readonly JsonValue[] {
   return [];
 }
 
-export function normalizeV1Slide(slide: JsonObject, index: number): NormalizedSlide {
+export function normalizeV1Slide(original: JsonObject, index: number): NormalizedSlide {
+  const slide = sanitizeSlide(original);
   const sourceType = normalizeType(slide.type);
   const classification = classifyV1Slide(slide);
   const correctAnswer = resolveCorrectAnswer(slide, index + 1);
@@ -191,7 +193,7 @@ export function normalizeV1Slide(slide: JsonObject, index: number): NormalizedSl
     ...(typeof slide.qCount === 'string' && slide.qCount !== '' ? { sourceQuestionNumber: slide.qCount } : {}),
     ...(recapOverrides === undefined ? {} : { recapOverrides }),
     raw: slide,
-    unknownFields: Object.keys(slide).filter((field) => !knownSlideFields.has(field)).sort(),
+    unknownFields: Object.keys(original).filter((field) => !knownSlideFields.has(field)).sort(),
   };
 }
 
@@ -256,7 +258,7 @@ export function normalizeV1Library(snapshot: V1LibrarySnapshot): readonly Normal
       title: payload.title,
       description: payload.description,
       slides: payload.slides.map(normalizeV1Slide),
-      legacyMetadata: payload.legacyMetadata,
+      legacyMetadata: sanitizeMetadata(payload.legacyMetadata),
       unknownFields: payload.unknownFields,
     };
   });

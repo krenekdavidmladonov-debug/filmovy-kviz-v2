@@ -1,3 +1,4 @@
+import { sanitizeSlide, sanitizeMetadata } from './sanitize.js';
 import { MigrationValidationError } from './errors.js';
 import { isPartiallyMappedSlideType, isUnknownSlideType } from './normalize.js';
 import { groupSlidesIntoRounds, isJsonObjectValue } from './transform.js';
@@ -86,6 +87,7 @@ export function validateNormalizedInput(quizzes: readonly NormalizedQuiz[]): voi
   for (const quiz of quizzes) {
     if (quiz.slides.length === 0) throw new MigrationValidationError(`Quiz ${quiz.id} contains no slides.`);
     for (const slide of quiz.slides) {
+      if (isUnknownSlideType(slide)) throw new MigrationValidationError('UNMAPPED source slide type; migration blocked.');
       if (slide.videoStart !== undefined && slide.videoEnd !== undefined && slide.videoStart > slide.videoEnd) {
         throw new MigrationValidationError(`Quiz ${quiz.id}, slide ${slide.position}: videoStart is after videoEnd.`);
       }
@@ -107,7 +109,7 @@ function canonical(value: unknown): string {
 }
 
 function assertRawPreserved(source: NormalizedSlide, outputLegacy: unknown, location: string): void {
-  if (!isJsonObjectValue(outputLegacy) || canonical(outputLegacy.raw) !== canonical(source.raw)) {
+  if (!isJsonObjectValue(outputLegacy) || canonical(outputLegacy.raw) !== canonical(sanitizeSlide(source.raw))) {
     throw new MigrationValidationError(`Lost or changed V1 slide data at ${location}.`);
   }
 }
@@ -201,7 +203,7 @@ function validateQuizOutput(source: NormalizedQuiz, output: V2QuizDocument): voi
     throw new MigrationValidationError(`Quiz ${source.id}: quiz id or round count changed.`);
   }
   const quizLegacy = output.data.legacy;
-  if (!isJsonObjectValue(quizLegacy) || canonical(quizLegacy.metadata) !== canonical(source.legacyMetadata)) {
+  if (!isJsonObjectValue(quizLegacy) || canonical(quizLegacy.metadata) !== canonical(sanitizeMetadata(source.legacyMetadata))) {
     throw new MigrationValidationError(`Quiz ${source.id}: legacy quiz metadata was lost or changed.`);
   }
   if (source.slides.length !== output.slides.length) {
