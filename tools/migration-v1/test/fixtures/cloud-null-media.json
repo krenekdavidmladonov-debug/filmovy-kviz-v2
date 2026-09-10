@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "collection": "library",
+  "documents": [
+    {
+      "id": "null-media-one",
+      "data": {
+        "name": "Synthetic nullable media quiz",
+        "email": "fake@example.test",
+        "phone": "FAKE_PHONE",
+        "token": "FAKE_TOKEN",
+        "secret": "FAKE_SECRET",
+        "unknownSensitiveField": { "nested": "DROP_ME" },
+        "data": {
+          "token": "FAKE_TOKEN",
+          "settings": {
+            "defaultAudioTrigger": 0,
+            "scaleTitle": 1,
+            "time_R1": 30,
+            "secret": "FAKE_SECRET"
+          },
+          "quiz": [
+            { "id": 1, "type": "intro", "title": "Round 1", "roundHeader": "Round 1", "media": null },
+            { "id": 2, "type": "agenda", "text": "Synthetic agenda", "roundHeader": "Round 1", "media": null },
+            { "id": 3, "type": "question", "text": "Test question", "options": ["A", "B"], "correct": "A", "roundHeader": "Round 1", "media": null, "mediaRaw": "", "email": "fake@example.test", "phone": "FAKE_PHONE", "token": "FAKE_TOKEN", "secret": "FAKE_SECRET", "unknownSensitiveField": "DROP_ME" },
+            { "id": 4, "type": "image", "text": "Test image", "correct": "Test image answer", "roundHeader": "Round 1", "media": { "type": "image", "src": "https://media.example.test/image.png", "token": "FAKE_TOKEN" }, "mediaRaw": "https://media.example.test/image.png" },
+            { "id": 5, "type": "audio", "text": "Test audio", "correct": "Test audio answer", "roundHeader": "Round 1", "media": { "type": "youtube", "src": "abcdefghijk", "secret": "FAKE_SECRET" }, "mediaRaw": "", "audioTrigger": "35" },
+            { "id": 6, "type": "video", "text": "Test video", "correct": "Test video answer", "roundHeader": "Round 1", "media": { "type": "youtube", "src": "https://www.youtube.com/watch?v=lmnopqrstuv" }, "mediaRaw": "https://www.youtube.com/watch?v=lmnopqrstuv", "videoStart": "12", "videoEnd": 20 },
+            { "id": 7, "type": "intro", "title": "Round 2", "roundHeader": "Round 2", "media": null },
+            { "id": 8, "type": "free", "text": "Test free question", "correct": "Test free answer", "roundHeader": "Round 2", "media": null },
+            { "id": 9, "type": "recap", "roundHeader": "Round 2", "media": null, "recapOverrides": [{ "extraText": "Test recap", "overrideMedia": "", "secret": "FAKE_SECRET" }] },
+            { "id": 10, "type": "end", "roundHeader": "", "media": null }
+          ]
+        }
+      }
+    },
+    {
+      "id": "null-media-two",
+      "data": {
+        "name": "Synthetic second quiz",
+        "data": {
+          "quiz": [
+            { "type": "intro", "title": "Round A", "roundHeader": "Round A", "media": null },
+            { "type": "pl", "text": "Test true or false", "correct": "True", "roundHeader": "Round A", "media": null },
+            { "type": "free", "text": "Test second question", "correct": "Test second answer", "roundHeader": "Round A", "media": null },
+            { "type": "end", "roundHeader": "", "media": null }
+          ]
+        }
+      }
+    }
+  ]
+}

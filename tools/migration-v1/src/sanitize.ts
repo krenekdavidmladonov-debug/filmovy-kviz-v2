@@ -33,7 +33,9 @@ export function sanitizeSlide(value: unknown): JsonObject {
     else if (Array.isArray(v) && v.every(scalar)) out[key] = [...v];
     else throw new MigrationValidationError('Unsupported structured options/answer; no content was exported.');
   }
-  if (input.media !== undefined) out.media = pickScalars(input.media, ['src', 'type']);
+  if (input.media !== undefined) {
+    out.media = input.media === null ? null : pickScalars(input.media, ['src', 'type']);
+  }
   if (input.recapOverrides !== undefined) {
     if (!Array.isArray(input.recapOverrides)) throw new MigrationValidationError('Unsupported recap overrides.');
     out.recapOverrides = input.recapOverrides.map(v => pickScalars(v, ['extraText', 'overrideMedia']));

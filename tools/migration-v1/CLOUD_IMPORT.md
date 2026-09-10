@@ -23,6 +23,14 @@ The same projection runs before existing normalization and feeds legacy.raw / le
 
 Unknown slide types block cloud artifacts as UNMAPPED. The existing explicit pl representation is retained as the confirmed locked Pravda / Lež type. All slides, rounds, ordering and answers use the existing transform/validate pipeline. Answers exist only under private quiz slides/questions; quiz roots, journals, inventories and human reports omit their values.
 
+### Observed nested source shape and nullable media
+
+The bounded read-only source diagnostic confirmed `library/{id}` documents with `name` and a `data` map containing one ordered `quiz` array; optional presentation settings live at `data.settings`. That array is the global slide stream, including introductions, agenda, recap and end slides as well as questions. The existing `roundHeader` transitions derive rounds; extraction must not split or duplicate the stream.
+
+Some slides explicitly store `media: null`, while others omit `media` or provide a `{ type, src }` map. The old sanitizer checked only for `undefined`, passed `null` to `pickScalars`, and failed in `object()` with `Expected quiz-content object.` This was an optional-field mismatch, not a different library hierarchy. The shared sanitizer now preserves this exact null marker in the allowlisted private legacy data. Existing media normalization already treats it as no nested media and still processes `mediaRaw` normally. Non-null scalar/array media, malformed roots, unknown significant types and missing answers remain blocked.
+
+Both cloud extraction and managed-export/emulator normalization use this same sanitizer and transformation. No new data model, schema version, fingerprint algorithm, IAM capability or writer path is introduced. `test/fixtures/cloud-null-media.json` reproduces the observed structure with entirely synthetic content; its regression fails with the original sanitizer. Live diagnostics persist only structural types/counts. The repaired real exporter and staging import require a separate authorized run.
+
 ## Artifacts, provenance and fingerprints
 Source artifacts are create-only local JSON under .local-data, marked read-only after creation. They contain sanitized schema-1 library content inside a schema-2 wrapper, exact source project/collection, export timestamp, counts, transform version and SHA-256 over canonical JSON. An existing file is never overwritten. File checks resolve symlinks/junctions; artifacts cannot escape .local-data. Protect this directory locally: the source artifact legitimately contains private answers. Reports contain only IDs, titles, counts, classifications and hashes, never answer values or source payloads.
 
