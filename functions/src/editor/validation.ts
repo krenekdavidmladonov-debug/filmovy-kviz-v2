@@ -1,3 +1,4 @@
+import { parseQuizAsset } from '@filmovy-kviz/quiz-domain';
 import { HttpsError } from 'firebase-functions/v2/https';
 
 import { QuizEditorError } from './errors.js';
@@ -113,7 +114,7 @@ function validatePresentation(value: unknown): EditorPresentationInput {
 
 function validateNormalizedImage(value: unknown, field: string): string {
   const source = value === undefined ? '' : boundedString(value, field, 4_096);
-  if (source === '') return source;
+  if (source === '' || (field === 'questionImage' && parseQuizAsset(source))) return source;
   let parsed: URL;
   try { parsed = new URL(source); }
   catch { throw new QuizEditorError('invalid-argument', `${field} must be an http(s) URL.`); }
@@ -125,7 +126,7 @@ function validateNormalizedImage(value: unknown, field: string): string {
 
 function validateNormalizedMediaSource(value: unknown): string {
   const source = value === undefined ? '' : boundedString(value, 'mediaSource', 4_096);
-  if (source === '' || /^[\w-]{11}$/u.test(source)) return source;
+  if (source === '' || parseQuizAsset(source) || /^[\w-]{11}$/u.test(source)) return source;
   try {
     const parsed = new URL(source);
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return source;

@@ -1,9 +1,11 @@
+import { parseQuizAsset } from '@filmovy-kviz/quiz-domain';
+import { AssetImage } from '../media/AssetImage';
 import { useMemo, useState } from 'react';
 
 import { productConfig } from '../../config/product';
 import { buildSlideRenderModel, defaultRules, formatPlAnswer, isSafeHttpUrl, projectorMediaPlan } from './model';
 import type { MediaPlaybackCommand, MediaPlaybackState, SlideRenderInput, SlideRenderMode } from './types';
-import { YouTubePlayer } from './YouTubePlayer';
+import { MediaPlayer } from './MediaPlayer';
 
 function QuestionHeader({ number, count, legacyPl }: { readonly number?: number; readonly count?: number; readonly legacyPl: boolean }) {
   return (
@@ -33,10 +35,10 @@ function AgendaItems({ items }: { readonly items: readonly string[] }) {
   );
 }
 
-function QuestionImage({ source, overlay }: { readonly source: string; readonly overlay: number }) {
+function QuestionImage({ source, overlay, sessionId }: { readonly source: string; readonly overlay: number; readonly sessionId?: string | undefined }) {
   return (
     <div className="question-image-frame">
-      <img src={source} alt="Obrázek k otázce" />
+      <AssetImage source={source} alt="Obrázek k otázce" sessionId={sessionId} />
       <span className="question-image-overlay" style={{ opacity: overlay / 100 }} aria-hidden="true" />
     </div>
   );
@@ -53,6 +55,7 @@ function QuestionCopy({ title, text }: { readonly title: string; readonly text: 
 
 export function SlideRenderer({
   slide,
+  mediaSessionId,
   quizTitle,
   mode,
   mediaCommand = 'idle',
@@ -64,6 +67,7 @@ export function SlideRenderer({
   onMediaPlaybackState,
 }: {
   readonly slide: SlideRenderInput;
+  readonly mediaSessionId?: string;
   readonly quizTitle: string;
   readonly mode?: SlideRenderMode;
   readonly mediaCommand?: MediaPlaybackCommand;
@@ -117,11 +121,12 @@ export function SlideRenderer({
       <div className={`slide-layout recap-layout recap-${model.contentKind}`}>
         <QuestionHeader number={model.questionNumber} count={model.questionCount} legacyPl={model.isLegacyPl} />
         <QuestionCopy title={model.title} text={model.text} />
-        {model.contentKind === 'image' && model.questionImage && isSafeHttpUrl(model.questionImage) && (
-          <QuestionImage source={model.questionImage} overlay={model.backgroundOverlay} />
+        {model.contentKind === 'image' && model.questionImage && (isSafeHttpUrl(model.questionImage) || Boolean(parseQuizAsset(model.questionImage))) && (
+          <QuestionImage sessionId={mediaSessionId} source={model.questionImage} overlay={model.backgroundOverlay} />
         )}
         {recapMedia && model.mediaSource && mediaPlan.mountPlayer && (
-          <YouTubePlayer
+          <MediaPlayer
+            sessionId={mediaSessionId}
             source={model.mediaSource}
             command={mediaCommand}
             generation={mediaGeneration}
@@ -163,7 +168,8 @@ export function SlideRenderer({
   } else if (model.contentKind === 'video' && mediaPlan.mountPlayer && model.mediaSource) {
     content = (
       <div className="video-presentation">
-        <YouTubePlayer
+        <MediaPlayer
+            sessionId={mediaSessionId}
           source={model.mediaSource}
           command={mediaCommand}
           generation={mediaGeneration}
@@ -181,8 +187,8 @@ export function SlideRenderer({
       <div className={`slide-layout question-layout question-${model.contentKind}`}>
         {model.isQuestionLike && <QuestionHeader number={model.questionNumber} count={model.questionCount} legacyPl={model.isLegacyPl} />}
         <QuestionCopy title={model.title || (model.contentKind === 'legacy' ? 'Legacy slide' : '')} text={model.text} />
-        {model.contentKind === 'image' && model.questionImage && isSafeHttpUrl(model.questionImage) && (
-          <QuestionImage source={model.questionImage} overlay={model.backgroundOverlay} />
+        {model.contentKind === 'image' && model.questionImage && (isSafeHttpUrl(model.questionImage) || Boolean(parseQuizAsset(model.questionImage))) && (
+          <QuestionImage sessionId={mediaSessionId} source={model.questionImage} overlay={model.backgroundOverlay} />
         )}
         <Options options={model.contentKind === 'free' ? [] : model.options} />
       </div>

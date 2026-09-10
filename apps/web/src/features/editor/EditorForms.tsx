@@ -1,7 +1,9 @@
+import { parseQuizAsset } from '@filmovy-kviz/quiz-domain';
+import { MediaUploadField } from '../media/MediaUploadField';
 import { useEffect, useRef, useState } from 'react';
 
 import { SlidePreview } from '../presentation/SlidePreview';
-import { YouTubePlayer } from '../presentation/YouTubePlayer';
+import { MediaPlayer } from '../presentation/MediaPlayer';
 import { youtubeVideoId, defaultRules, generatedAgendaOptions } from '../presentation/model';
 import type { MediaPlaybackCommand } from '../presentation/types';
 import type { SemanticQuizModel, SemanticRound, SemanticSystemSection } from './semanticModel';
@@ -278,6 +280,7 @@ function MediaTimingFields(props: QuestionFormFieldProps) {
     touch('clipEndSeconds');
     setGeneration((value) => value + 1);
     setCommand(next);
+    setMediaStatus(next === 'stop' ? 'Ukázka je zastavená.' : next === 'idle' ? 'Načítám ukázku.' : 'Spouštím ukázku.');
   };
   const duration = clipDuration(slide.clipStartSeconds, slide.clipEndSeconds);
   const capture = (target: 'start' | 'end') => {
@@ -287,18 +290,18 @@ function MediaTimingFields(props: QuestionFormFieldProps) {
   };
   return (
     <fieldset className="editor-fieldset media-timing-editor" disabled={disabled}>
-      <legend>Ukázka z YouTube</legend>
-      <label className="form-field" data-preflight-field="mediaSource">Zdroj z YouTube *
+      <legend>Ukázka</legend>
+      {parseQuizAsset(slide.mediaSource) ? <div data-preflight-field="mediaSource"><p>Vlastní audio je připravené.</p><button type="button" className="text-button" onClick={() => onChange({ ...slide, mediaSource: '' })}>Použít YouTube</button></div> : <label className="form-field" data-preflight-field="mediaSource">Zdroj z YouTube *
         <input value={slide.mediaSource} placeholder="YouTube URL nebo video ID" onBlur={() => touch('mediaSource')} onChange={(event) => onChange({ ...slide, mediaSource: event.target.value })} />
         <FieldIssues field="mediaSource" issues={issues} visible={showIssues('mediaSource')} />
-      </label>
+      </label>}
       <div className="media-time-grid">
         <TimeField label="Začátek ukázky" field="clipStartSeconds" value={slide.clipStartSeconds} disabled={disabled} issues={issues} showIssue={showIssues('clipStartSeconds')} touch={() => touch('clipStartSeconds')} onChange={(value) => onChange({ ...slide, clipStartSeconds: value })} />
         <TimeField label="Konec ukázky" field="clipEndSeconds" value={slide.clipEndSeconds} disabled={disabled} issues={issues} showIssue={showIssues('clipEndSeconds')} touch={() => touch('clipEndSeconds')} onChange={(value) => onChange({ ...slide, clipEndSeconds: value })} />
       </div>
       <p className="clip-duration">Délka ukázky: <strong>{duration === null ? '—' : formatHumanTime(duration)}</strong></p>
-      {youtubeVideoId(slide.mediaSource) !== undefined && (
-        <YouTubePlayer
+      {(youtubeVideoId(slide.mediaSource) !== undefined || Boolean(parseQuizAsset(slide.mediaSource))) && (
+        <MediaPlayer
           className="youtube-player-shell editor-test-player"
           source={slide.mediaSource}
           command={command}
@@ -326,6 +329,8 @@ function MediaTimingFields(props: QuestionFormFieldProps) {
 }
 
 export function QuestionForm({
+  quizId,
+  onUploadPending,
   slide,
   number,
   disabled,
@@ -337,6 +342,8 @@ export function QuestionForm({
   readonly slide: EditorSlide;
   readonly number: number;
   readonly disabled: boolean;
+  readonly quizId?: string;
+  readonly onUploadPending?: ((pending: boolean) => void) | undefined;
   readonly showAllIssues: boolean;
   readonly touched: ReadonlySet<string>;
   readonly onTouch: (field: string) => void;
@@ -355,16 +362,17 @@ export function QuestionForm({
       {type === 'legacy-pl' && <div className="legacy-notice"><strong>Starší typ Pravda / Lež</strong><p>Typ je uzamčený, ale obsah a odpověď můžete upravit bez ztráty původních dat.</p></div>}
       {type === 'legacy' && <div className="legacy-notice"><strong>Obsah obsahuje starší nastavení.</strong><p>Neznámé části zůstanou při uložení beze změny.</p></div>}
       <PromptField {...props} />
+      {quizId && (type === 'image' || type === 'audio') && <MediaUploadField key={slide.id} quizId={quizId} kind={type} disabled={disabled} onPending={onUploadPending} onReady={reference => onChange({ ...slide, [type === 'image' ? 'questionImage' : 'mediaSource']: reference })} />}
       {type === 'choice' && <ChoiceFields {...props} />}
       {type === 'free' && <FreeAnswerField {...props} />}
       {type === 'legacy-pl' && <PlAnswerField {...props} />}
       {type === 'legacy' && <FreeAnswerField {...props} />}
       {type === 'image' && (
         <>
-          <label className="form-field" data-preflight-field="questionImage">Obrázek otázky *
+          {parseQuizAsset(slide.questionImage) ? <div data-preflight-field="questionImage"><p>Vlastní obrázek je připravený.</p><button disabled={disabled} type="button" className="text-button" onClick={() => onChange({ ...slide, questionImage: '' })}>Použít adresu obrázku</button></div> : <label className="form-field" data-preflight-field="questionImage">Obrázek otázky *
             <input disabled={disabled} value={slide.questionImage} placeholder="https://…" onBlur={() => onTouch('questionImage')} onChange={(event) => onChange({ ...slide, questionImage: event.target.value })} />
             <FieldIssues field="questionImage" issues={issues} visible={showAllIssues || touched.has('questionImage')} />
-          </label>
+          </label>}
           <label className="toggle-field"><input type="checkbox" disabled={disabled} checked={imageChoices} onChange={(event) => onChange({ ...slide, options: event.target.checked ? ['', '', '', ''] : [], correctAnswer: '' })} /> Výběr z možností</label>
           {imageChoices ? <ChoiceFields {...props} /> : <FreeAnswerField {...props} />}
           <label className="form-field" data-preflight-field="answerImage">Obrázek ke správné odpovědi<input disabled={disabled} value={slide.answerImage} placeholder="https://…" onChange={(event) => onChange({ ...slide, answerImage: event.target.value })} /></label>

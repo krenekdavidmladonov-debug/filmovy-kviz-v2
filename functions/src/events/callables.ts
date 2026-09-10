@@ -1,3 +1,4 @@
+import { assertQuizAssets } from '../media/model.js';
 import { closeEventPresentation } from '../live/event-lifecycle.js';
 import {
   mapEditorQuiz,
@@ -378,6 +379,7 @@ export const lockEventQuiz = onCall(callableOptions, async (request): Promise<Ev
     } catch {
       throw new HttpsError('failed-precondition', 'Quiz cannot be mapped for readiness validation.');
     }
+    await assertQuizAssets(transaction, db, quizId, slideSnapshot.docs.map(slide => slide.data()));
     const preflight = runQuizPreflight(quiz);
     const lockDecision = decidePreflightLock(preflight, acknowledgeWarnings);
     if (lockDecision === 'BLOCKED') {

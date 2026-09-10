@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: [
-      'tests/quizModel.test.ts',
+      'tests/quizModel.test.ts', 'tests/mediaStorage.test.ts', 'tests/ownedMediaComponents.test.tsx',
       'tests/liveSession.test.ts',
       'tests/liveRepository.test.ts',
       'tests/quizEditor.test.ts',
