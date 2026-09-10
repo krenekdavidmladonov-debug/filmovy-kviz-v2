@@ -83,7 +83,7 @@ The V1 migration tool follows the same fail-closed principle. Managed export byt
 
 Firestore Rules tests run through `firebase emulators:exec` and `@firebase/rules-unit-testing`, not mocked SDK calls. The suite covers anonymous/unprivileged denial for private sessions and quiz sources, anonymous single-document public reads, public list/write denial, staff private reads, direct staff write denial, and default denial. Emulator E2E additionally invokes real callable emulators as anonymous, ordinary user, moderator, and admin. Editor coverage verifies admin CRUD, moderator read-only behavior, direct-write denial, stale/concurrent saves, exact legacy round-trip, contiguous ordering, guided Choice/Video repairs, invalid indices/timing rejection, sanitized repair responses, and that editor activity leaves a sentinel public session absent.
 
-Storage remains fully deny-all. Before additional Firestore or Storage access is granted, emulator tests must also cover cross-event access, private answers, contact isolation, reveal timing, and media paths/types/sizes as those features are implemented.
+Storage now allows only admin create under an exact server-issued quiz media upload grant. All direct get/list/update/delete remain denied. The authenticated/current-publication read gateway, MIME/size/signature checks and immutable generation binding are covered by local Storage contracts and browser tests; see MEDIA_STORAGE.md. Further access still requires explicit boundary tests.
 
 ## Operational safeguards
 

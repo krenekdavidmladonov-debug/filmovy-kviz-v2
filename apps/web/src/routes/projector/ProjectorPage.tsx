@@ -35,6 +35,7 @@ function ProjectorState({ state, onMediaFinished, onMediaPlaybackState }: {
   if (state.interimResults) return <div className="results-frame" data-version-id={state.interimResults.versionId}><ResultsTable {...state.interimResults} /></div>;
   return (
     <SlideRenderer
+      mediaSessionId={state.sessionId}
       quizTitle={state.quizTitle}
       mode={state.renderMode}
       mediaCommand={state.mediaCommand}

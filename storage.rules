@@ -1,10 +1,18 @@
 rules_version = '2';
-
 service firebase.storage {
   match /b/{bucket}/o {
-    // Secure baseline. Media access will be designed before it is enabled.
-    match /{path=**} {
-      allow read, write: if false;
+    match /quiz-assets/{quizId}/{assetId}/source {
+      function upload() { return firestore.get(/databases/(default)/documents/quizzes/$(quizId)/mediaAssets/$(assetId)).data; }
+      allow create: if request.auth != null && request.auth.token.role == 'admin'
+        && upload().createdBy == request.auth.uid && upload().quizId == quizId && upload().assetId == assetId
+        && upload().status == 'uploading' && request.time < upload().uploadExpiresAt
+        && request.resource.size == upload().size && request.resource.contentType == upload().contentType
+        && request.resource.size > 0
+        && ((upload().kind == 'image' && request.resource.size <= 10485760 && request.resource.contentType in ['image/png','image/jpeg','image/webp'])
+          || (upload().kind == 'audio' && request.resource.size <= 26214400 && request.resource.contentType in ['audio/mpeg','audio/wav']));
+      // Even staff obtain bytes through the current-role authenticated endpoint.
+      allow get, list, update, delete: if false;
     }
+    match /{path=**} { allow read, write: if false; }
   }
 }

@@ -2,7 +2,7 @@
 
 ## Guarantees
 
-Media control is explicit and revisioned. Navigation resets media to `idle` and advances `mediaGeneration`; every play, stop, replay, finish, or recap selection advances it again. `mediaCommand` records moderator intent, while `mediaPlaybackState` records confirmed lifecycle (`idle`, `preparing`, `ready`, `playing`, `finished`, or `error`). Player reports are accepted only for the current generation and a valid forward transition.
+Media control is explicit and revisioned. Navigation resets media to `idle` and advances `mediaGeneration`; every play, stop, replay, finish, or recap selection advances it again. `mediaCommand` records moderator intent, while `mediaPlaybackState` records confirmed lifecycle (`idle`, `preparing`, `ready`, `playing`, `finished`, or `error`). Player reports are accepted only for the current generation and a valid lifecycle transition (including native pause from playing to ready and resume within the same generation).
 
 The local player lifecycle is:
 
@@ -20,7 +20,7 @@ Normalized slide fields are `mediaSource`, `clipStartSeconds`, and optional `cli
 
 ## AUDIO
 
-In ordinary question mode, the public projector payload omits the audio source and the renderer cannot mount a YouTube iframe. The projector shows question copy and a vinyl state driven only by confirmed `mediaPlaybackState === playing`, never by the PLAY command alone. The moderator laptop mounts the visible, controlled YouTube player, so system audio comes from that device. Errors and autoplay blocks transition the trusted state to `error`, stop the vinyl, retain the question, and require an explicit REPLAY.
+In ordinary question mode, the public projector payload omits the audio source and the renderer cannot mount a YouTube iframe. The projector shows question copy and a vinyl state driven only by confirmed `mediaPlaybackState === playing`, never by the PLAY command alone. The moderator laptop mounts the visible, controlled MediaPlayer adapter (YouTube or owned native audio), so system audio comes from that device. Errors and autoplay blocks transition the trusted state to `error`, stop the vinyl, retain the question, and require an explicit REPLAY.
 
 ## VIDEO
 
@@ -35,3 +35,7 @@ Recap AUDIO/VIDEO has one visible player on the projector. Moderator PLAY/STOP/R
 YouTube behavior is **BEST EFFORT**, not a spoiler-free guarantee. The implementation uses the documented IFrame API and does not obscure, background, or extract audio from a player. YouTube may display title, thumbnail, channel, branding, ads, errors, region/age restrictions, and controls; requested start can resolve to a nearby keyframe. A browser can also block scripted playback. See the official [IFrame Player API](https://developers.google.com/youtube/iframe_api_reference), [player parameters](https://developers.google.com/youtube/player_parameters), [required minimum functionality](https://developers.google.com/youtube/terms/required-minimum-functionality), and [developer policies](https://developers.google.com/youtube/terms/developer-policies).
 
 Owned/direct media is a future source adapter. It is not silently treated as YouTube and no media is uploaded or copied by this foundation.
+
+## Owned image/audio
+
+See [MEDIA_STORAGE.md](MEDIA_STORAGE.md). The owned adapter shares commands, generations, callbacks, reducer and player budget. It uses immutable quiz assets through the authorized gateway; legacy YouTube/HTTP sources continue to use their existing paths. Uploaded answer/background/video media and physical cleanup are outside this foundation.

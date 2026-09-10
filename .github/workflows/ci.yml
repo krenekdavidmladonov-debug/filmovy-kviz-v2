@@ -118,3 +118,10 @@ jobs:
           --only auth,firestore,functions
           --project demo-filmovy-kviz-v2
           "node tools/local-emulator-environment.mjs full tests/e2e/final-reveal-emulator.mjs && node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/final-reveal.config.ts"
+
+      - name: Owned media Storage contracts and browser E2E (local emulators only)
+        run: >-
+          pnpm exec firebase emulators:exec
+          --only auth,firestore,functions,storage
+          --project demo-filmovy-kviz-v2
+          "pnpm test:e2e:media && pnpm test:e2e:media-browser"

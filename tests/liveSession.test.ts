@@ -317,3 +317,11 @@ describe('live-session state machine', () => {
     expect(() => applyMediaPlaybackReport(playing, 'finished', playing.mediaGeneration - 1, 'moderator', now)).toThrow(/stale/u);
   });
 });
+
+test('native audio pause and resume keep generation; stopped callbacks remain stale', () => {
+  const playing = session({mediaCommand:'play',mediaPlaybackState:'playing',mediaGeneration:4});
+  const paused = applyMediaPlaybackReport(playing,'ready',4,'staff-1',now);
+  expect(paused.mediaPlaybackState).toBe('ready');
+  expect(applyMediaPlaybackReport(paused,'playing',4,'staff-1',now).mediaPlaybackState).toBe('playing');
+  expect(()=>applyMediaPlaybackReport({...paused,mediaGeneration:5},'playing',4,'staff-1',now)).toThrow();
+});

@@ -341,3 +341,17 @@ describe('interim result versions and publication authority', () => {
     });
   }
 });
+
+describe('owned quiz asset metadata', () => {
+  for (const role of [null, 'user', 'moderator', 'admin']) {
+    test('server-only immutable metadata and staff-only reads: ' + String(role), async () => {
+      const db = role === null ? testEnvironment.unauthenticatedContext().firestore() : testEnvironment.authenticatedContext('media-' + role, {role}).firestore();
+      const path=privateQuizPath+'/mediaAssets/synthetic';
+      await testEnvironment.withSecurityRulesDisabled(async context => {await setDoc(doc(context.firestore(),path),{status:'ready',generation:'1'});});
+      if(role==='admin'||role==='moderator') await assertSucceeds(getDoc(doc(db,path))); else await assertFails(getDoc(doc(db,path)));
+      await assertFails(setDoc(doc(db,path),{status:'ready',generation:'forged'}));
+      await assertFails(updateDoc(doc(db,path),{generation:'forged'}));
+      await assertFails(deleteDoc(doc(db,path)));
+    });
+  }
+});

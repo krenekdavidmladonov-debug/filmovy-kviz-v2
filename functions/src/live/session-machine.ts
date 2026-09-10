@@ -6,7 +6,7 @@ const playbackTransitions: Readonly<Record<LiveMediaPlaybackState, readonly Live
   idle: [],
   preparing: ['ready', 'playing', 'error', 'finished'],
   ready: ['playing', 'error', 'finished'],
-  playing: ['error', 'finished'],
+  playing: ['ready', 'error', 'finished'],
   finished: [],
   error: [],
 };

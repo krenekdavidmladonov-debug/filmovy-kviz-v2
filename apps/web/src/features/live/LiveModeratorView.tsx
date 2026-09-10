@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 
 import { SlideRenderer } from '../presentation/SlideRenderer';
-import { YouTubePlayer } from '../presentation/YouTubePlayer';
+import { MediaPlayer } from '../presentation/MediaPlayer';
 import { HumanError, type HumanErrorValue } from '../../ui/HumanError';
 import { TechnicalDetails } from '../../ui/TechnicalDetails';
 import {
@@ -177,7 +177,7 @@ export function LiveModeratorView({
               </div>
               <p className="youtube-limitation">Při přehrávání z YouTube se mohou zobrazit jeho vlastní prvky.</p>
               {isAudioSlide(presentedSlide) && session.presentationMode === 'slide' && (
-                <YouTubePlayer
+                <MediaPlayer
                   source={source}
                   command={session.mediaCommand}
                   generation={session.mediaGeneration}

@@ -75,3 +75,6 @@ export { previewFinalResults, controlFinalReveal } from './final-reveal/callable
 export { dispatchRegistrationEmail, deliverEmailTask } from './email/worker.js';
 
 export { previewEventTeamMessage, createEventTeamMessage, listEventTeamMessages, getEventTeamMessage } from './email/team-callables.js';
+
+export { beginQuizMediaUpload, finalizeQuizMediaUpload } from './media/callables.js';
+export { readQuizMedia } from './media/endpoint.js';

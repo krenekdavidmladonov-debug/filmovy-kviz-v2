@@ -1,3 +1,4 @@
+import { assertQuizAssets } from '../media/model.js';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import {
   FieldValue,
@@ -316,6 +317,7 @@ export const updateQuizSlide = onCall(callableOptions, async (request): Promise<
     const input = requestedSlide(request.data);
     return await db.runTransaction(async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
+      await assertQuizAssets(transaction, db, quizId, [input as unknown as Record<string, unknown>]);
       const current = state.slides.find((slide) => slide.id === slideId);
       if (current === undefined) throw new QuizEditorError('not-found', 'Quiz slide was not found.');
       const currentIsRound = isRoundKind(storedKind(current));
@@ -385,6 +387,7 @@ export const createQuizSlide = onCall(callableOptions, async (request): Promise<
     const slideRef = quizRef.collection('slides').doc();
     return await db.runTransaction(async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
+      await assertQuizAssets(transaction, db, quizId, [input as unknown as Record<string, unknown>]);
       if (state.slides.length >= maximumSlideCount || position > state.slides.length + 1) {
         throw new QuizEditorError('invalid-argument', 'Slide position is outside the quiz range.');
       }

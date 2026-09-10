@@ -1,3 +1,4 @@
+import { parseQuizAsset } from './media-assets.js';
 import { generatedAgendaOptions, isSafeHttpUrl, youtubeVideoId } from './presentation.js';
 import { buildSemanticQuizModel, questionPrompt, semanticQuestionType } from './semantic.js';
 import type {
@@ -77,15 +78,15 @@ export function validateQuestion(slide: EditorSlide): readonly EditorValidationI
   if (type === 'image') {
     if (slide.questionImage.trim() === '') {
       issues.push(issue('IMAGE_SOURCE_MISSING', 'IMAGE', 'questionImage', 'Chybí obrázek otázky.'));
-    } else if (!isSafeHttpUrl(slide.questionImage)) {
+    } else if (!isSafeHttpUrl(slide.questionImage) && !parseQuizAsset(slide.questionImage)) {
       issues.push(issue('IMAGE_SOURCE_INVALID', 'IMAGE', 'questionImage', 'Obrázek otázky nemá platnou HTTP(S) adresu.'));
     }
   }
   if (type === 'audio' || type === 'video') {
     if (slide.mediaSource.trim() === '') {
       issues.push(issue('MEDIA_SOURCE_MISSING', 'MEDIA', 'mediaSource', 'Chybí zdroj ukázky.'));
-    } else if (youtubeVideoId(slide.mediaSource) === undefined) {
-      issues.push(issue('MEDIA_SOURCE_INVALID', 'MEDIA', 'mediaSource', 'Zdroj není platný YouTube odkaz ani video ID.'));
+    } else if (youtubeVideoId(slide.mediaSource) === undefined && !(type === 'audio' && parseQuizAsset(slide.mediaSource))) {
+      issues.push(issue('MEDIA_SOURCE_INVALID', 'MEDIA', 'mediaSource', 'Zdroj není platný YouTube odkaz ani připravené vlastní audio.'));
     }
     if (slide.clipStartSeconds === null) {
       issues.push(issue('CLIP_START_MISSING', 'TIMING', 'clipStartSeconds', 'Chybí začátek ukázky.'));
