@@ -140,6 +140,9 @@ importers:
 
   tools/migration-v1:
     dependencies:
+      '@filmovy-kviz/quiz-domain':
+        specifier: workspace:*
+        version: link:../../packages/quiz-domain
       firebase-admin:
         specifier: ^13.4.0
         version: 13.10.0(@firebase/app-compat@0.5.17)(@firebase/app@0.16.1)(supports-color@7.2.0)

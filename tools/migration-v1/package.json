@@ -9,6 +9,7 @@
     "lint": "eslint src test --max-warnings 0"
   },
   "dependencies": {
-    "firebase-admin": "^13.4.0"
+    "firebase-admin": "^13.4.0",
+    "@filmovy-kviz/quiz-domain": "workspace:*"
   }
 }

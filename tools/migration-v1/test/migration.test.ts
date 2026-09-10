@@ -155,11 +155,11 @@ describe('V1 migration framework', () => {
     expect(isJsonObjectValue(legacy) && isJsonObjectValue(legacy.raw) && legacy.raw.id).toBe(42);
   });
 
-  test('reports unknown fields and preserves them in legacy.raw', async () => {
+  test('reports unknown fields without retaining their values in legacy.raw', async () => {
     const { source, output } = await loadFixture();
     expect(source.slides[2]!.unknownFields).toContain('syntheticUnknownField');
     const legacy = output.slides[2]!.data.legacy;
-    expect(isJsonObjectValue(legacy) && isJsonObjectValue(legacy.raw) && legacy.raw.syntheticUnknownField).toBe('preserve');
+    expect(isJsonObjectValue(legacy) && isJsonObjectValue(legacy.raw) && legacy.raw.syntheticUnknownField).toBeUndefined();
   });
 
   test('rejects malformed slide values and invalid timing ranges', () => {

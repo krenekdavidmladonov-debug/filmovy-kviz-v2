@@ -61,6 +61,11 @@ jobs:
       - name: Unit and synthetic migration regression tests
         run: pnpm test:unit
 
+      - name: Migration create-only and existing emulator regression (synthetic only)
+        run: >-
+          pnpm exec firebase emulators:exec --only firestore --project demo-filmovy-kviz-v2
+          "node tools/migration-v1/test/emulator.mjs"
+
       - name: Live server unit tests
         run: pnpm test:functions
 
