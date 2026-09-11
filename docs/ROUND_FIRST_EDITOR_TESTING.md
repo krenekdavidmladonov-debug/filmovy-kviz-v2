@@ -81,10 +81,11 @@ Unit/component coverage includes:
 - exactly five creatable types and locked existing PL;
 - Choice, Free, Image, Audio, and Video form behavior;
 - 5/6-option preservation and correct-option consistency;
-- timing parsing, formatting, duration, and invalid ranges;
+- timing parsing, formatting, duration, invalid ranges, and the narrow persisted-import save exception without weakening preflight;
 - dirty/save/failure/navigation state;
 - immediate local preview without public publication;
-- preservation of unknown and legacy shapes.
+- preservation of unknown and legacy shapes, including the imported `0/0` timing sentinel;
+- strict creation validation and deterministic retry identity;
 - whole-quiz preflight severity, structure, answer, image, media/timing, PL, draft, and private-value exclusion rules.
 
 ## Synthetic emulator E2E
@@ -103,14 +104,15 @@ The editor E2E verifies:
 
 - anonymous and ordinary-user denial;
 - moderator read-only access;
-- admin callable access;
+- admin callable access, including idempotent creation of one empty private draft;
+- identical create-request retry and conflicting-title rejection;
 - denial of direct client writes;
 - stale revision rejection;
 - create/update/duplicate/move/delete behavior;
 - contiguous ordering and derived counters;
 - round rename/duplicate/move/removal modes;
-- preservation of legacy fields;
-- absence of editor writes to a sentinel `publicSessions` document.
+- preservation of legacy fields and the exact imported `0/0` timing storage shape;
+- absence of editor writes to sentinel `publicSessions` and immutable snapshot documents.
 
 Synthetic browser and script-based E2E use distinct quiz fixture IDs. This allows `live → editor → browser` and `browser → editor → live` to run against the same fresh emulator seed without a suite inheriting another suite's quiz revision.
 
@@ -128,6 +130,7 @@ The round-first browser specification covers these viewports:
 
 The tested workflow includes:
 
+- create a named empty quiz from the library, then add its first round and question and reopen it;
 - open quiz and editor;
 - select a round and questions;
 - edit Free, Choice, Image, Audio, and Video drafts;
@@ -136,6 +139,7 @@ The tested workflow includes:
 - create without autosave and then save explicitly;
 - duplicate and reorder content;
 - exercise dirty outline navigation and browser Back;
+- preserve a failed/stale save draft and keep the human-readable error visible;
 - open legacy PL and system recap;
 - verify responsive panel availability.
 
@@ -196,6 +200,8 @@ For every migrated quiz the E2E contract is:
 ```text
 open -> edit one safe field -> save -> reload -> verify -> restore
 ```
+
+A sanitized imported fixture must additionally cover the historical `presentation.videoStart/videoEnd = 0/0` sentinel with top-level start `0` and no end. Editing an unrelated field twice must succeed across reloads without changing the answer, media array, `legacy.raw`, presentation timing, top-level timing-key presence, or immutable snapshot sentinel.
 
 The independent emulator verifier must still pass afterward. The migrated browser suites verify that all four quizzes open through the real editor facade, all rounds/questions are accessible, PL is represented, the largest quiz remains responsive, and all 263 questions produce a sanitised readiness result without answer values, question copy, media URLs, notes, or raw legacy data in the report.
 

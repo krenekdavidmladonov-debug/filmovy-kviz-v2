@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - main
+      - release/staging-editor-core-hotfix
   pull_request:
     branches:
       - main
       - chore/v2-staging-environment
+      - reference/staging-editor-core-base
 
 permissions:
   contents: read
@@ -33,6 +35,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Install pnpm from packageManager
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5
@@ -69,6 +74,17 @@ jobs:
 
       - name: Install Playwright Chromium for browser E2E
         run: pnpm exec playwright install chromium
+
+      - name: Editor core workflow browser E2E (local emulators only)
+        run: |
+          pnpm exec firebase emulators:exec --only auth,firestore,functions --project demo-filmovy-kviz-v2 "pnpm seed:auth && pnpm test:e2e:editor-core-empty-browser"
+          pnpm exec firebase emulators:exec --only auth,firestore,functions --project demo-filmovy-kviz-v2 "pnpm seed:auth && pnpm seed:quizzes && pnpm test:e2e:editor-core-browser"
+
+      - name: Exact staging client and deployed editor contract compatibility
+        run: |
+          node tools/staging/editor-compatibility.mjs
+          pnpm exec firebase emulators:exec --only auth,firestore,functions --project demo-filmovy-kviz-v2 "node tools/local-emulator-environment.mjs auth functions/lib/dev/seed-auth.js && node tools/local-emulator-environment.mjs firestore functions/lib/dev/seed-quizzes.js && node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/editor-staging-compat.config.ts && pnpm test:e2e:editor && node tools/local-emulator-environment.mjs firestore functions/lib/dev/seed-quizzes.js && pnpm test:e2e:editor-core-browser"
+          pnpm --filter @filmovy-kviz/functions build
 
       - name: Live Auth, Firestore, and Functions emulator E2E
         run: >-
