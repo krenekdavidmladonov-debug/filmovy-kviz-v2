@@ -122,12 +122,10 @@ export function mapEditorSlide(id: string, data: DocumentData): EditorSlide {
     presentation: mappedPresentation,
     ...(Number.isInteger(data.questionNumber) ? { questionNumber: data.questionNumber as number } : {}),
     ...(Number.isInteger(data.questionCount) ? { questionCount: data.questionCount as number } : {}),
-    backgroundImage: optionalText(data.backgroundImage) || mediaByRoleAndKind(data.media, 'background', 'image'),
-    questionImage: optionalText(data.questionImage)
-      || (['image', 'picture', 'photo'].includes(normalizedKind) ? mediaByRoleAndKind(data.media, 'prompt', 'image') : ''),
-    answerImage: optionalText(data.answerImage) || mediaByRoleAndKind(data.media, 'answer', 'image'),
-    mediaSource: normalizedSource(data.mediaSource)
-      || (['audio', 'music'].includes(normalizedKind) ? mediaByRoleAndKind(data.media, 'prompt', 'audio') : '')
+    backgroundImage: typeof data.backgroundImage === 'string' ? data.backgroundImage : mediaByRoleAndKind(data.media, 'background', 'image'),
+    questionImage: typeof data.questionImage === 'string' ? data.questionImage : (['image', 'picture', 'photo'].includes(normalizedKind) ? mediaByRoleAndKind(data.media, 'prompt', 'image') : ''),
+    answerImage: typeof data.answerImage === 'string' ? data.answerImage : mediaByRoleAndKind(data.media, 'answer', 'image'),
+    mediaSource: typeof data.mediaSource === 'string' ? data.mediaSource : normalizedSource(data.mediaSource) || (['audio', 'music'].includes(normalizedKind) ? mediaByRoleAndKind(data.media, 'prompt', 'audio') : '')
       || (['video', 'youtube'].includes(normalizedKind) ? mediaByRoleAndKind(data.media, 'prompt', 'video') : ''),
     backgroundOverlay: explicitBackgroundOverlay ?? mappedPresentation.backgroundOverlay,
     clipStartSeconds: legacyZeroTiming ? null : explicitClipStart ?? mappedPresentation.videoStart,

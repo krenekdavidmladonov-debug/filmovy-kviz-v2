@@ -42,12 +42,12 @@ describe('owned media contract', () => {
     expect(publicMediaAllowed({status:'active',answerImage:reference},reference)).toBe(false);
   });
   test('binding rejects cross-quiz, unresolved, wrong kind and conflicting roles across slides', async () => {
-    let data: Record<string,unknown> = {quizId:'quiz-1',status:'ready',kind:'image',contentType:'image/png',size:20};
+    let data: Record<string,unknown> = {quizId:'quiz-1',status:'ready',generation:'123',kind:'image',contentType:'image/png',size:20};
     const tx={get:()=>Promise.resolve({data:()=>data})} as unknown as Parameters<typeof assertQuizAssets>[0], db={doc:(path:string)=>path} as unknown as Parameters<typeof assertQuizAssets>[1];
     const bind=(slides:Record<string,unknown>[])=>assertQuizAssets(tx,db,'quiz-1',slides);
-    await expect(bind([{kind:'image',questionImage:reference}])).resolves.toBeUndefined();
+    await expect(bind([{kind:'image',questionImage:reference,answerImage:reference,backgroundImage:reference}])).resolves.toBeUndefined();
     await expect(bind([{kind:'image',questionImage:reference},{kind:'audio',mediaSource:reference}])).rejects.toMatchObject({code:'invalid-argument'});
-    for(const slide of [{kind:'audio',questionImage:reference,mediaSource:reference},{kind:'image',answerImage:reference},{kind:'image',questionImage:reference.replace('quiz-1','quiz-2')}]) await expect(bind([slide])).rejects.toMatchObject({code:'invalid-argument'});
+    for(const slide of [{kind:'audio',questionImage:reference,mediaSource:reference},{kind:'image',questionImage:reference.replace('quiz-1','quiz-2')}]) await expect(bind([slide])).rejects.toMatchObject({code:'invalid-argument'});
     data={...data,status:'uploading'};await expect(bind([{kind:'image',questionImage:reference}])).rejects.toMatchObject({code:'failed-precondition'});
     data={...data,status:'ready',kind:'audio'};await expect(bind([{kind:'image',questionImage:reference}])).rejects.toMatchObject({code:'failed-precondition'});
     await expect(bind([{kind:'image',questionImage:'https://example.test/legacy.png'},{kind:'audio',mediaSource:'abcdefghijk'}])).resolves.toBeUndefined();

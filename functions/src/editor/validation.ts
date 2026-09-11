@@ -126,7 +126,7 @@ function validatePresentation(value: unknown): EditorPresentationInput {
 
 function validateNormalizedImage(value: unknown, field: string): string {
   const source = value === undefined ? '' : boundedString(value, field, 4_096);
-  if (source === '' || (field === 'questionImage' && parseQuizAsset(source))) return source;
+  if (source === '' || parseQuizAsset(source)) return source;
   let parsed: URL;
   try { parsed = new URL(source); }
   catch { throw new QuizEditorError('invalid-argument', `${field} must be an http(s) URL.`); }

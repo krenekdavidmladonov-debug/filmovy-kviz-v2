@@ -6,6 +6,7 @@ on:
       - main
   pull_request:
     branches:
+      - release/staging-editor-core-hotfix
       - main
       - chore/v2-staging-environment
 

@@ -1,3 +1,4 @@
+import { mapEditorSlide, directMediaKind, youtubeVideoId, parseQuizAsset } from '@filmovy-kviz/quiz-domain';
 import { createHash } from 'node:crypto';
 
 import { QuizEditorError } from './errors.js';
@@ -80,6 +81,10 @@ function mediaUrl(source: string): { readonly url?: string; readonly domain?: st
 
 function mergedMediaEntry(existing: unknown, input: EditorMediaInput): Record<string, unknown> {
   const base = isObject(existing) ? { ...existing } : {};
+  const previousSource = [base.value, base.source, base.url].find(value => typeof value === 'string');
+  const sameRole = input.role === base.role || (input.role === 'unknown' && typeof base.role === 'string');
+  const sameKind = input.kind === base.kind || (input.kind === 'unknown' && typeof base.kind === 'string');
+  if (previousSource === input.source && sameRole && sameKind) return base;
   delete base.url;
   delete base.domain;
   delete base.validUrl;
@@ -146,11 +151,6 @@ function mergedOptions(current: unknown, input: readonly string[]): readonly unk
   return [...input];
 }
 
-function applyOptionalText(result: Record<string, unknown>, current: Record<string, unknown>, field: string, input: string): void {
-  if (input === '' && !Object.hasOwn(current, field)) delete result[field];
-  else result[field] = keepMalformedText(current[field], input);
-}
-
 function applyOptionalNumber(result: Record<string, unknown>, current: Record<string, unknown>, field: string, input: number | null): void {
   const stored = current[field];
   if (input === null) {
@@ -182,10 +182,22 @@ export function applyKnownSlideUpdate(
   else result.moderatorNote = keepMalformedText(current.moderatorNote, input.moderatorNote);
   if (input.correctAnswer === '' && !Object.hasOwn(current, 'correctAnswer')) delete result.correctAnswer;
   else result.correctAnswer = keepMalformedText(current.correctAnswer, input.correctAnswer);
-  applyOptionalText(result, current, 'backgroundImage', input.backgroundImage);
-  applyOptionalText(result, current, 'questionImage', input.questionImage);
-  applyOptionalText(result, current, 'answerImage', input.answerImage);
-  applyOptionalText(result, current, 'mediaSource', input.mediaSource);
+  const mapped = mapEditorSlide('current', { position: 1, ...current, kind: current.kind ?? input.kind });
+  for (const field of ['backgroundImage', 'questionImage', 'answerImage', 'mediaSource'] as const) {
+    // Equal mapped values mean no edit, retaining absent, malformed and legacy fields.
+    // Explicit empty replacement shadows the legacy role without deleting its history.
+    if (mapped[field] !== input[field]) result[field] = input[field];
+  }
+  const timed = ['audio', 'music', 'video', 'youtube'].includes(input.kind);
+  if (timed && input.mediaSource !== '' && mapped.mediaSource !== input.mediaSource && youtubeVideoId(input.mediaSource) === undefined
+      && directMediaKind(input.mediaSource) !== (['audio', 'music'].includes(input.kind) ? 'audio' : 'video')
+      && !(['audio', 'music'].includes(input.kind) && parseQuizAsset(input.mediaSource))) {
+    throw new QuizEditorError('invalid-argument', 'Nepodporovaný zdroj ukázky.');
+  }
+  if (timed && input.mediaSource !== '' && mapped.mediaSource !== input.mediaSource
+      && (input.clipStartSeconds === null || input.clipEndSeconds === null || input.clipEndSeconds <= input.clipStartSeconds)) {
+    throw new QuizEditorError('invalid-argument', 'Změna zdroje vyžaduje platný začátek a konec ukázky.');
+  }
   applyOptionalNumber(result, current, 'backgroundOverlay', input.backgroundOverlay);
   const preserveLegacyZeroTiming = input.clipStartSeconds === null
     && input.clipEndSeconds === null

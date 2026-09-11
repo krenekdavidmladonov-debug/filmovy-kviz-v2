@@ -1,4 +1,4 @@
-import { parseQuizAsset } from '@filmovy-kviz/quiz-domain';
+import { parseQuizAsset, directMediaKind } from '@filmovy-kviz/quiz-domain';
 import { MediaUploadField } from '../media/MediaUploadField';
 import { useEffect, useRef, useState } from 'react';
 
@@ -144,10 +144,10 @@ export function RoundSettingsForm({
 function VisualFields({ slide, disabled, onChange }: { readonly slide: EditorSlide; readonly disabled: boolean; readonly onChange: (slide: EditorSlide) => void }) {
   const set = <K extends keyof EditorSlide>(field: K, value: EditorSlide[K]) => onChange({ ...slide, [field]: value });
   return (
-    <fieldset className="editor-fieldset visual-fields" disabled={disabled}>
-      <legend>Vzhled</legend>
-      <label className="form-field" data-preflight-field="backgroundImage">Pozadí<input value={slide.backgroundImage} placeholder="https://…" onChange={(event) => set('backgroundImage', event.target.value)} /></label>
-      <label className="form-field">Ztmavení pozadí <span>{slide.backgroundOverlay ?? 0} %</span><input type="range" min="0" max="100" value={slide.backgroundOverlay ?? 0} onChange={(event) => set('backgroundOverlay', Number(event.target.value))} /></label>
+    <fieldset className="editor-fieldset visual-fields">
+      <legend>Vzhled slidu</legend>
+      <MediaUploadField key={slide.id + ":background"} kind="image" label="Pozadí" value={slide.backgroundImage} disabled={disabled} onReady={value => set("backgroundImage", value)} />
+      <label className="form-field">Ztmavení pozadí <span>{slide.backgroundOverlay ?? 0} %</span><input type="range" disabled={disabled} min="0" max="100" value={slide.backgroundOverlay ?? 0} onChange={(event) => set('backgroundOverlay', Number(event.target.value))} /></label>
     </fieldset>
   );
 }
@@ -289,20 +289,22 @@ function MediaTimingFields(props: QuestionFormFieldProps) {
     setCurrentTimeRequest((value) => value + 1);
   };
   return (
-    <fieldset className="editor-fieldset media-timing-editor" disabled={disabled}>
+    <fieldset className="editor-fieldset media-timing-editor">
       <legend>Ukázka</legend>
-      {parseQuizAsset(slide.mediaSource) ? <div data-preflight-field="mediaSource"><p>Vlastní audio je připravené.</p><button type="button" className="text-button" onClick={() => onChange({ ...slide, mediaSource: '' })}>Použít YouTube</button></div> : <label className="form-field" data-preflight-field="mediaSource">Zdroj z YouTube *
-        <input value={slide.mediaSource} placeholder="YouTube URL nebo video ID" onBlur={() => touch('mediaSource')} onChange={(event) => onChange({ ...slide, mediaSource: event.target.value })} />
-        <FieldIssues field="mediaSource" issues={issues} visible={showIssues('mediaSource')} />
-      </label>}
+      <MediaUploadField key={slide.id + ':source'} kind={semanticQuestionType(slide) === 'audio' ? 'audio' : 'video'} label="Zdroj ukázky" value={slide.mediaSource} disabled={disabled} onReady={value => {
+        setCurrentTimeRequest(0); setCommand('stop'); setGeneration(g => g + 1); setMediaStatus(value ? 'Zdroj rozpoznán. Načtěte přehrávač a zkontrolujte nové časování.' : 'Zdroj odebrán.');
+        onChange({ ...slide, mediaSource: value, clipStartSeconds: null, clipEndSeconds: null });
+      }} />
+      {youtubeVideoId(slide.mediaSource) && <p className="field-help">YouTube zobrazuje svůj přehrávač a může omezit vložení. Pro zvuk bez názvu a náhledu použijte vlastní audio.</p>}
       <div className="media-time-grid">
-        <TimeField label="Začátek ukázky" field="clipStartSeconds" value={slide.clipStartSeconds} disabled={disabled} issues={issues} showIssue={showIssues('clipStartSeconds')} touch={() => touch('clipStartSeconds')} onChange={(value) => onChange({ ...slide, clipStartSeconds: value })} />
-        <TimeField label="Konec ukázky" field="clipEndSeconds" value={slide.clipEndSeconds} disabled={disabled} issues={issues} showIssue={showIssues('clipEndSeconds')} touch={() => touch('clipEndSeconds')} onChange={(value) => onChange({ ...slide, clipEndSeconds: value })} />
+        <TimeField key={slide.id + slide.mediaSource + ":start"} label="Začátek ukázky" field="clipStartSeconds" value={slide.clipStartSeconds} disabled={disabled} issues={issues} showIssue={showIssues('clipStartSeconds')} touch={() => touch('clipStartSeconds')} onChange={(value) => onChange({ ...slide, clipStartSeconds: value })} />
+        <TimeField key={slide.id + slide.mediaSource + ":end"} label="Konec ukázky" field="clipEndSeconds" value={slide.clipEndSeconds} disabled={disabled} issues={issues} showIssue={showIssues('clipEndSeconds')} touch={() => touch('clipEndSeconds')} onChange={(value) => onChange({ ...slide, clipEndSeconds: value })} />
       </div>
       <p className="clip-duration">Délka ukázky: <strong>{duration === null ? '—' : formatHumanTime(duration)}</strong></p>
-      {(youtubeVideoId(slide.mediaSource) !== undefined || Boolean(parseQuizAsset(slide.mediaSource))) && (
+      {(youtubeVideoId(slide.mediaSource) !== undefined || Boolean(parseQuizAsset(slide.mediaSource)) || directMediaKind(slide.mediaSource) !== undefined) && (
         <MediaPlayer
           className="youtube-player-shell editor-test-player"
+          key={slide.id + slide.mediaSource}
           source={slide.mediaSource}
           command={command}
           generation={generation}
@@ -310,27 +312,25 @@ function MediaTimingFields(props: QuestionFormFieldProps) {
           {...(slide.clipEndSeconds === null ? {} : { endSeconds: slide.clipEndSeconds })}
           currentTimeRequest={currentTimeRequest}
           onCurrentTime={(seconds) => onChange({ ...slide, [captureTarget === 'start' ? 'clipStartSeconds' : 'clipEndSeconds']: Math.round(seconds * 10) / 10 })}
-          onPlaybackState={(_generation, state) => setMediaStatus(state === 'playing' ? 'Ukázka se přehrává.' : 'Ukázka je připravená.')}
+          onPlaybackState={(_generation, state) => setMediaStatus(state === 'playing' ? 'Ukázka se přehrává.' : 'Přehrávač je připravený.')}
           onFinished={() => setMediaStatus('Ukázka dohrála.')}
-          onError={() => setMediaStatus('Ukázku se nepodařilo načíst.')}
+          onError={(_generation, message) => setMediaStatus(message)}
         />
       )}
       <p className="field-help" role="status" aria-live="polite">{mediaStatus}</p>
       <div className="media-test-controls">
-        <button type="button" className="secondary-button" onClick={() => run('idle')}>Načíst</button>
-        <button type="button" className="secondary-button" onClick={() => capture('start')}>Použít aktuální čas jako začátek</button>
-        <button type="button" className="secondary-button" onClick={() => capture('end')}>Použít aktuální čas jako konec</button>
-        <button type="button" className="primary-button" onClick={() => run('play')}>Přehrát ukázku</button>
-        <button type="button" className="secondary-button" onClick={() => run('stop')}>Stop</button>
-        <button type="button" className="secondary-button" onClick={() => run('replay')}>Pustit znovu</button>
+        <button type="button" className="secondary-button" disabled={disabled} onClick={() => run('idle')}>Načíst</button>
+        <button type="button" className="secondary-button" disabled={disabled} onClick={() => capture('start')}>Použít aktuální čas jako začátek</button>
+        <button type="button" className="secondary-button" disabled={disabled} onClick={() => capture('end')}>Použít aktuální čas jako konec</button>
+        <button type="button" className="primary-button" disabled={disabled} onClick={() => run('play')}>Přehrát ukázku</button>
+        <button type="button" className="secondary-button" disabled={disabled} onClick={() => run('stop')}>Stop</button>
+        <button type="button" className="secondary-button" disabled={disabled} onClick={() => run('replay')}>Pustit znovu</button>
       </div>
     </fieldset>
   );
 }
 
 export function QuestionForm({
-  quizId,
-  onUploadPending,
   slide,
   number,
   disabled,
@@ -362,20 +362,17 @@ export function QuestionForm({
       {type === 'legacy-pl' && <div className="legacy-notice"><strong>Starší typ Pravda / Lež</strong><p>Typ je uzamčený, ale obsah a odpověď můžete upravit bez ztráty původních dat.</p></div>}
       {type === 'legacy' && <div className="legacy-notice"><strong>Obsah obsahuje starší nastavení.</strong><p>Neznámé části zůstanou při uložení beze změny.</p></div>}
       <PromptField {...props} />
-      {quizId && (type === 'image' || type === 'audio') && <MediaUploadField key={slide.id} quizId={quizId} kind={type} disabled={disabled} onPending={onUploadPending} onReady={reference => onChange({ ...slide, [type === 'image' ? 'questionImage' : 'mediaSource']: reference })} />}
+
       {type === 'choice' && <ChoiceFields {...props} />}
       {type === 'free' && <FreeAnswerField {...props} />}
       {type === 'legacy-pl' && <PlAnswerField {...props} />}
       {type === 'legacy' && <FreeAnswerField {...props} />}
       {type === 'image' && (
         <>
-          {parseQuizAsset(slide.questionImage) ? <div data-preflight-field="questionImage"><p>Vlastní obrázek je připravený.</p><button disabled={disabled} type="button" className="text-button" onClick={() => onChange({ ...slide, questionImage: '' })}>Použít adresu obrázku</button></div> : <label className="form-field" data-preflight-field="questionImage">Obrázek otázky *
-            <input disabled={disabled} value={slide.questionImage} placeholder="https://…" onBlur={() => onTouch('questionImage')} onChange={(event) => onChange({ ...slide, questionImage: event.target.value })} />
-            <FieldIssues field="questionImage" issues={issues} visible={showAllIssues || touched.has('questionImage')} />
-          </label>}
+          <MediaUploadField key={slide.id + ":question"} kind="image" label="Obrázek otázky" value={slide.questionImage} disabled={disabled} onReady={value => onChange({ ...slide, questionImage: value })} />
           <label className="toggle-field"><input type="checkbox" disabled={disabled} checked={imageChoices} onChange={(event) => onChange({ ...slide, options: event.target.checked ? ['', '', '', ''] : [], correctAnswer: '' })} /> Výběr z možností</label>
           {imageChoices ? <ChoiceFields {...props} /> : <FreeAnswerField {...props} />}
-          <label className="form-field" data-preflight-field="answerImage">Obrázek ke správné odpovědi<input disabled={disabled} value={slide.answerImage} placeholder="https://…" onChange={(event) => onChange({ ...slide, answerImage: event.target.value })} /></label>
+          <MediaUploadField key={slide.id + ":answer"} kind="image" label="Obrázek odpovědi (soukromý)" value={slide.answerImage} disabled={disabled} onReady={value => onChange({ ...slide, answerImage: value })} />
         </>
       )}
       {(type === 'audio' || type === 'video') && <><FreeAnswerField {...props} /><MediaTimingFields {...props} /></>}

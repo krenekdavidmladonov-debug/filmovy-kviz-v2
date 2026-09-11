@@ -1,5 +1,5 @@
 import { parseQuizAsset } from './media-assets.js';
-import { generatedAgendaOptions, isSafeHttpUrl, youtubeVideoId } from './presentation.js';
+import { generatedAgendaOptions, isSafeHttpUrl, youtubeVideoId, directMediaKind } from './presentation.js';
 import { buildSemanticQuizModel, questionPrompt, semanticQuestionType } from './semantic.js';
 import type {
   EditorQuiz,
@@ -85,8 +85,8 @@ export function validateQuestion(slide: EditorSlide): readonly EditorValidationI
   if (type === 'audio' || type === 'video') {
     if (slide.mediaSource.trim() === '') {
       issues.push(issue('MEDIA_SOURCE_MISSING', 'MEDIA', 'mediaSource', 'Chybí zdroj ukázky.'));
-    } else if (youtubeVideoId(slide.mediaSource) === undefined && !(type === 'audio' && parseQuizAsset(slide.mediaSource))) {
-      issues.push(issue('MEDIA_SOURCE_INVALID', 'MEDIA', 'mediaSource', 'Zdroj není platný YouTube odkaz ani připravené vlastní audio.'));
+    } else if (youtubeVideoId(slide.mediaSource) === undefined && directMediaKind(slide.mediaSource) !== type && !(type === 'audio' && parseQuizAsset(slide.mediaSource))) {
+      issues.push(issue('MEDIA_SOURCE_INVALID', 'MEDIA', 'mediaSource', 'Zdroj není podporovaný audio/video odkaz ani připravené vlastní audio.'));
     }
     if (slide.clipStartSeconds === null) {
       issues.push(issue('CLIP_START_MISSING', 'TIMING', 'clipStartSeconds', 'Chybí začátek ukázky.'));
@@ -102,10 +102,10 @@ export function validateQuestion(slide: EditorSlide): readonly EditorValidationI
       issues.push(issue('CLIP_RANGE_INVALID', 'TIMING', 'clipEndSeconds', 'Konec ukázky musí být po začátku.'));
     }
   }
-  if (slide.answerImage.trim() !== '' && !isSafeHttpUrl(slide.answerImage)) {
+  if (slide.answerImage.trim() !== '' && !isSafeHttpUrl(slide.answerImage) && !parseQuizAsset(slide.answerImage)) {
     issues.push(issue('ANSWER_IMAGE_INVALID', 'IMAGE', 'answerImage', 'Obrázek odpovědi nemá platnou HTTP(S) adresu.', 'warning'));
   }
-  if (slide.backgroundImage.trim() !== '' && !isSafeHttpUrl(slide.backgroundImage)) {
+  if (slide.backgroundImage.trim() !== '' && !isSafeHttpUrl(slide.backgroundImage) && !parseQuizAsset(slide.backgroundImage)) {
     issues.push(issue('BACKGROUND_IMAGE_INVALID', 'IMAGE', 'backgroundImage', 'Pozadí nemá platnou HTTP(S) adresu.', 'warning'));
   }
   return issues;

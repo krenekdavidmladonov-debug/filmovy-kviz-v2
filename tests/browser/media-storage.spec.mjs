@@ -18,12 +18,12 @@ test('synthetic owned image/audio upload, editor preview, immutable projector im
     const pendingUpload=new Promise(resolve=>{releaseUpload=resolve;});
     await page.route('**/finalizeQuizMediaUpload',async route=>{await pendingUpload;await route.continue();});
     await page.locator('[data-preflight-field="prompt"] textarea').fill('Syntetický obrázek upravený');
-    await page.getByLabel('Nahrát vlastní obrázek').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:syntheticImage()});
+    await page.getByLabel('Obrázek otázky — soubor', {exact:true}).setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:syntheticImage()});
     await expect(page.getByRole('button',{name:'Uložit',exact:true})).toBeDisabled();
     await page.keyboard.press('Control+s');
     expect((await f.quizRef.collection('slides').doc(f.ids.image).get()).data().text).toBe('Syntetický obrázek');
     releaseUpload();
-    await expect(page.getByText('Vlastní obrázek je připravený.',{exact:true})).toBeVisible();
+    await expect(page.getByText('Ověřené médium tohoto kvízu', {exact:false}).first()).toBeVisible();
     const preview=page.locator('.round-editor-preview img');
     await expect.poll(()=>preview.evaluate(img=>img.naturalWidth)).toBe(8);
     await page.getByRole('button',{name:'Uložit',exact:true}).click();
@@ -31,8 +31,10 @@ test('synthetic owned image/audio upload, editor preview, immutable projector im
     await expect(page.locator('.save-state')).toHaveText('Uloženo');
     phase='audio upload';console.log('Media browser: image saved');
     await page.locator('.outline-question').filter({hasText:'Syntetické audio'}).click();
-    await page.getByLabel('Nahrát vlastní audio').setInputFiles({name:'synthetic.wav',mimeType:'audio/wav',buffer:syntheticAudio()});
-    await expect(page.getByText('Vlastní audio je připravené.',{exact:true})).toBeVisible();
+    await page.getByLabel('Zdroj ukázky — soubor', {exact:true}).setInputFiles({name:'synthetic.wav',mimeType:'audio/wav',buffer:syntheticAudio()});
+    await expect(page.getByText('Ověřené médium tohoto kvízu', {exact:false}).first()).toBeVisible();
+    await page.locator('[data-preflight-field="clipStartSeconds"] input').fill('0:01');
+    await page.locator('[data-preflight-field="clipEndSeconds"] input').fill('0:02');
     await page.getByRole('button',{name:'Uložit',exact:true}).click();
     await expect.poll(async()=>(await f.quizRef.collection('slides').doc(f.ids.audio).get()).data().mediaSource).toMatch(/^quiz-asset:/);
     await expect(page.locator('.save-state')).toHaveText('Uloženo');
@@ -48,7 +50,7 @@ test('synthetic owned image/audio upload, editor preview, immutable projector im
     await expect.poll(()=>page.locator('audio').evaluate(a=>a.paused)).toBe(true);
     await expect(page.getByText('Ukázka je zastavená.',{exact:true})).toBeVisible();
     expect(await page.evaluate(()=>window.__FILMOVY_KVIZ_MEDIA_DEBUG__.peakPlayers)).toBe(1);
-    await page.screenshot({path:'.local-data/night-c/editor-audio.png'});
+    await page.screenshot({path:'.local-data/media-authoring/editor-audio.png'});
     phase='snapshot/projector';console.log('Media browser: editor audio completed');
     await f.lock();const sessionId=await f.live();
     await new Promise((resolve,reject)=>{unsubscribe=f.db.doc('sessions/'+sessionId).onSnapshot(snapshot=>{playbackStates.push(snapshot.data()?.mediaPlaybackState);resolve();},reject);});
@@ -60,7 +62,7 @@ test('synthetic owned image/audio upload, editor preview, immutable projector im
     const projected=projector.locator('.question-image-frame img');
     await expect.poll(()=>projected.evaluate(img=>img.naturalWidth)).toBe(8);
     expect(await projected.evaluate(img=>getComputedStyle(img).objectFit)).toBe('contain');
-    await projector.screenshot({path:'.local-data/night-c/projector-image.png'});
+    await projector.screenshot({path:'.local-data/media-authoring/projector-image.png'});
     await expect(projector.getByText('Soukromá odpověď',{exact:true})).toHaveCount(0);
     phase='moderator audio';
     await f.navigate(sessionId,4);await expect(projector.getByText('Syntetické audio',{exact:true})).toBeVisible();
@@ -88,5 +90,5 @@ test('synthetic owned image/audio upload, editor preview, immutable projector im
     expect(await projector.evaluate(()=>window.__FILMOVY_KVIZ_MEDIA_DEBUG__.peakPlayers)).toBe(1);
     await f.navigate(sessionId,6);await expect(projector.locator('audio')).toHaveCount(0);
     expect(await projector.evaluate(()=>window.__FILMOVY_KVIZ_MEDIA_DEBUG__.activePlayers)).toBe(0);
-  } catch(error) { console.error('Media browser failed during '+phase); if(phase!=='login') { console.error((await page.locator('body').innerText()).slice(0,9000)); await page.screenshot({path:'.local-data/night-c/browser-failure.png'}); } throw error; } finally {unsubscribe?.();await projectorContext?.close();await context.close();await f.dispose();}
+  } catch(error) { console.error('Media browser failed during '+phase); if(phase!=='login') { console.error((await page.locator('body').innerText()).slice(0,9000)); await page.screenshot({path:'.local-data/media-authoring/browser-failure.png'}); } throw error; } finally {unsubscribe?.();await projectorContext?.close();await context.close();await f.dispose();}
 });

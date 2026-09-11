@@ -6,6 +6,7 @@ import { router } from './app/router';
 import { AuthProvider } from './auth/AuthProvider';
 import { productConfig } from './config/product';
 import './styles/global.css';
+import './styles/editor.css';
 
 const rootElement = document.getElementById('root');
 const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');

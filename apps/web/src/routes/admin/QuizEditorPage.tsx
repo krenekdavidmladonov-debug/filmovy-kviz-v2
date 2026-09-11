@@ -1,3 +1,4 @@
+import { MediaAuthoringContext } from '../../features/media/MediaUploadField';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useBlocker, useParams, useSearchParams } from 'react-router-dom';
 
@@ -303,6 +304,7 @@ export function QuizEditorPage() {
     if (quiz === null || readOnly || semantic === null || uploadPending.current) return null;
     const persistedDraft = draft === null ? undefined : quiz.slides.find((slide) => slide.id === draft.id);
     if (draft?.isQuestion && hasSaveBlockingIssues(draft, persistedDraft)) {
+
       setShowReadiness(true);
       setTouched(new Set(['prompt', 'options', 'correctAnswer', 'questionImage', 'mediaSource', 'clipStartSeconds', 'clipEndSeconds']));
       setError('Před uložením opravte označené údaje.');
@@ -441,7 +443,7 @@ export function QuizEditorPage() {
   const structuralDisabled = readOnly || saving || dirty || uploading;
 
   return (
-    <article className="round-first-editor">
+    <MediaAuthoringContext.Provider value={{ quizId: quiz.id, onPending: onUploadPending }}><article className="round-first-editor">
       {(pendingSelection !== null || blocker.state === 'blocked') && (
         <UnsavedChangesDialog
           busy={saving || uploading}
@@ -604,6 +606,6 @@ export function QuizEditorPage() {
           <EditorPreview slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer} onShowAnswer={setShowAnswer} />
         )}
       </section>
-    </article>
+    </article></MediaAuthoringContext.Provider>
   );
 }

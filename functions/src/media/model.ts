@@ -32,7 +32,8 @@ export function mediaByteRange(header: string | undefined, size: number): { star
 // Exact current publication only: ordinary AUDIO has no public source; unrevealed answer is absent.
 export function publicMediaAllowed(publication: Record<string, unknown> | undefined, reference: string, kind?: string): boolean {
   if (!publication || publication.status !== 'active' || publication.interimResults || publication.finalReveal) return false;
-  return ((kind === undefined || kind === 'image') && ['image','picture','photo'].includes(String(publication.slideKind)) && publication.questionImage === reference)
+  return ((kind === undefined || kind === 'image') && publication.backgroundImage === reference)
+    || ((kind === undefined || kind === 'image') && ['image','picture','photo'].includes(String(publication.slideKind)) && publication.questionImage === reference)
     || ((kind === undefined || kind === 'image') && publication.answerRevealed === true && publication.answerImage === reference)
     || ((kind === undefined || kind === 'audio') && publication.renderMode === 'recap' && ['audio','music'].includes(String(publication.slideKind)) && publication.mediaSource === reference);
 }
@@ -43,10 +44,10 @@ export async function assertQuizAssets(transaction: Transaction, db: Firestore, 
       const value = slide[field];
       if (typeof value !== 'string' || !value.startsWith('quiz-asset:')) continue;
       const asset = parseQuizAsset(value);
-      if (!asset || asset.quizId !== quizId || (field !== 'questionImage' && field !== 'mediaSource')
+      if (!asset || asset.quizId !== quizId
         || (field === 'mediaSource' && !['audio','music'].includes(String(slide.kind)))
         || (field === 'questionImage' && !['image','picture','photo'].includes(String(slide.kind)))) throw new HttpsError('invalid-argument', 'Asset nepatří do této otázky a kvízu.');
-      const expectedKind = field === 'questionImage' ? 'image' : 'audio';
+      const expectedKind = field === 'mediaSource' ? 'audio' : 'image';
       if (sources.has(value) && sources.get(value) !== expectedKind) throw new HttpsError('invalid-argument', 'Asset má neslučitelné role.');
       sources.set(value, expectedKind);
     }
@@ -55,6 +56,6 @@ export async function assertQuizAssets(transaction: Transaction, db: Firestore, 
   for (const [source, kind] of sources) {
     const asset = parseQuizAsset(source)!;
     const data = (await transaction.get(db.doc('quizzes/' + quizId + '/mediaAssets/' + asset.assetId))).data();
-    if (!data || data.status !== 'ready' || data.quizId !== quizId || data.kind !== kind || !validOwnedMedia(data.kind, data.contentType, data.size)) throw new HttpsError('failed-precondition', 'Médium ještě není připravené pro otázku.');
+    if (!data || typeof data.generation !== 'string' || data.status !== 'ready' || data.quizId !== quizId || data.kind !== kind || !validOwnedMedia(data.kind, data.contentType, data.size)) throw new HttpsError('failed-precondition', 'Médium ještě není připravené pro otázku.');
   }
 }

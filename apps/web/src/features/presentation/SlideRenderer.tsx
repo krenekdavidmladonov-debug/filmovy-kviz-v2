@@ -89,9 +89,6 @@ export function SlideRenderer({
   const mediaFailed = mediaCommand === 'error'
     || (locallyFailed?.generation === mediaGeneration && locallyFailed.source === model.mediaSource);
   const mediaPlan = projectorMediaPlan(model, mediaCommand, mediaPlaybackState, mediaFinished, mediaFailed);
-  const backgroundStyle = model.backgroundImage && isSafeHttpUrl(model.backgroundImage)
-    ? { backgroundImage: `url("${model.backgroundImage.replaceAll('"', '%22')}")` }
-    : undefined;
   const showAnswer = model.renderMode === 'recap' && model.revealedAnswer !== undefined;
   const displayedAnswer = model.isLegacyPl && model.revealedAnswer !== undefined
     ? formatPlAnswer(model.revealedAnswer)
@@ -141,7 +138,7 @@ export function SlideRenderer({
           <section className="slide-answer">
             <span>SPRÁVNÁ ODPOVĚĎ</span>
             <strong>{displayedAnswer}</strong>
-            {model.answerImage && isSafeHttpUrl(model.answerImage) && <img src={model.answerImage} alt="Obrázek odpovědi" />}
+            {model.answerImage && <AssetImage source={model.answerImage} alt="Obrázek odpovědi" sessionId={mediaSessionId} />}
           </section>
         )}
       </div>
@@ -167,7 +164,7 @@ export function SlideRenderer({
     );
   } else if (model.contentKind === 'video' && mediaPlan.mountPlayer && model.mediaSource) {
     content = (
-      <div className="video-presentation">
+      <div className="video-presentation"><QuestionCopy title={model.title} text={model.text} />
         <MediaPlayer
             sessionId={mediaSessionId}
           source={model.mediaSource}
@@ -197,7 +194,7 @@ export function SlideRenderer({
 
   return (
     <article className={`slide-renderer mode-${visibleMode} kind-${model.contentKind}${compact ? ' is-compact' : ''}`}>
-      <div className="slide-background" style={backgroundStyle} aria-hidden="true" />
+      <div className="slide-background" aria-hidden="true">{model.backgroundImage && <AssetImage source={model.backgroundImage} alt="" sessionId={mediaSessionId} />}</div>
       <div className="slide-background-overlay" style={{ opacity: model.backgroundOverlay / 100 }} aria-hidden="true" />
       <div className="slide-safe-area">
         <header className="slide-brand"><span>{quizTitle}</span><span>{productConfig.name}</span></header>
