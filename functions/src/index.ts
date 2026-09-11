@@ -18,6 +18,7 @@ export {
 } from './live/callables.js';
 
 export {
+  createQuiz,
   createQuizSlide,
   deleteQuizSlide,
   duplicateQuizSlide,

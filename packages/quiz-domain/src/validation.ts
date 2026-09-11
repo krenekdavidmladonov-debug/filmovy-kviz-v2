@@ -115,6 +115,26 @@ export function hasBlockingIssues(slide: EditorSlide): boolean {
   return validateQuestion(slide).some((item) => item.severity === 'error');
 }
 
+function isImportedUnsetTiming(slide: EditorSlide): boolean {
+  return slide.hasLegacyData
+    && slide.presentation.videoStart === 0
+    && slide.presentation.videoEnd === 0
+    && slide.clipStartSeconds === null
+    && slide.clipEndSeconds === null;
+}
+
+export function hasSaveBlockingIssues(slide: EditorSlide, persistedSlide?: EditorSlide): boolean {
+  const preserveImportedUnsetTiming = persistedSlide !== undefined
+    && persistedSlide.id === slide.id
+    && persistedSlide.kind === slide.kind
+    && persistedSlide.mediaSource === slide.mediaSource
+    && isImportedUnsetTiming(persistedSlide)
+    && isImportedUnsetTiming(slide);
+  return validateQuestion(slide).some((item) => item.severity === 'error'
+    && !(preserveImportedUnsetTiming
+      && (item.code === 'CLIP_START_MISSING' || item.code === 'CLIP_END_MISSING')));
+}
+
 const categories: readonly PreflightCategory[] = [
   'STRUCTURE', 'ANSWER', 'MEDIA', 'TIMING', 'IMAGE', 'LEGACY', 'PROJECTOR',
 ];
