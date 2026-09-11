@@ -351,6 +351,82 @@ function writeRepairFlowQuiz(batch: WriteBatch, quizId: string): void {
   });
 }
 
+function writeEditorCoreImportedQuiz(batch: WriteBatch, quizId: string): void {
+  const db = getFirestore();
+  const quizRef = db.collection('quizzes').doc(quizId);
+  const timestamp = Timestamp.fromDate(new Date('2026-09-04T08:00:00.000Z'));
+  const round = {
+    kind: 'round', isQuestion: false, title: 'Syntetické importované kolo', text: '',
+    options: [], correctAnswer: '', media: [], presentation: {},
+  };
+  const question = {
+    kind: 'video', isQuestion: true, title: 'Importovaná video otázka', text: 'Původní syntetické zadání',
+    moderatorNote: 'Soukromá importovaná poznámka',
+    options: [],
+    correctAnswer: 'Syntetická správná odpověď',
+    media: [{
+      role: 'prompt', kind: 'video', value: 'test__local', opaqueVendorField: 'preserve-only',
+    }],
+    presentation: {
+      videoStart: 0, videoEnd: 0, sourceQuestionNumber: '1/1',
+      opaquePresentationField: { preserve: true },
+    },
+    mediaSource: 'test__local',
+    clipStartSeconds: 0,
+    legacy: {
+      source: 'synthetic-import-fixture',
+      raw: { privateAnswerSentinel: 'preserve-only', unknownArray: [1, 2, 3] },
+    },
+    opaqueTopLevelField: { preserve: true },
+  };
+
+  batch.set(quizRef, {
+    schemaVersion: 1,
+    title: 'Syntetický importní editor E2E',
+    description: 'Lokální fixture s historickým timing sentinel tvarem.',
+    status: 'draft',
+    revision: 0,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    createdBy: seedActor,
+    updatedBy: seedActor,
+    slideCount: 2,
+    roundCount: 1,
+    questionCount: 1,
+  });
+  batch.set(quizRef.collection('slides').doc('slide-001'), {
+    ...round, position: 1, roundId: 'imported-round', roundTitle: round.title,
+  });
+  batch.set(quizRef.collection('slides').doc('slide-002'), {
+    ...question, position: 2, roundId: 'imported-round', roundTitle: round.title,
+    questionNumber: 1, questionCount: 1,
+  });
+  const roundRef = quizRef.collection('rounds').doc('imported-round');
+  batch.set(roundRef, {
+    title: round.title, type: 'classic', position: 1, slideCount: 2, questionCount: 1,
+  });
+  batch.set(roundRef.collection('questions').doc('slide-002'), {
+    type: 'video', prompt: question.text, options: question.options,
+    correctAnswer: question.correctAnswer, position: 1, sourceSlideId: 'slide-002',
+  });
+
+  const snapshotRef = db.collection('quizSnapshots').doc('editor-core-snapshot-sentinel');
+  batch.set(snapshotRef, {
+    sourceQuizId: quizId,
+    sourceQuizRevision: 0,
+    title: 'Neměnný syntetický snapshot',
+    slideCount: 1,
+    roundCount: 1,
+    questionCount: 1,
+    createdAt: timestamp,
+    immutableSentinel: { preserve: ['root', 42] },
+  });
+  batch.set(snapshotRef.collection('slides').doc('slide-002'), {
+    ...question, position: 1, roundId: 'imported-round', roundTitle: round.title,
+    immutableSentinel: { preserve: ['slide', 84] },
+  });
+}
+
 async function clearLiveFlowFixture(db: Firestore, quizId: string): Promise<void> {
   const quizRef = db.collection('quizzes').doc(quizId);
   const [rounds, slides] = await Promise.all([
@@ -380,6 +456,7 @@ async function seed(): Promise<void> {
     await clearLiveFlowFixture(db, 'preflight-repair-flow-e2e');
     await clearLiveFlowFixture(db, 'preflight-repair-readonly-e2e');
     await clearLiveFlowFixture(db, 'events-toctou-e2e');
+    await clearLiveFlowFixture(db, 'editor-core-imported-e2e');
     const batch = db.batch();
     for (const quiz of quizzes) {
       writeQuiz(batch, quiz);
@@ -394,8 +471,9 @@ async function seed(): Promise<void> {
     writeRepairFlowQuiz(batch, 'preflight-repair-flow-e2e');
     writeRepairFlowQuiz(batch, 'preflight-repair-readonly-e2e');
     writePreflightQuiz(batch, 'events-toctou-e2e', 'ready');
+    writeEditorCoreImportedQuiz(batch, 'editor-core-imported-e2e');
     await batch.commit();
-    console.log(`Seeded ${quizzes.length} library quizzes and 10 isolated E2E fixtures into ${projectId}.`);
+    console.log(`Seeded ${quizzes.length} library quizzes and 11 isolated E2E fixtures into ${projectId}.`);
   } finally {
     await deleteApp(app);
   }

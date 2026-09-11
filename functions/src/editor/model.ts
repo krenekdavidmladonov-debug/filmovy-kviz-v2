@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { QuizEditorError } from './errors.js';
 import type {
   EditorMediaInput,
@@ -36,6 +38,17 @@ export function assertRevision(data: Record<string, unknown>, expected: number):
     throw new QuizEditorError('aborted', 'The quiz changed in another editor window.');
   }
   return current;
+}
+
+export function quizCreationIdentity(actorUid: string, requestId: string, title: string): {
+  readonly quizId: string;
+  readonly fingerprint: string;
+} {
+  const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  return {
+    quizId: `quiz_${digest([actorUid, requestId])}`,
+    fingerprint: digest({ title }),
+  };
 }
 
 export function isQuestionKind(kind: EditorSlideKind): boolean {
@@ -174,8 +187,16 @@ export function applyKnownSlideUpdate(
   applyOptionalText(result, current, 'answerImage', input.answerImage);
   applyOptionalText(result, current, 'mediaSource', input.mediaSource);
   applyOptionalNumber(result, current, 'backgroundOverlay', input.backgroundOverlay);
-  applyOptionalNumber(result, current, 'clipStartSeconds', input.clipStartSeconds);
-  applyOptionalNumber(result, current, 'clipEndSeconds', input.clipEndSeconds);
+  const preserveLegacyZeroTiming = input.clipStartSeconds === null
+    && input.clipEndSeconds === null
+    && input.presentation.videoStart === 0
+    && input.presentation.videoEnd === 0
+    && (current.clipStartSeconds === undefined || current.clipStartSeconds === 0)
+    && current.clipEndSeconds === undefined;
+  if (!preserveLegacyZeroTiming) {
+    applyOptionalNumber(result, current, 'clipStartSeconds', input.clipStartSeconds);
+    applyOptionalNumber(result, current, 'clipEndSeconds', input.clipEndSeconds);
+  }
   return result;
 }
 

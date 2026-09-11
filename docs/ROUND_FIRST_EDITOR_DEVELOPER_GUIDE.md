@@ -50,6 +50,7 @@ The semantic model is derived on read. The server mutates the stored lossless mo
 
 | File | Responsibility |
 | --- | --- |
+| `apps/web/src/routes/admin/QuizCreatePage.tsx` | Admin-only titled empty-quiz creation and retry-safe handoff into the editor. |
 | `apps/web/src/routes/admin/QuizEditorPage.tsx` | Focused shell, selection, draft lifecycle, Save, navigation blocking, and structural orchestration. |
 | `apps/web/src/features/editor/semanticModel.ts` | Quiz/round/question facade, type mapping, indexing, local numbering, and insertion point. |
 | `apps/web/src/features/editor/EditorOutline.tsx` | Human-readable structure and create picker. |
@@ -116,6 +117,8 @@ Question numbers are never stored as user input. They are derived from order ins
 
 ## Draft and Save lifecycle
 
+The library's admin-only **Nový kvíz** action opens `/admin/quizzes/new`. One explicit submit calls `createQuiz` with a tab-session request ID that remains stable across retry, double-click, and a page reload after an ambiguous response. The Function derives the quiz ID from the actor and request ID, creates only an empty private draft root, and returns that same root for an identical retry. Reusing the request ID with a different title fails closed. The token is removed after confirmed success; no quiz content is stored with it. Success navigates to the existing editor; the first round and question still use the normal revisioned slide workflow. No placeholder content or public state is created.
+
 The page holds one selected entity and one mutable local draft. Changes update the preview immediately and mark the session dirty. Nothing persists until the explicit Save action.
 
 Save dispatch depends on selection:
@@ -141,6 +144,7 @@ The router blocker handles ordinary SPA navigation and browser Back. `beforeunlo
 
 | Callable | Effect |
 | --- | --- |
+| `createQuiz` | Idempotently creates one titled, empty private draft root for an admin/request pair. |
 | `updateQuizMetadata` | Updates validated quiz title/description. |
 | `updateQuizSlide` | Applies a known-field patch to one authoritative stored slide. |
 | `createQuizSlide` | Creates a fresh slide identity at a validated position. |
@@ -157,11 +161,11 @@ The router blocker handles ordinary SPA navigation and browser Back. `beforeunlo
 Every callable:
 
 - requires an authenticated `admin` custom claim;
-- validates IDs, kind-specific fields, ranges, destinations, and revision;
+- validates its strict input shape and bounded fields;
 - reads the authoritative server snapshot inside a transaction;
-- rejects oversized unsafe transactions;
-- increments the quiz revision and refreshes counters/order;
 - returns only IDs, counters, and revision—not slide content or answers.
+
+Structural mutations reject oversized unsafe transactions. Existing-quiz mutations also require the caller's exact revision, increment it, and refresh counters/order. `createQuiz` has no prior revision to compare: it creates `revision: 0` and zero counters, or returns the same already-created root only when the actor-bound request ID and title fingerprint match.
 
 Moderators have private read access for their disabled editor view but cannot call these mutations.
 
@@ -179,6 +183,8 @@ The merge behavior preserves:
 - explicit empty V1 fields where their presence is meaningful;
 - correct-answer values unless the authorized form explicitly changes them.
 
+Imported V1 data may use `presentation.videoStart: 0` and `presentation.videoEnd: 0` as an unset sentinel while retaining a top-level zero start and no top-level end. The shared mapper must expose that exact shape as `clipStartSeconds: null` / `clipEndSeconds: null`; on an unrelated edit the server must leave the existing stored timing-key presence and legacy presentation object unchanged. Do not reinterpret arbitrary invalid media ranges as this sentinel.
+
 Do not guess the meaning of an unknown field. Preserve it privately, expose a conservative warning if needed, and add a synthetic regression fixture before introducing a supported mapping.
 
 ## Choice answer consistency
@@ -195,7 +201,11 @@ Human time parsing accepts minutes and seconds in `mm:ss` or `mm:ss.s` form and 
 - a blank value;
 - an invalid value.
 
-Audio/video question mode requires finite start and end values with `start >= 0` and `end > start`. Invalid draft input must not fall back to old stored timing and must block Save. The test player is private moderator UI; it does not change the projector media protocol.
+Audio/video question mode requires finite start and end values with `start >= 0` and `end > start`. Invalid new or edited timing must not fall back to old stored timing and must block Save. A persisted imported slide with the exact legacy `0/0` unset sentinel may save an unrelated text/answer edit while its media source and timing remain unchanged; this does not relax preflight, which continues to block live readiness until valid timing is supplied. The test player is private moderator UI; it does not change the projector media protocol.
+
+## Background support boundary
+
+The normalized slide model and shared `SlideRenderer` already support a safe HTTP(S) `backgroundImage` rendered with cover semantics behind content plus `backgroundOverlay`. Editor authoring currently exposes only a URL field and overlay slider through `VisualFields`, and Choice questions do not mount that block. There is no **Vybrat / Změnit / Odebrat** background control and no owned-background picker/upload flow. Treat those as a separately designed media/ownership slice; do not widen the editor save fix into a new media module.
 
 ## Preview boundary
 
@@ -239,6 +249,8 @@ The expected revision is stale. Reload the quiz and repeat the edit deliberately
 ### A migrated value disappears after Save
 
 Treat this as a data-loss defect. Reproduce with a sanitized synthetic fixture, inspect known-field merge behavior, and stop migrated writes until validate/dry-run/round-trip checks pass again.
+
+For imported `0/0` timing, verify all three layers: the browser model must treat the exact legacy sentinel as unset, the editor save gate may ignore only the two missing-timing issues for the same persisted slide with unchanged media/timing, and the trusted patch must preserve the original key presence on unrelated saves. Preflight must remain blocked, and accepting zero-length clips globally would hide other invalid data rather than fix compatibility.
 
 ### Preview differs from projector
 

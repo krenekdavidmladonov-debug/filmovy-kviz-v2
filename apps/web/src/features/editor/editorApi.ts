@@ -40,6 +40,9 @@ async function invoke(name: string, data: Record<string, unknown>): Promise<Edit
   }
 }
 
+export const createQuiz = (title: string, requestId: string) => (
+  invoke('createQuiz', { title, requestId })
+);
 export const updateQuizMetadata = (quizId: string, revision: number, title: string, description: string) => (
   invoke('updateQuizMetadata', { quizId, expectedRevision: revision, quiz: { title, description } })
 );
