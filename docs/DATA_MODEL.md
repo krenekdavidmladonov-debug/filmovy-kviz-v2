@@ -14,11 +14,16 @@ Quiz metadata: `title`, `description`, `status` (`draft`, `ready`, `archived`), 
 
 Current required fields:
 
+- `schemaVersion: 1` for newly created native roots;
 - `title`, `description`, `status`;
 - `createdAt`, `updatedAt` as Firestore timestamps;
 - `createdBy`, `updatedBy` as trusted actor identifiers;
 - `slideCount`, `roundCount`, `questionCount` as denormalized list counters maintained by trusted server/editor workflows.
 - `revision` as a monotonic non-negative integer maintained by trusted editor workflows. A missing revision on an untouched migrated document is interpreted as `0` and initialized on its first mutation.
+
+The admin-only `createQuiz` operation creates an empty private draft with revision and counters at zero. Its ID is deterministic for the authenticated admin UID and requestId; a private creationFingerprint over the normalized title makes identical retries idempotent and rejects reuse for different content. It creates no slides, rounds, snapshots or public documents. Audit fields are server-owned.
+
+Imported presentation timing of exactly 0/0, with top-level start absent or zero and no top-level end, maps to unset timing. Saving an unrelated edit preserves those original timing keys. Preflight remains strict.
 
 V1-migrated drafts may additionally contain private `legacy: { source, metadata }`. This field preserves V1 quiz metadata that does not yet have a native V2 field and is never copied into a public projection.
 

@@ -44,6 +44,11 @@ connectFunctionsEmulator(functions, functionsEndpoint.host, functionsEndpoint.po
 const quizId = 'quiz-editor-e2e';
 const quizRef = doc(db, 'quizzes', quizId);
 const slideRef = (id) => doc(db, 'quizzes', quizId, 'slides', id);
+const importedQuizId = 'editor-core-imported-e2e';
+const importedQuizRef = doc(db, 'quizzes', importedQuizId);
+const importedSlideRef = doc(db, 'quizzes', importedQuizId, 'slides', 'slide-002');
+const snapshotRef = doc(db, 'quizSnapshots', 'editor-core-snapshot-sentinel');
+const snapshotSlideRef = doc(db, 'quizSnapshots', 'editor-core-snapshot-sentinel', 'slides', 'slide-002');
 const invoke = async (name, data) => (await httpsCallable(functions, name)(data)).data;
 
 async function expectFunctionError(action, code) {
@@ -69,11 +74,36 @@ function editorSlide(overrides = {}) {
   };
 }
 
+function importedEditorSlide(text) {
+  return editorSlide({
+    kind: 'video',
+    title: 'Importovaná video otázka',
+    text,
+    moderatorNote: 'Soukromá importovaná poznámka',
+    options: [],
+    correctAnswer: 'Syntetická správná odpověď',
+    media: [{
+      sourceIndex: 0, role: 'prompt', kind: 'video', source: 'test__local',
+    }],
+    mediaSource: 'test__local',
+    presentation: {
+      videoStart: 0, videoEnd: 0, audioTrigger: null,
+      backgroundOverlay: null, answerOverlay: null, sourceQuestionNumber: '1/1',
+    },
+    clipStartSeconds: null,
+    clipEndSeconds: null,
+  });
+}
+
 async function orderedSlides() {
   return (await getDocs(query(collection(quizRef, 'slides'), orderBy('position')))).docs;
 }
 
 async function run() {
+  await expectFunctionError(
+    () => invoke('createQuiz', { title: 'Denied', requestId: 'anonymous-create' }),
+    'functions/unauthenticated',
+  );
   await expectFunctionError(
     () => invoke('updateQuizMetadata', { quizId, expectedRevision: 0, quiz: { title: 'Denied', description: '' } }),
     'functions/unauthenticated',
@@ -87,6 +117,10 @@ async function run() {
 
   await signInWithEmailAndPassword(auth, 'user@example.test', 'LocalQuiz123!');
   await expectFunctionError(
+    () => invoke('createQuiz', { title: 'Denied', requestId: 'normal-user-create' }),
+    'functions/permission-denied',
+  );
+  await expectFunctionError(
     () => invoke('updateQuizMetadata', { quizId, expectedRevision: 0, quiz: { title: 'Denied', description: '' } }),
     'functions/permission-denied',
   );
@@ -95,6 +129,10 @@ async function run() {
   await signInWithEmailAndPassword(auth, 'moderator@example.test', 'LocalQuiz123!');
   assert.equal((await getDoc(quizRef)).exists(), true);
   assert.equal((await getDoc(slideRef('slide-002'))).exists(), true);
+  await expectFunctionError(
+    () => invoke('createQuiz', { title: 'Denied', requestId: 'moderator-create' }),
+    'functions/permission-denied',
+  );
   await expectFunctionError(
     () => invoke('updateQuizSlide', { quizId, slideId: 'slide-002', expectedRevision: 0, slide: editorSlide() }),
     'functions/permission-denied',
@@ -111,6 +149,166 @@ async function run() {
   await assert.rejects(updateDoc(quizRef, { title: 'Direct write must fail' }), /permission-denied/u);
   const publicBefore = await getDoc(doc(db, 'publicSessions', 'quiz-editor-e2e'));
   assert.equal(publicBefore.exists(), false);
+  const snapshotBefore = JSON.stringify({
+    root: (await getDoc(snapshotRef)).data(),
+    slide: (await getDoc(snapshotSlideRef)).data(),
+  });
+
+  const importedBefore = (await getDoc(importedSlideRef)).data();
+  const importedAnswerBefore = importedBefore.correctAnswer;
+  const importedMediaBefore = JSON.parse(JSON.stringify(importedBefore.media));
+  const importedLegacyBefore = JSON.parse(JSON.stringify(importedBefore.legacy));
+  const importedPresentationBefore = JSON.parse(JSON.stringify(importedBefore.presentation));
+  const importedFirstSave = await invoke('updateQuizSlide', {
+    quizId: importedQuizId,
+    slideId: 'slide-002',
+    expectedRevision: 0,
+    slide: importedEditorSlide('První bezpečně uložené syntetické zadání'),
+  });
+  assert.equal(importedFirstSave.revision, 1);
+  const importedAfterFirstReload = (await getDoc(importedSlideRef)).data();
+  assert.equal(importedAfterFirstReload.text, 'První bezpečně uložené syntetické zadání');
+  assert.equal(importedAfterFirstReload.correctAnswer, importedAnswerBefore);
+  assert.deepEqual(importedAfterFirstReload.media, importedMediaBefore);
+  assert.deepEqual(importedAfterFirstReload.legacy, importedLegacyBefore);
+  assert.deepEqual(importedAfterFirstReload.presentation, importedPresentationBefore);
+  assert.equal(importedAfterFirstReload.clipStartSeconds, 0);
+  assert.equal(Object.hasOwn(importedAfterFirstReload, 'clipEndSeconds'), false);
+  const importedSecondSave = await invoke('updateQuizSlide', {
+    quizId: importedQuizId,
+    slideId: 'slide-002',
+    expectedRevision: 1,
+    slide: importedEditorSlide('Druhé bezpečně uložené syntetické zadání'),
+  });
+  assert.equal(importedSecondSave.revision, 2);
+  assert.equal((await getDoc(importedSlideRef)).data().text, 'Druhé bezpečně uložené syntetické zadání');
+  assert.equal(
+    (await getDoc(doc(db, 'quizzes', importedQuizId, 'rounds', 'imported-round', 'questions', 'slide-002'))).data().prompt,
+    'Druhé bezpečně uložené syntetické zadání',
+  );
+  await expectFunctionError(
+    () => invoke('updateQuizSlide', {
+      quizId: importedQuizId,
+      slideId: 'slide-002',
+      expectedRevision: 1,
+      slide: importedEditorSlide('Konfliktní syntetické zadání'),
+    }),
+    'functions/aborted',
+  );
+
+  const createRequestId = `editor-core-create-${Date.now().toString(36)}`;
+  const [createdQuiz, concurrentCreateRetry] = await Promise.all([
+    invoke('createQuiz', {
+      title: '  Nový syntetický kvíz  ',
+      requestId: createRequestId,
+    }),
+    invoke('createQuiz', {
+      title: 'Nový syntetický kvíz',
+      requestId: createRequestId,
+    }),
+  ]);
+  assert.deepEqual(concurrentCreateRetry, createdQuiz);
+  const createdQuizId = createdQuiz.quizId;
+  const createdQuizRef = doc(db, 'quizzes', createdQuizId);
+  assert.deepEqual(createdQuiz, {
+    quizId: createdQuizId, revision: 0, slideCount: 0, questionCount: 0, roundCount: 0,
+  });
+  const createdRoot = (await getDoc(createdQuizRef)).data();
+  assert.equal(createdRoot.title, 'Nový syntetický kvíz');
+  assert.equal(createdRoot.description, '');
+  assert.equal(createdRoot.status, 'draft');
+  assert.equal(createdRoot.schemaVersion, 1);
+  assert.equal(createdRoot.createdBy, auth.currentUser.uid);
+  assert.equal(createdRoot.updatedBy, auth.currentUser.uid);
+  assert.equal(typeof createdRoot.creationFingerprint, 'string');
+  assert.equal((await getDocs(collection(createdQuizRef, 'slides'))).empty, true);
+  assert.equal((await getDocs(collection(createdQuizRef, 'rounds'))).empty, true);
+
+  const createdQuizRetry = await invoke('createQuiz', {
+    title: 'Nový syntetický kvíz',
+    requestId: createRequestId,
+  });
+  assert.deepEqual(createdQuizRetry, createdQuiz);
+  await expectFunctionError(
+    () => invoke('createQuiz', { title: 'Jiný syntetický kvíz', requestId: createRequestId }),
+    'functions/already-exists',
+  );
+
+  const newRound = await invoke('createQuizSlide', {
+    quizId: createdQuizId,
+    expectedRevision: 0,
+    position: 1,
+    slide: editorSlide({
+      kind: 'round', title: 'První syntetické kolo', text: '',
+      moderatorNote: '', options: [], correctAnswer: '',
+    }),
+  });
+  assert.equal(newRound.revision, 1);
+  assert.equal(newRound.slideCount, 1);
+  assert.equal(newRound.roundCount, 1);
+  const newRoundData = (await getDoc(doc(createdQuizRef, 'slides', newRound.selectedSlideId))).data();
+  assert.equal(typeof newRoundData.roundId, 'string');
+
+  const newQuestion = await invoke('createQuizSlide', {
+    quizId: createdQuizId,
+    expectedRevision: 1,
+    position: 2,
+    slide: editorSlide({
+      kind: 'free', title: 'První syntetická otázka', text: 'Rozpracované zadání',
+      options: [], correctAnswer: 'Soukromá syntetická odpověď',
+    }),
+  });
+  assert.equal(newQuestion.revision, 2);
+  assert.equal(newQuestion.slideCount, 2);
+  assert.equal(newQuestion.questionCount, 1);
+  const newQuestionRef = doc(createdQuizRef, 'slides', newQuestion.selectedSlideId);
+  const derivedNewQuestionRef = doc(
+    createdQuizRef, 'rounds', newRoundData.roundId, 'questions', newQuestion.selectedSlideId,
+  );
+  assert.equal((await getDoc(derivedNewQuestionRef)).exists(), true);
+
+  const newQuestionFirstSave = await invoke('updateQuizSlide', {
+    quizId: createdQuizId,
+    slideId: newQuestion.selectedSlideId,
+    expectedRevision: 2,
+    slide: editorSlide({
+      kind: 'free', title: 'První syntetická otázka', text: 'První uložené zadání',
+      options: [], correctAnswer: 'Soukromá syntetická odpověď',
+    }),
+  });
+  assert.equal(newQuestionFirstSave.revision, 3);
+  assert.equal((await getDoc(newQuestionRef)).data().text, 'První uložené zadání');
+  const newQuestionSecondSave = await invoke('updateQuizSlide', {
+    quizId: createdQuizId,
+    slideId: newQuestion.selectedSlideId,
+    expectedRevision: 3,
+    slide: editorSlide({
+      kind: 'free', title: 'První syntetická otázka', text: 'Druhé uložené zadání',
+      options: [], correctAnswer: 'Soukromá syntetická odpověď',
+    }),
+  });
+  assert.equal(newQuestionSecondSave.revision, 4);
+  assert.equal((await getDoc(newQuestionRef)).data().text, 'Druhé uložené zadání');
+  assert.equal((await getDoc(derivedNewQuestionRef)).data().prompt, 'Druhé uložené zadání');
+  await expectFunctionError(
+    () => invoke('updateQuizSlide', {
+      quizId: createdQuizId,
+      slideId: newQuestion.selectedSlideId,
+      expectedRevision: 3,
+      slide: editorSlide({
+        kind: 'free', title: 'První syntetická otázka', text: 'Konfliktní zadání',
+        options: [], correctAnswer: 'Soukromá syntetická odpověď',
+      }),
+    }),
+    'functions/aborted',
+  );
+  const createdQuizLateRetry = await invoke('createQuiz', {
+    title: 'Nový syntetický kvíz',
+    requestId: createRequestId,
+  });
+  assert.deepEqual(createdQuizLateRetry, {
+    quizId: createdQuizId, revision: 4, slideCount: 2, questionCount: 1, roundCount: 1,
+  });
 
   const originalSlide = (await getDoc(slideRef('slide-002'))).data();
   const originalLegacy = JSON.parse(JSON.stringify(originalSlide.legacy));
@@ -309,6 +507,11 @@ async function run() {
   assert.deepEqual(finalOrderedSlides.map((slide) => slide.data().position), Array.from({ length: finalOrderedSlides.length }, (_, index) => index + 1));
   assert.equal(finalQuiz.revision, 17);
   assert.equal((await getDoc(doc(db, 'publicSessions', 'quiz-editor-e2e'))).exists(), false);
+  assert.equal((await getDoc(importedQuizRef)).data().revision, 2);
+  assert.equal(JSON.stringify({
+    root: (await getDoc(snapshotRef)).data(),
+    slide: (await getDoc(snapshotSlideRef)).data(),
+  }), snapshotBefore);
 
   globalThis.console.log(JSON.stringify({
     status: 'PASS', adminMutations: true, moderatorReadOnly: true, normalUserDenied: true,
@@ -318,6 +521,9 @@ async function run() {
     guidedChoiceAndTimingRepairVerified: true, repairAuthorizationAndStaleRevisionVerified: true,
     repairResponseSanitized: true,
     safeRoundRemovalModesVerified: true, publicSessionUntouched: true,
+    importedZeroTimingRoundTripVerified: true, importedPrivateFieldsPreserved: true,
+    createQuizAuthorizationAndIdempotenceVerified: true, newQuizRoundQuestionSaveReloadVerified: true,
+    newQuizConflictVerified: true, historicalSnapshotUntouched: true,
   }, null, 2));
 }
 

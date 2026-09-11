@@ -22,6 +22,7 @@ import {
   moveQuizRound,
   removeQuizRound,
   reorderQuizQuestion,
+  staleEditorMessage,
   updateQuizMetadata,
   updateQuizRound,
   updateQuizSlide,
@@ -36,7 +37,7 @@ import {
 } from '../../features/editor/semanticModel';
 import { editorSaveLabels, editorSaveStatus, needsNavigationDecision } from '../../features/editor/sessionState';
 import type { CreatableQuestionType, EditableSlideKind, EditorQuiz, EditorSlide } from '../../features/editor/types';
-import { hasBlockingIssues } from '../../features/editor/validation';
+import { hasSaveBlockingIssues } from '../../features/editor/validation';
 import { defaultRules, generatedAgendaOptions } from '../../features/presentation/model';
 import { QuizPreflightPanel } from '../../features/preflight/QuizPreflightPanel';
 import type { PreflightFixTarget } from '../../features/preflight/types';
@@ -120,7 +121,7 @@ function selectionForSlide(slideId: string | undefined, model: SemanticQuizModel
 }
 
 function safeErrorMessage(error: unknown): string {
-  if (error instanceof Error && /aborted|revision|newer|stale/iu.test(error.message)) {
+  if (error instanceof Error && (error.message === staleEditorMessage || /aborted|revision|newer|stale/iu.test(error.message))) {
     return 'Kvíz mezitím upravil někdo jiný. Načtěte aktuální verzi a změnu proveďte znovu.';
   }
   return 'Změnu se nepodařilo uložit. Rozepsané hodnoty zůstaly v editoru.';
@@ -297,7 +298,8 @@ export function QuizEditorPage() {
 
   const saveAll = useCallback(async (afterKey = selectedKey): Promise<EditorQuiz | null> => {
     if (quiz === null || readOnly || semantic === null) return null;
-    if (draft?.isQuestion && hasBlockingIssues(draft)) {
+    const persistedDraft = draft === null ? undefined : quiz.slides.find((slide) => slide.id === draft.id);
+    if (draft?.isQuestion && hasSaveBlockingIssues(draft, persistedDraft)) {
       setShowReadiness(true);
       setTouched(new Set(['prompt', 'options', 'correctAnswer', 'questionImage', 'mediaSource', 'clipStartSeconds', 'clipEndSeconds']));
       setError('Před uložením opravte označené údaje.');
@@ -428,8 +430,8 @@ export function QuizEditorPage() {
   const selectedSection = selectedKey.startsWith('system:')
     ? semantic.introduction.find((item) => item.key === selectedKey.slice('system:'.length))
     : undefined;
-  const previewBase = draft ?? selectedRound?.settingsSlide ?? semantic.introduction.find((item) => item.slide)?.slide ?? quiz.slides[0]!;
-  const previewSlide = selectedSection?.key === 'agenda'
+  const previewBase = draft ?? selectedRound?.settingsSlide ?? semantic.introduction.find((item) => item.slide)?.slide ?? quiz.slides[0];
+  const previewSlide = selectedSection?.key === 'agenda' && previewBase !== undefined
     ? { ...previewBase, kind: 'agenda' as const, storedKind: 'agenda', options: generatedAgendaOptions(semantic.rounds) }
     : previewBase;
   const saveLabel = editorSaveLabels[editorSaveStatus(dirty, saving, saveFailed)];
@@ -590,7 +592,14 @@ export function QuizEditorPage() {
           {dirty && <p className="structure-save-hint">Strukturální operace budou dostupné po uložení nebo zahození rozepsaných změn.</p>}
         </main>
 
-        <EditorPreview slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer} onShowAnswer={setShowAnswer} />
+        {previewSlide === undefined ? (
+          <aside className="round-editor-preview editor-panel-preview editor-empty-preview">
+            <header className="preview-heading"><span>Náhled</span><strong>Zatím není co promítnout</strong></header>
+            <p>Nejdřív přidejte kolo a otázku. Prázdný rozpracovaný kvíz zůstává bezpečně uložený.</p>
+          </aside>
+        ) : (
+          <EditorPreview slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer} onShowAnswer={setShowAnswer} />
+        )}
       </section>
     </article>
   );
