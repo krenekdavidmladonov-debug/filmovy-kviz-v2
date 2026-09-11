@@ -18,6 +18,8 @@ import {
   isQuestionKind,
   isRoundKind,
   questionTypeForKind,
+  quizCreationIdentity,
+  quizRevision,
   sortedSlides,
   type StoredEditorSlide,
 } from './model.js';
@@ -30,6 +32,7 @@ import {
   requestedPosition,
   requestedRoundRemovalMode,
   requestedRoundTitle,
+  requestedQuizCreation,
   requestedSlide,
   requiredId,
   validateQuizMetadata,
@@ -285,6 +288,56 @@ function mapError(error: unknown): never {
   if (error instanceof QuizEditorError) throw new HttpsError(error.code, error.message);
   throw new HttpsError('internal', 'Quiz editor operation failed.');
 }
+
+export const createQuiz = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+  try {
+    const actor = authorizeEditorAdmin(request.auth);
+    const creation = requestedQuizCreation(request.data);
+    const identity = quizCreationIdentity(actor.uid, creation.requestId, creation.title);
+    const quizRef = db.collection('quizzes').doc(identity.quizId);
+    return await db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(quizRef);
+      if (existing.exists) {
+        const quiz = snapshotData(existing, 'Quiz');
+        if (quiz.createdBy !== actor.uid || quiz.creationFingerprint !== identity.fingerprint) {
+          throw new QuizEditorError('already-exists', 'requestId was already used for another quiz creation.');
+        }
+        return {
+          quizId: identity.quizId,
+          revision: quizRevision(quiz),
+          slideCount: requiredStoredCount(quiz, 'slideCount'),
+          questionCount: requiredStoredCount(quiz, 'questionCount'),
+          roundCount: requiredStoredCount(quiz, 'roundCount'),
+        };
+      }
+      const now = Timestamp.now();
+      transaction.create(quizRef, {
+        schemaVersion: 1,
+        title: creation.title,
+        description: '',
+        status: 'draft',
+        revision: 0,
+        slideCount: 0,
+        questionCount: 0,
+        roundCount: 0,
+        creationFingerprint: identity.fingerprint,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: actor.uid,
+        updatedBy: actor.uid,
+      });
+      return {
+        quizId: identity.quizId,
+        revision: 0,
+        slideCount: 0,
+        questionCount: 0,
+        roundCount: 0,
+      };
+    });
+  } catch (error) {
+    return mapError(error);
+  }
+});
 
 export const updateQuizMetadata = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {

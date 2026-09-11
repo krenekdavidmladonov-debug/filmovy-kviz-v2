@@ -13,7 +13,12 @@ import {
 import { editorSaveLabels, editorSaveStatus, needsNavigationDecision } from '../apps/web/src/features/editor/sessionState';
 import { clipDuration, formatHumanTime, parseHumanTime } from '../apps/web/src/features/editor/time';
 import type { EditorQuiz, EditorSlide } from '../apps/web/src/features/editor/types';
-import { correctOptionIndex, hasBlockingIssues, validateQuestion } from '../apps/web/src/features/editor/validation';
+import {
+  correctOptionIndex,
+  hasBlockingIssues,
+  hasSaveBlockingIssues,
+  validateQuestion,
+} from '../apps/web/src/features/editor/validation';
 
 function slide(overrides: Partial<EditorSlide> = {}): EditorSlide {
   return {
@@ -99,6 +104,34 @@ describe('type-specific question forms and validation', () => {
     expect(html).toContain('Volná odpověď');
     expect(html).not.toContain('<legend>Odpovědi</legend>');
     expect(validateQuestion(value)).toEqual([]);
+  });
+
+  test('allows unrelated edits to persisted imported unset timing while keeping readiness strict', () => {
+    const persisted = slide({
+      kind: 'audio',
+      storedKind: 'audio',
+      options: [],
+      correctAnswer: 'Syntetická odpověď',
+      mediaSource: 'test__local',
+      presentation: {
+        videoStart: 0,
+        videoEnd: 0,
+        audioTrigger: null,
+        backgroundOverlay: null,
+        answerOverlay: null,
+        sourceQuestionNumber: '1/1',
+      },
+      clipStartSeconds: null,
+      clipEndSeconds: null,
+      hasLegacyData: true,
+    });
+    const textEdit = { ...persisted, text: 'Upravené syntetické zadání' };
+
+    expect(hasBlockingIssues(textEdit)).toBe(true);
+    expect(hasSaveBlockingIssues(textEdit, persisted)).toBe(false);
+    expect(hasSaveBlockingIssues(textEdit)).toBe(true);
+    expect(hasSaveBlockingIssues({ ...textEdit, mediaSource: 'other_local' }, persisted)).toBe(true);
+    expect(hasSaveBlockingIssues({ ...textEdit, clipStartSeconds: 1 }, persisted)).toBe(true);
   });
 
   test('image keeps question image separate, supports optional choices, and exposes answer image', () => {

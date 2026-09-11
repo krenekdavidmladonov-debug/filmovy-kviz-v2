@@ -75,6 +75,11 @@ jobs:
       - name: Install Playwright Chromium for browser E2E
         run: pnpm exec playwright install chromium
 
+      - name: Editor core workflow browser E2E (local emulators only)
+        run: |
+          pnpm exec firebase emulators:exec --only auth,firestore,functions --project demo-filmovy-kviz-v2 "pnpm seed:auth && pnpm test:e2e:editor-core-empty-browser"
+          pnpm exec firebase emulators:exec --only auth,firestore,functions --project demo-filmovy-kviz-v2 "pnpm seed:auth && pnpm seed:quizzes && pnpm test:e2e:editor-core-browser"
+
       - name: Live Auth, Firestore, and Functions emulator E2E
         run: >-
           pnpm exec firebase emulators:exec

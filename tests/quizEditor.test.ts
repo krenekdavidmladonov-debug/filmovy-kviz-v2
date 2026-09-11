@@ -6,9 +6,10 @@ import {
   applyKnownSlideUpdate,
   assertRevision,
   mergeEditorMedia,
+  quizCreationIdentity,
   sortedSlides,
 } from '../functions/src/editor/model';
-import { validateSlideInput } from '../functions/src/editor/validation';
+import { requestedQuizCreation, validateSlideInput } from '../functions/src/editor/validation';
 import { requestedPreflightRepair } from '../functions/src/editor/repair';
 
 function slideInput(overrides: Record<string, unknown> = {}) {
@@ -85,6 +86,73 @@ describe('quiz editor lossless model', () => {
     expect(Object.hasOwn(updated, 'correctAnswer')).toBe(true);
   });
 
+  test('round-trips the imported 0/0 timing sentinel without losing private or opaque fields', () => {
+    const originalMedia = [{
+      role: 'prompt', kind: 'video', value: 'synthetic-video-reference', opaqueVendorField: 'keep',
+    }];
+    const originalLegacy = {
+      source: 'synthetic-import', raw: { answerHint: 'private sentinel', unknownArray: [1, 2, 3] },
+    };
+    const current = {
+      position: 2,
+      kind: 'question',
+      isQuestion: true,
+      roundId: 'imported-round',
+      title: 'Importovaná otázka',
+      text: 'Původní syntetické zadání',
+      moderatorNote: 'Soukromá poznámka',
+      options: ['A', 'B', 'C', 'D'],
+      correctAnswer: 'Soukromá odpověď',
+      media: originalMedia,
+      presentation: {
+        videoStart: 0,
+        videoEnd: 0,
+        sourceQuestionNumber: '1/1',
+        futurePresentationField: { preserve: true },
+      },
+      clipStartSeconds: 0,
+      legacy: originalLegacy,
+      futureTopLevel: { preserve: true },
+    };
+
+    const mapped = mapEditorSlide('imported-slide', current);
+    expect(mapped.clipStartSeconds).toBeNull();
+    expect(mapped.clipEndSeconds).toBeNull();
+    const explicitNullEnd = mapEditorSlide('not-the-import-sentinel', {
+      ...current,
+      clipEndSeconds: null,
+    });
+    expect(explicitNullEnd.clipStartSeconds).toBe(0);
+    expect(explicitNullEnd.clipEndSeconds).toBe(0);
+
+    const updated = applyKnownSlideUpdate(current, validateSlideInput({
+      kind: mapped.kind,
+      title: mapped.title,
+      text: 'Upravené syntetické zadání',
+      moderatorNote: mapped.moderatorNote,
+      options: mapped.options,
+      correctAnswer: mapped.correctAnswer,
+      media: mapped.media,
+      presentation: mapped.presentation,
+      backgroundImage: mapped.backgroundImage,
+      questionImage: mapped.questionImage,
+      answerImage: mapped.answerImage,
+      mediaSource: mapped.mediaSource,
+      backgroundOverlay: mapped.backgroundOverlay,
+      clipStartSeconds: mapped.clipStartSeconds,
+      clipEndSeconds: mapped.clipEndSeconds,
+    }));
+
+    expect(updated.text).toBe('Upravené syntetické zadání');
+    expect(updated.correctAnswer).toBe(current.correctAnswer);
+    expect(updated.media).toEqual(originalMedia);
+    expect(updated.legacy).toEqual(originalLegacy);
+    expect(updated.futureTopLevel).toEqual({ preserve: true });
+    expect(updated.presentation).toEqual(current.presentation);
+    expect(updated.clipStartSeconds).toBe(0);
+    expect(Object.hasOwn(updated, 'clipEndSeconds')).toBe(false);
+  });
+
   test('keeps unmentioned mixed media, deletes an explicit empty patch, and appends safely', () => {
     const result = mergeEditorMedia([
       { role: 'prompt', kind: 'audio', value: 'audio-ref', opaque: 1 },
@@ -151,6 +219,31 @@ describe('quiz editor lossless model', () => {
       quizId: 'quiz', slideId: 'slide', expectedRevision: 2,
       kind: 'video-timing', clipStartSeconds: 1.5, clipEndSeconds: 7,
     })).toEqual({ kind: 'video-timing', clipStartSeconds: 1.5, clipEndSeconds: 7 });
+  });
+
+  test('validates and normalizes only the narrow create-quiz request shape', () => {
+    expect(requestedQuizCreation({ title: '  Nový syntetický kvíz  ', requestId: 'request-1' })).toEqual({
+      title: 'Nový syntetický kvíz',
+      requestId: 'request-1',
+    });
+    expect(() => requestedQuizCreation({ title: '   ', requestId: 'request-1' })).toThrow('title');
+    expect(() => requestedQuizCreation({ title: 'Kvíz', requestId: 'bad/request' })).toThrow('requestId');
+    expect(() => requestedQuizCreation({
+      title: 'Kvíz', requestId: 'request-1', status: 'ready',
+    })).toThrow('creation request');
+  });
+
+  test('derives an idempotent quiz identity without mixing title into the document id', () => {
+    const first = quizCreationIdentity('admin-uid', 'stable-request', 'První název');
+    const retry = quizCreationIdentity('admin-uid', 'stable-request', 'První název');
+    const conflictingRetry = quizCreationIdentity('admin-uid', 'stable-request', 'Jiný název');
+    const separateRequest = quizCreationIdentity('admin-uid', 'other-request', 'První název');
+
+    expect(retry).toEqual(first);
+    expect(conflictingRetry.quizId).toBe(first.quizId);
+    expect(conflictingRetry.fingerprint).not.toBe(first.fingerprint);
+    expect(separateRequest.quizId).not.toBe(first.quizId);
+    expect(first.quizId).toMatch(/^quiz_[a-f0-9]{64}$/u);
   });
 });
 

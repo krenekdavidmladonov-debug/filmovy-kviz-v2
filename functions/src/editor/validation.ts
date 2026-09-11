@@ -84,6 +84,18 @@ export function validateQuizMetadata(value: unknown): { readonly title: string; 
   };
 }
 
+export function requestedQuizCreation(data: unknown): { readonly title: string; readonly requestId: string } {
+  if (!isObject(data)) throw new QuizEditorError('invalid-argument', 'Request data is required.');
+  const unknownField = Object.keys(data).find((field) => field !== 'title' && field !== 'requestId');
+  if (unknownField !== undefined) throw new QuizEditorError('invalid-argument', 'Quiz creation request is invalid.');
+  const requestId = requiredId(data, 'requestId');
+  if (requestId.length > 150) throw new QuizEditorError('invalid-argument', 'requestId is too long.');
+  return {
+    title: boundedString(data.title, 'title', 300, false).trim(),
+    requestId,
+  };
+}
+
 function nullableNumber(value: unknown, field: string, maximum: number): number | null {
   if (value === null) return null;
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > maximum) {

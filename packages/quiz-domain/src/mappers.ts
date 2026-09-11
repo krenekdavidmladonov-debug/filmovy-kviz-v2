@@ -99,6 +99,12 @@ export function mapEditorSlide(id: string, data: DocumentData): EditorSlide {
   const mappedPresentation = mapPresentation(data.presentation);
   const normalizedKind = storedKind.toLowerCase();
   const explicitBackgroundOverlay = nullableNumber(data.backgroundOverlay);
+  const explicitClipStart = nullableNumber(data.clipStartSeconds);
+  const explicitClipEnd = nullableNumber(data.clipEndSeconds);
+  const legacyZeroTiming = mappedPresentation.videoStart === 0
+    && mappedPresentation.videoEnd === 0
+    && (!Object.hasOwn(data, 'clipStartSeconds') || data.clipStartSeconds === 0)
+    && !Object.hasOwn(data, 'clipEndSeconds');
   return {
     id,
     position,
@@ -124,8 +130,8 @@ export function mapEditorSlide(id: string, data: DocumentData): EditorSlide {
       || (['audio', 'music'].includes(normalizedKind) ? mediaByRoleAndKind(data.media, 'prompt', 'audio') : '')
       || (['video', 'youtube'].includes(normalizedKind) ? mediaByRoleAndKind(data.media, 'prompt', 'video') : ''),
     backgroundOverlay: explicitBackgroundOverlay ?? mappedPresentation.backgroundOverlay,
-    clipStartSeconds: nullableNumber(data.clipStartSeconds) ?? mappedPresentation.videoStart,
-    clipEndSeconds: nullableNumber(data.clipEndSeconds) ?? mappedPresentation.videoEnd,
+    clipStartSeconds: legacyZeroTiming ? null : explicitClipStart ?? mappedPresentation.videoStart,
+    clipEndSeconds: legacyZeroTiming ? null : explicitClipEnd ?? mappedPresentation.videoEnd,
     hasLegacyData: object(data.legacy) !== undefined || !kindSet.has(storedKind),
   };
 }
