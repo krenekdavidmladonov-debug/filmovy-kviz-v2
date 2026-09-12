@@ -1,5 +1,4 @@
 import { teamEmailEnabled } from '../../features/events/teamEmailCapability';
-const EventTeamMessagePanel = lazy(() => import('../../features/events/EventTeamMessagePanel').then(module => ({ default: module.EventTeamMessagePanel })));
 import { EventLiveButton } from '../../features/leaderboard/EventLiveButton';
 import { RefereeAccessPanel } from '../../features/referee/RefereeAccessPanel';
 import { runQuizPreflight, type EditorQuiz, type PreflightResult } from '@filmovy-kviz/quiz-domain';
@@ -24,6 +23,10 @@ import { QuizErrorState } from '../../features/quizzes/QuizErrorState';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
 import { listQuizzes } from '../../features/quizzes/quizRepository';
 import type { QuizSummary } from '../../features/quizzes/types';
+
+const EventTeamMessagePanel = teamEmailEnabled
+  ? lazy(() => import('../../features/events/EventTeamMessagePanel').then(module => ({ default: module.EventTeamMessagePanel })))
+  : null;
 
 function localDateTime(value: Date): string {
   const pad = (part: number) => String(part).padStart(2, '0');
@@ -140,7 +143,7 @@ export function AdminEventDetailPage() {
         <p className="event-muted">Body přijatých týmů za kola připraveného kvízu a historie oprav.</p>
         <Link className="secondary-link" to={`/admin/events/${event.id}/scoring`}>Otevřít bodování</Link>
       </section>
-      {admin && teamEmailEnabled && <Suspense fallback={null}><EventTeamMessagePanel key={event.id + ':' + currentUser?.uid} eventId={event.id} actorId={currentUser!.uid} canCreate={['draft', 'scheduled', 'ready', 'live'].includes(event.lifecycleStatus)} /></Suspense>}
+      {admin && EventTeamMessagePanel && <Suspense fallback={null}><EventTeamMessagePanel key={event.id + ':' + currentUser?.uid} eventId={event.id} actorId={currentUser!.uid} canCreate={['draft', 'scheduled', 'ready', 'live'].includes(event.lifecycleStatus)} /></Suspense>}
       <RegistrationSharePanel event={event} />
       {admin && addingTeam && <ManualTeamDialog event={event} onClose={() => setAddingTeam(false)} onSaved={async (id, name) => { setAddedTeam({ id, name }); setEvent(await getEvent(event.id)); }} />}
 

@@ -65,3 +65,9 @@ Po budoucím samostatně autorizovaném nasazení postupovat cíleně:
 5. Teprve potom Hosting ze stejného artefaktu. Zopakovat UI autorství/refresh/rehearsal/snapshot/reveal online. Media bucket nesmí blokovat textové otázky/kola; bez media předpokladů se ale celý kandidát neoznačuje za nasazený.
 
 Obnova: před backend dokončením zůstává starý Hosting. Frontend lze vrátit na předem zaznamenanou verzi. Jakmile obsah nebo snapshot používá vlastní asset/draft, nesmí se slepě vracet starý backend, který jej neumí bezpečně číst/validovat; zachovat kompatibilní gateway/Rules a řešit cíleným forward fixem. Nikdy nemazat bucket, ready objekty, kvízy, snapshoty nebo jejich generace jako rollback. E-mailové moduly zůstávají mimo rollout.
+
+## Závěrečná regrese CI a delší relace
+
+CI prvního kandidáta 4815b32 odhalilo chybu Vite dev načtení detailu akce: volání React.lazy před importem bylo transformováno před inicializaci bindingu. Definice je nyní za importy a vzniká jen při výslovně zapnutém e-mailovém modulu. Registrační browser scénář zůstává beze změn; přísnější kompletní test čeká na URL i nadpis detailu, odmítá page errors a ověřuje, že se e-mailový chunk vůbec nenačetl. Původní závěrečná kontrola mohla projít na starém seznamu během navigace; autorská část kvízu tím nebyla obejita.
+
+Doplňkové dlouhé měření 4815b32: jediná nepřerušená relace se 60 otázkami, 2400 přepnutí a náhledů, 240 uložení, 445,4 s aktivní práce. Načtení 903 ms; medián přepnutí 74,5 ms, náhledu 43,8 ms, uložení 246,1 ms; nejpomalejší Save 2419,8 ms. Vytvořeno/odpojeno 800/800 přehrávačů, maximum 1 a po odchodu 0. Raw data a reprodukční rozšíření existující výkonové sady jsou v .local-data/complete-editor/soak.json a soak.spec.mjs. Následná oprava detailu akce nemění editor, renderer ani media player; několika hodinový soak tím stále není prokázán.
