@@ -136,3 +136,8 @@ jobs:
           --only auth,firestore,functions,storage
           --project demo-filmovy-kviz-v2
           "pnpm test:e2e:media && pnpm test:e2e:media-browser"
+
+      - name: Complete editor UI acceptance and private draft contracts (fresh local emulators)
+        run: >-
+          pnpm exec firebase emulators:exec --only auth,firestore,functions,storage --project demo-filmovy-kviz-v2
+          "pnpm test:e2e:complete-editor && node tools/local-emulator-environment.mjs full tests/e2e/complete-editor-boundaries.mjs && pnpm test:e2e:complete-editor-performance"

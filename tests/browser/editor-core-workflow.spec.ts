@@ -128,7 +128,7 @@ test('library CTA creates an empty quiz and carries its first round and free que
     await expect(page.locator('.editor-empty-preview')).toContainText('Zatím není co promítnout');
     await expect(page.locator('.outline-round')).toHaveCount(0);
 
-    await waitForCallable(page, 'createQuizSlide', () => page.getByRole('button', { name: '+ Přidat kolo' }).click());
+    await waitForCallable(page, 'createQuizRound', () => page.getByRole('button', { name: '+ Přidat kolo' }).click());
     await expect(page.locator('.outline-round')).toHaveCount(1);
     await page.getByRole('button', { name: '+ Přidat otázku' }).click();
     await page.getByRole('dialog', { name: /Typ otázky/u }).getByRole('button', { name: 'Volná odpověď' }).click();
@@ -137,7 +137,8 @@ test('library CTA creates an empty quiz and carries its first round and free que
     await waitForCallable(page, 'createQuizSlide', () => page.getByRole('button', { name: 'Uložit', exact: true }).click());
     await expect(page.locator('.save-state')).toHaveText('Uloženo');
 
-    await page.getByRole('link', { name: '← Detail kvízu' }).click();
+    await page.getByRole('link', { name: '← Knihovna kvízů' }).click();
+    await page.getByRole('link', { name: title, exact: true }).click();
     await expect(page.getByRole('heading', { name: title })).toBeVisible();
     await expect(page.getByText(question, { exact: true })).toBeVisible();
     await page.getByRole('link', { name: '← Zpět do knihovny' }).click();

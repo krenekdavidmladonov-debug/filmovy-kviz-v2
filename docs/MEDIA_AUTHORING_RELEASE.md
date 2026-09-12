@@ -1,3 +1,7 @@
+# Historical media integration record
+
+Superseded for release by [COMPLETE_EDITOR_RELEASE.md](COMPLETE_EDITOR_RELEASE.md). The active integrated direction is `codex/complete-quiz-editor` on current main + PR #26; do not deploy the old staging-based branch or its seven-function manifest. Details below record the preserved earlier work.
+
 # Media authoring candidate
 
 ## Provenance and diagnosis

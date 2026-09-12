@@ -116,3 +116,6 @@ Admin-only preview/confirmation creates an immutable emailCampaigns record and r
 Quiz-scoped image/audio uploads use private asset metadata, create-only Storage grants and a current-role/current-publication HTTP read gateway. Immutable event snapshots keep stable asset references and generations; no cleanup runs. The existing MediaPlayer lifecycle selects YouTube or native audio while retaining the one-player budget. See [MEDIA_STORAGE.md](MEDIA_STORAGE.md) for boundaries and future deployment checks.
 
 Media authoring extends the shared picker/gateway/renderer to question, private answer and background roles. Explicit empty fields detach without deleting legacy data or snapshot assets. See MEDIA_AUTHORING_RELEASE.md for the complete contract and deployment scope.
+
+
+Complete editor extends the same private ordered stream with explicit draft/ready authoring, independent answer mode, default appearance, atomic round/recap creation and private in-memory rehearsal. Drafts block preflight, snapshot lock and live publication. See [COMPLETE_EDITOR_RELEASE.md](COMPLETE_EDITOR_RELEASE.md) for field compatibility, authorization, verification and the integrated deployment manifest.
