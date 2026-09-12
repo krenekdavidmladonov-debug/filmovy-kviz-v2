@@ -1,6 +1,7 @@
 import { FunctionsError, httpsCallable } from 'firebase/functions';
 
 import { getFirebaseServices } from '../../services/firebase/client';
+import type { EditorAppearance } from '@filmovy-kviz/quiz-domain';
 import type { EditorMutationResponse, EditorSlide } from './types';
 
 export const staleEditorMessage = 'Kvíz byl mezitím změněn v jiném okně. Načtěte prosím aktuální verzi a své změny zopakujte.';
@@ -12,6 +13,10 @@ function callable(name: string) {
 function slidePayload(slide: EditorSlide) {
   return {
     kind: slide.kind,
+    ...(slide.authoringStatus === undefined ? {} : { authoringStatus: slide.authoringStatus }),
+    ...(slide.answerMode === undefined ? {} : { answerMode: slide.answerMode }),
+    ...(slide.imageLayout === undefined ? {} : { imageLayout: slide.imageLayout }),
+    ...(slide.answerExplanation === undefined ? {} : { answerExplanation: slide.answerExplanation }),
     title: slide.title,
     text: slide.text,
     moderatorNote: slide.moderatorNote,
@@ -43,8 +48,8 @@ async function invoke(name: string, data: Record<string, unknown>): Promise<Edit
 export const createQuiz = (title: string, requestId: string) => (
   invoke('createQuiz', { title, requestId })
 );
-export const updateQuizMetadata = (quizId: string, revision: number, title: string, description: string) => (
-  invoke('updateQuizMetadata', { quizId, expectedRevision: revision, quiz: { title, description } })
+export const updateQuizMetadata = (quizId: string, revision: number, title: string, description: string, defaultAppearance?: EditorAppearance) => (
+  invoke('updateQuizMetadata', { quizId, expectedRevision: revision, quiz: { title, description, ...(defaultAppearance === undefined ? {} : { defaultAppearance }) } })
 );
 export const updateQuizSlide = (quizId: string, revision: number, slide: EditorSlide) => (
   invoke('updateQuizSlide', { quizId, slideId: slide.id, expectedRevision: revision, slide: slidePayload(slide) })
@@ -63,8 +68,8 @@ export const repairQuizVideoTiming = (
 ) => invoke('repairQuizPreflightIssue', {
   quizId, slideId, expectedRevision: revision, kind: 'video-timing', clipStartSeconds, clipEndSeconds,
 });
-export const createQuizSlide = (quizId: string, revision: number, position: number, slide: EditorSlide) => (
-  invoke('createQuizSlide', { quizId, expectedRevision: revision, position, slide: slidePayload(slide) })
+export const createQuizSlide = (quizId: string, revision: number, position: number, slide: EditorSlide, scope?: 'quiz') => (
+  invoke('createQuizSlide', { quizId, expectedRevision: revision, position, slide: slidePayload(slide), ...(scope === undefined ? {} : { scope }) })
 );
 export const duplicateQuizSlide = (quizId: string, revision: number, slideId: string) => (
   invoke('duplicateQuizSlide', { quizId, slideId, expectedRevision: revision })
@@ -97,3 +102,5 @@ export const removeQuizRound = (
   mode: 'delete' | 'move',
   targetRoundId?: string,
 ) => invoke('removeQuizRound', { quizId, roundId, mode, expectedRevision: revision, ...(targetRoundId ? { targetRoundId } : {}) });
+
+export const createQuizRound = (quizId: string, revision: number, title: string) => invoke('createQuizRound', { quizId, expectedRevision: revision, title });

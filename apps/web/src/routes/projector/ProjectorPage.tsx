@@ -51,6 +51,8 @@ function ProjectorState({ state, onMediaFinished, onMediaPlaybackState }: {
         ...(state.questionCount === undefined ? {} : { questionCount: state.questionCount }),
         ...(state.backgroundImage === undefined ? {} : { backgroundImage: state.backgroundImage }),
         ...(state.questionImage === undefined ? {} : { questionImage: state.questionImage }),
+        ...(state.imageLayout === undefined ? {} : { imageLayout: state.imageLayout }),
+        ...(state.answerExplanation === undefined ? {} : { answerExplanation: state.answerExplanation }),
         ...(state.answerImage === undefined ? {} : { answerImage: state.answerImage }),
         ...(state.mediaSource === undefined ? {} : { mediaSource: state.mediaSource }),
         ...(state.backgroundOverlay === undefined ? {} : { backgroundOverlay: state.backgroundOverlay }),

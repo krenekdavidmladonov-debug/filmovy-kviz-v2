@@ -1,4 +1,4 @@
-import { parseQuizAsset, directMediaKind } from '@filmovy-kviz/quiz-domain';
+import { parseQuizAsset, directMediaKind, type EditorAppearance } from '@filmovy-kviz/quiz-domain';
 import { MediaUploadField } from '../media/MediaUploadField';
 import { useEffect, useRef, useState } from 'react';
 
@@ -44,7 +44,10 @@ export function QuizSettingsForm({
   disabled,
   onTitle,
   onDescription,
+  appearance, onAppearance,
 }: {
+  readonly appearance?: EditorAppearance;
+  readonly onAppearance?: (value: EditorAppearance) => void;
   readonly quiz: EditorQuiz;
   readonly title: string;
   readonly description: string;
@@ -57,6 +60,12 @@ export function QuizSettingsForm({
       <header className="content-form-heading"><span>Kvíz</span><h2 id="quiz-settings-title">Základní údaje</h2><p>{quiz.roundCount} kol · {quiz.questionCount} otázek</p></header>
       <label className="form-field" data-preflight-field="quizTitle">Název kvízu *<input disabled={disabled} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
       <label className="form-field">Popis<textarea rows={5} disabled={disabled} value={description} onChange={(event) => onDescription(event.target.value)} /></label>
+      {appearance && onAppearance && <details className="editor-extra"><summary>Výchozí vzhled nových otázek</summary>
+        <MediaUploadField kind="image" label="Výchozí pozadí" value={appearance.backgroundImage} disabled={disabled} onReady={value => onAppearance({...appearance,backgroundImage:value})} />
+        <label className="form-field">Výchozí ztmavení<input type="range" min="0" max="100" value={appearance.backgroundOverlay} disabled={disabled} onChange={event=>onAppearance({...appearance,backgroundOverlay:Number(event.target.value)})}/></label>
+        <label className="form-field">Výchozí rozložení obrázku<select disabled={disabled} value={appearance.imageLayout} onChange={event=>onAppearance({...appearance,imageLayout:event.target.value as 'split'|'stacked'})}><option value="split">Obrázek vedle zadání</option><option value="stacked">Obrázek pod zadáním</option></select></label>
+        <p>Změna určuje vzhled nových otázek. U existující otázky lze použít Obnovit výchozí vzhled; uložené snapshoty akcí se nemění.</p>
+      </details>}
       <p className="field-help">Další nastavení upravíte v části Úvod kvízu. Změny se uloží až tlačítkem Uložit.</p>
     </section>
   );
@@ -155,7 +164,7 @@ function VisualFields({ slide, disabled, onChange }: { readonly slide: EditorSli
 function PromptField({ slide, disabled, issues, showIssues, touch, onChange }: QuestionFormFieldProps) {
   return (
     <label className="form-field" data-preflight-field="prompt">Otázka *
-      <textarea rows={4} disabled={disabled} value={slide.text || slide.title} onBlur={() => touch('prompt')} onChange={(event) => onChange({
+      <textarea aria-label="Otázka *" rows={4} disabled={disabled} value={slide.text || slide.title} onBlur={() => touch('prompt')} onChange={(event) => onChange({
         ...slide,
         text: event.target.value,
         ...(event.target.value === '' ? { title: '' } : {}),
@@ -193,10 +202,11 @@ function ChoiceFields(props: QuestionFormFieldProps) {
           <input type="radio" data-preflight-field={index === 0 ? 'correctAnswer' : undefined} name={`correct-${slide.id}`} aria-label={`Označit možnost ${String.fromCharCode(65 + index)} jako správnou`} checked={selectedIndex === index} onChange={() => onChange({ ...slide, correctAnswer: option })} />
           <span>{String.fromCharCode(65 + index)}</span>
           <input aria-label={`Možnost ${String.fromCharCode(65 + index)}`} value={option} onChange={(event) => updateOption(index, event.target.value)} />
+          <button type="button" className="icon-button" aria-label={`Posunout možnost ${String.fromCharCode(65 + index)} nahoru`} disabled={index === 0} onClick={() => { const options = [...slide.options]; [options[index - 1], options[index]] = [options[index]!, options[index - 1]!]; onChange({ ...slide, options }); }}>↑</button>
           <button type="button" className="icon-button" aria-label={`Odstranit možnost ${String.fromCharCode(65 + index)}`} onClick={() => remove(index)}>×</button>
         </div>
       ))}
-      <button type="button" className="secondary-button compact-button" onClick={() => onChange({ ...slide, options: [...slide.options, ''] })}>+ Přidat odpověď</button>
+      <button type="button" className="secondary-button compact-button" disabled={slide.options.length >= 6} onClick={() => onChange({ ...slide, options: [...slide.options, ''] })}>+ Přidat odpověď</button>
       <FieldIssues field="options" issues={issues} visible={showIssues('options')} />
       <FieldIssues field="correctAnswer" issues={issues} visible={showIssues('correctAnswer')} />
     </fieldset>
@@ -207,7 +217,7 @@ function FreeAnswerField(props: QuestionFormFieldProps) {
   const { slide, disabled, issues, showIssues, touch, onChange } = props;
   return (
     <label className="form-field private-field" data-preflight-field="correctAnswer">Správná odpověď *
-      <textarea rows={2} disabled={disabled} value={slide.correctAnswer} onBlur={() => touch('correctAnswer')} onChange={(event) => onChange({ ...slide, correctAnswer: event.target.value })} />
+      <textarea aria-label="Správná odpověď *" rows={2} disabled={disabled} value={slide.correctAnswer} onBlur={() => touch('correctAnswer')} onChange={(event) => onChange({ ...slide, correctAnswer: event.target.value })} />
       <FieldIssues field="correctAnswer" issues={issues} visible={showIssues('correctAnswer')} />
     </label>
   );
@@ -331,6 +341,7 @@ function MediaTimingFields(props: QuestionFormFieldProps) {
 }
 
 export function QuestionForm({
+  defaultAppearance,
   slide,
   number,
   disabled,
@@ -342,6 +353,7 @@ export function QuestionForm({
   readonly slide: EditorSlide;
   readonly number: number;
   readonly disabled: boolean;
+  readonly defaultAppearance?: EditorAppearance;
   readonly quizId?: string;
   readonly onUploadPending?: ((pending: boolean) => void) | undefined;
   readonly showAllIssues: boolean;
@@ -355,29 +367,37 @@ export function QuestionForm({
     slide, disabled, issues, onChange, touch: onTouch,
     showIssues: (field) => showAllIssues || touched.has(field),
   };
-  const imageChoices = type === 'image' && slide.options.length > 0;
+  const choices = slide.answerMode === 'choice' || (slide.answerMode !== 'open' && (type === 'choice' || slide.options.length > 0));
+  const changeMode = (mode: 'open' | 'choice') => {
+    if (mode === 'open' && slide.options.length > 0 && !window.confirm('Přechod na volnou odpověď odpojí všechny možnosti. Zadání, média a text správné odpovědi zůstanou. Pokračovat?')) return;
+    onChange({ ...slide, kind: mode === 'choice' && slide.kind === 'free' ? 'text' : slide.kind, answerMode: mode, options: mode === 'choice' ? slide.options.length ? slide.options : ['', '', '', ''] : [] });
+  };
   return (
     <section className="editor-form-stack question-form" data-question-type={type} data-preflight-field={type === 'legacy' || type === 'legacy-pl' ? 'legacy' : undefined}>
       <header className="content-form-heading"><span>Otázka {number}</span><h2>{questionTypeLabels[type]}</h2></header>
       {type === 'legacy-pl' && <div className="legacy-notice"><strong>Starší typ Pravda / Lež</strong><p>Typ je uzamčený, ale obsah a odpověď můžete upravit bez ztráty původních dat.</p></div>}
       {type === 'legacy' && <div className="legacy-notice"><strong>Obsah obsahuje starší nastavení.</strong><p>Neznámé části zůstanou při uložení beze změny.</p></div>}
+      {!type.startsWith('legacy') && <div className="question-settings">
+        <label className="form-field">Způsob zadání<select disabled={disabled} value={['image','audio','video'].includes(type) ? type : 'text'} onChange={event => {
+          const next = event.target.value as 'text' | 'image' | 'audio' | 'video';
+          if (next !== type && (slide.questionImage || slide.mediaSource) && !window.confirm('Změna zadání odpojí nynější médium otázky a časování. Soubor zůstane v knihovně, odpověď, poznámka a pozadí se zachovají. Pokračovat?')) return;
+          onChange({ ...slide, kind: next, questionImage: '', mediaSource: '', clipStartSeconds: null, clipEndSeconds: null, answerMode: choices ? 'choice' : 'open' });
+        }}><option value="text">Text</option><option value="image">Obrázek</option><option value="audio">Audio</option><option value="video">Video</option></select></label>
+        <label className="form-field">Způsob odpovědi<select disabled={disabled || slide.options.length > 6} value={choices ? 'choice' : 'open'} onChange={event => changeMode(event.target.value as 'open' | 'choice')}><option value="open">Volná odpověď</option><option value="choice">ABCD – jedna možnost</option></select></label>
+      </div>}
       <PromptField {...props} />
 
-      {type === 'choice' && <ChoiceFields {...props} />}
-      {type === 'free' && <FreeAnswerField {...props} />}
-      {type === 'legacy-pl' && <PlAnswerField {...props} />}
-      {type === 'legacy' && <FreeAnswerField {...props} />}
-      {type === 'image' && (
-        <>
-          <MediaUploadField key={slide.id + ":question"} kind="image" label="Obrázek otázky" value={slide.questionImage} disabled={disabled} onReady={value => onChange({ ...slide, questionImage: value })} />
-          <label className="toggle-field"><input type="checkbox" disabled={disabled} checked={imageChoices} onChange={(event) => onChange({ ...slide, options: event.target.checked ? ['', '', '', ''] : [], correctAnswer: '' })} /> Výběr z možností</label>
-          {imageChoices ? <ChoiceFields {...props} /> : <FreeAnswerField {...props} />}
-          <MediaUploadField key={slide.id + ":answer"} kind="image" label="Obrázek odpovědi (soukromý)" value={slide.answerImage} disabled={disabled} onReady={value => onChange({ ...slide, answerImage: value })} />
-        </>
-      )}
-      {(type === 'audio' || type === 'video') && <><FreeAnswerField {...props} /><MediaTimingFields {...props} /></>}
-      {type !== 'choice' && <VisualFields slide={slide} disabled={disabled} onChange={onChange} />}
-      <label className="form-field">Poznámka moderátora<textarea rows={3} disabled={disabled} value={slide.moderatorNote} onChange={(event) => onChange({ ...slide, moderatorNote: event.target.value })} /></label>
+      {type === 'legacy-pl' ? <PlAnswerField {...props} /> : choices ? <ChoiceFields {...props} /> : <FreeAnswerField {...props} />}
+      {type === 'image' && <MediaUploadField key={slide.id + ':question'} kind="image" label="Obrázek otázky" value={slide.questionImage} disabled={disabled} onReady={value => onChange({ ...slide, questionImage: value })} />}
+      {(type === 'audio' || type === 'video') && <MediaTimingFields {...props} />}
+      <details className="editor-extra"><summary>Odpověď po odhalení</summary>
+        <MediaUploadField key={slide.id + ':answer'} kind="image" label="Obrázek odpovědi (soukromý)" value={slide.answerImage} disabled={disabled} onReady={value => onChange({ ...slide, answerImage: value })} />
+        <label className="form-field">Vysvětlení pro hráče po odhalení<textarea disabled={disabled} value={slide.answerExplanation ?? ''} onChange={event => onChange({ ...slide, answerExplanation: event.target.value })} /></label>
+      </details>
+      <details className="editor-extra"><summary>Vzhled slidu</summary><button type="button" disabled={disabled} onClick={() => onChange({ ...slide, ...(defaultAppearance ?? { backgroundImage: '', backgroundOverlay: 0, imageLayout: 'split' }) })}>Obnovit výchozí vzhled</button><VisualFields slide={slide} disabled={disabled} onChange={onChange} />
+        {type === 'image' && <label className="form-field">Rozložení obrázku<select disabled={disabled} value={slide.imageLayout ?? 'split'} onChange={event => onChange({ ...slide, imageLayout: event.target.value as 'split' | 'stacked' })}><option value="split">Obrázek vedle zadání</option><option value="stacked">Obrázek pod zadáním</option></select></label>}
+      </details>
+      <details className="editor-extra"><summary>Poznámka moderátora</summary><label className="form-field">Poznámka moderátora<textarea rows={3} disabled={disabled} value={slide.moderatorNote} onChange={event => onChange({ ...slide, moderatorNote: event.target.value })} /></label></details>
       {(showAllIssues || issues.some((issue) => issue.severity === 'warning')) && <ReadinessSummary slide={slide} />}
     </section>
   );

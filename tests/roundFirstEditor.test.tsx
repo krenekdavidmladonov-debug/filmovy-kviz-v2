@@ -141,7 +141,7 @@ describe('type-specific question forms and validation', () => {
     expect(validateQuestion(choiceImage)).toEqual([]);
     const html = renderQuestion(choiceImage);
     expect(html).toContain('Obrázek otázky');
-    expect(html).toContain('Výběr z možností');
+    expect(html).toContain('ABCD – jedna možnost');
     expect(html).toContain('Obrázek odpovědi (soukromý)');
   });
 

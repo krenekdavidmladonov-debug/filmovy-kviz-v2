@@ -137,7 +137,7 @@ export function SlideRenderer({
         {showAnswer && (
           <section className="slide-answer">
             <span>SPRÁVNÁ ODPOVĚĎ</span>
-            <strong>{displayedAnswer}</strong>
+            <strong>{displayedAnswer}</strong>{slide.answerExplanation && <p>{slide.answerExplanation}</p>}
             {model.answerImage && <AssetImage source={model.answerImage} alt="Obrázek odpovědi" sessionId={mediaSessionId} />}
           </section>
         )}
@@ -156,7 +156,7 @@ export function SlideRenderer({
       <div className="slide-layout audio-layout">
         <QuestionHeader number={model.questionNumber} count={model.questionCount} legacyPl={false} />
         <QuestionCopy title={model.title} text={model.text} />
-          <div className={`vinyl-visual ${mediaPlan.vinylPlaying ? 'is-playing' : ''}`} aria-label={mediaPlan.vinylPlaying ? 'Audio se přehrává' : 'Audio je připravené'}>
+          <Options options={model.options} /><div className={`vinyl-visual ${mediaPlan.vinylPlaying ? 'is-playing' : ''}`} aria-label={mediaPlan.vinylPlaying ? 'Audio se přehrává' : 'Audio je připravené'}>
           <div className="vinyl-disc"><div className="vinyl-label">{productConfig.shortName}</div></div><div className="vinyl-arm" />
           <span>{mediaPlan.vinylPlaying ? 'PŘEHRÁVÁ SE AUDIO' : mediaFinished ? 'AUDIO DOHRÁLO' : 'AUDIO OTÁZKA'}</span>
         </div>
@@ -164,7 +164,7 @@ export function SlideRenderer({
     );
   } else if (model.contentKind === 'video' && mediaPlan.mountPlayer && model.mediaSource) {
     content = (
-      <div className="video-presentation"><QuestionCopy title={model.title} text={model.text} />
+      <div className="video-presentation"><QuestionCopy title={model.title} text={model.text} /><Options options={model.options} />
         <MediaPlayer
             sessionId={mediaSessionId}
           source={model.mediaSource}
@@ -193,7 +193,7 @@ export function SlideRenderer({
   }
 
   return (
-    <article className={`slide-renderer mode-${visibleMode} kind-${model.contentKind}${compact ? ' is-compact' : ''}`}>
+    <article className={`slide-renderer mode-${visibleMode} kind-${model.contentKind} image-layout-${slide.imageLayout ?? 'split'}${compact ? ' is-compact' : ''}`}>
       <div className="slide-background" aria-hidden="true">{model.backgroundImage && <AssetImage source={model.backgroundImage} alt="" sessionId={mediaSessionId} />}</div>
       <div className="slide-background-overlay" style={{ opacity: model.backgroundOverlay / 100 }} aria-hidden="true" />
       <div className="slide-safe-area">

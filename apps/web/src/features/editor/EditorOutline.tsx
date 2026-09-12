@@ -4,7 +4,7 @@ import type { CreatableQuestionType, EditorSlide } from './types';
 import { validateQuestion } from './validation';
 
 const creationLabels: Record<CreatableQuestionType, string> = {
-  choice: 'Výběr z možností', free: 'Volná odpověď', image: 'Obrázek', audio: 'Audio', video: 'Video',
+  choice: 'ABCD', free: 'Volná odpověď', image: 'Obrázek', audio: 'Audio', video: 'Video',
 };
 
 export function EditorOutline({
@@ -18,6 +18,7 @@ export function EditorOutline({
   onClosePicker,
   onCreateQuestion,
   onAddRound,
+  onAddClosing,
 }: {
   readonly model: SemanticQuizModel;
   readonly selectedKey: string;
@@ -29,6 +30,7 @@ export function EditorOutline({
   readonly onClosePicker: () => void;
   readonly onCreateQuestion: (round: SemanticRound, type: CreatableQuestionType) => void;
   readonly onAddRound: () => void;
+  readonly onAddClosing?: () => void;
 }) {
   const selected = (key: string) => key === selectedKey ? 'selected' : '';
   const questionCount = model.rounds.reduce((total, round) => total + round.questions.length, 0);
@@ -49,7 +51,7 @@ export function EditorOutline({
       </section>
 
       <section className="outline-section outline-rounds">
-        <h2>Kola</h2>
+        <h2>Kola</h2><button type="button" className="secondary-button add-round-button" disabled={disabled} onClick={onAddRound}>+ Přidat kolo</button>
         {model.rounds.map((round) => (
           <details key={round.id} open className="outline-round">
             <summary><span>{round.position}. kolo</span><strong>{round.title}</strong><small>{round.questions.length} otázek</small></summary>
@@ -64,7 +66,7 @@ export function EditorOutline({
                   <li key={question.slide.id}>
                     <button type="button" className={`outline-question ${selected(key)}`} onClick={() => onSelect(key)}>
                       <span className="outline-question-number">{question.number}</span>
-                      <span><strong>{questionTypeLabels[question.type]}</strong><small>{questionSummary(displayedSlide)}</small></span>
+                      <span><strong>{questionTypeLabels[question.type]}</strong><small>{displayedSlide.authoringStatus === 'draft' ? 'Koncept · ' : ''}{questionSummary(displayedSlide)}</small></span>
                       {issue && <span className={`outline-issue ${issue.severity}`} title={issue.message} aria-label={issue.message}>!</span>}
                     </button>
                   </li>
@@ -105,9 +107,9 @@ export function EditorOutline({
             )}
           </details>
         ))}
-        <button type="button" className="secondary-button add-round-button" disabled={disabled} onClick={onAddRound}>+ Přidat kolo</button>
       </section>
 
+      {model.closing.length === 0 && onAddClosing && <button type="button" className="secondary-button" disabled={disabled} onClick={onAddClosing}>+ Závěrečná obrazovka</button>}
       {(model.closing.length > 0 || model.legacy.length > 0) && (
         <section className="outline-section">
           <h2>Závěr a starší obsah</h2>

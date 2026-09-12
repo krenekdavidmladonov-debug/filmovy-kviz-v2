@@ -4,11 +4,13 @@ import type { SemanticRound } from './semanticModel';
 
 export function UnsavedChangesDialog({
   busy,
+  saveLabel = 'Uložit a pokračovat',
   onSave,
   onDiscard,
   onCancel,
 }: {
   readonly busy: boolean;
+  readonly saveLabel?: string;
   readonly onSave: () => void;
   readonly onDiscard: () => void;
   readonly onCancel: () => void;
@@ -26,7 +28,7 @@ export function UnsavedChangesDialog({
       <h2 id="unsaved-dialog-title">Máte neuložené změny.</h2>
       <p>Než budete pokračovat, zvolte, co se má s rozepsanými změnami stát.</p>
       <div className="editor-dialog-actions">
-        <button type="button" className="primary-button" disabled={busy} onClick={onSave}>Uložit a pokračovat</button>
+        <button type="button" className="primary-button" disabled={busy} onClick={onSave}>{saveLabel}</button>
         <button type="button" className="secondary-button" disabled={busy} onClick={onDiscard}>Pokračovat bez uložení</button>
         <button ref={cancelRef} type="button" className="secondary-button" disabled={busy} onClick={onCancel}>Zrušit</button>
       </div>
