@@ -159,6 +159,7 @@ export function parseSession(snapshot: DocumentSnapshot): PrivateLiveSession {
 function parseSlide(snapshot: DocumentSnapshot): PrivateSlide {
   if (!snapshot.exists) throw new LiveSessionError('not-found', 'Quiz slide was not found.');
   const data = snapshotData(snapshot, 'Quiz slide');
+  if (data.authoringStatus === 'draft') throw new LiveSessionError('failed-precondition', 'Soukromý koncept nelze publikovat.');
   const copy = (field: string) => Object.hasOwn(data, field) ? { [field]: data[field] } : {};
   return {
     id: snapshot.id,
@@ -176,7 +177,7 @@ function parseSlide(snapshot: DocumentSnapshot): PrivateSlide {
     presentation: isObject(data.presentation) ? data.presentation : {},
     ...copy('backgroundImage'), ...copy('questionImage'), ...copy('answerImage'), ...copy('mediaSource'),
     ...copy('backgroundOverlay'), ...copy('clipStartSeconds'), ...copy('clipEndSeconds'),
-    ...copy('correctAnswer'), ...copy('moderatorNote'), ...copy('legacy'),
+    ...copy('imageLayout'), ...copy('answerExplanation'), ...copy('correctAnswer'), ...copy('moderatorNote'), ...copy('legacy'),
   };
 }
 
@@ -220,6 +221,8 @@ export const createLiveSession = onCall(callableOptions, async (request): Promis
       const quiz = snapshotData(quizSnapshot, 'Quiz');
       const slideCount = requiredNumber(quiz, 'slideCount', 'Quiz');
       if (!Number.isInteger(slideCount) || slideCount < 1) throw new LiveSessionError('failed-precondition', 'Quiz has no ordered slides.');
+      const sourceSlides = await transaction.get(quizRef.collection('slides'));
+      if (sourceSlides.docs.some(slide => slide.data().authoringStatus === 'draft')) throw new LiveSessionError('failed-precondition', 'Kvíz obsahuje soukromé koncepty.');
       const now = Timestamp.now();
       const session: PrivateLiveSession = {
         sessionId: sessionRef.id, quizId, quizTitle: requiredString(quiz, 'title', 'Quiz'), slideCount,

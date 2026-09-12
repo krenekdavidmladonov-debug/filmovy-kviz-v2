@@ -122,6 +122,10 @@ export function mapEditorSlide(id: string, data: DocumentData): EditorSlide {
     presentation: mappedPresentation,
     ...(Number.isInteger(data.questionNumber) ? { questionNumber: data.questionNumber as number } : {}),
     ...(Number.isInteger(data.questionCount) ? { questionCount: data.questionCount as number } : {}),
+    ...(data.authoringStatus === 'draft' || data.authoringStatus === 'ready' ? { authoringStatus: data.authoringStatus } : {}),
+    ...(data.answerMode === 'open' || data.answerMode === 'choice' ? { answerMode: data.answerMode } : {}),
+    ...(data.imageLayout === 'split' || data.imageLayout === 'stacked' ? { imageLayout: data.imageLayout } : {}),
+    ...(typeof data.answerExplanation === 'string' ? { answerExplanation: data.answerExplanation } : {}),
     backgroundImage: typeof data.backgroundImage === 'string' ? data.backgroundImage : mediaByRoleAndKind(data.media, 'background', 'image'),
     questionImage: typeof data.questionImage === 'string' ? data.questionImage : (['image', 'picture', 'photo'].includes(normalizedKind) ? mediaByRoleAndKind(data.media, 'prompt', 'image') : ''),
     answerImage: typeof data.answerImage === 'string' ? data.answerImage : mediaByRoleAndKind(data.media, 'answer', 'image'),
@@ -135,6 +139,7 @@ export function mapEditorSlide(id: string, data: DocumentData): EditorSlide {
 }
 
 export function mapEditorQuiz(id: string, data: DocumentData, slides: readonly EditorSlide[]): EditorQuiz {
+  const appearance = object(data.defaultAppearance);
   const revision = data.revision === undefined ? 0 : requiredCount(data, 'revision');
   const ordered = [...slides].sort((left, right) => left.position - right.position);
   ordered.forEach((slide, index) => {
@@ -151,5 +156,10 @@ export function mapEditorQuiz(id: string, data: DocumentData, slides: readonly E
     questionCount: requiredCount(data, 'questionCount'),
     roundCount: requiredCount(data, 'roundCount'),
     slides: ordered,
+    ...(appearance ? {defaultAppearance: {
+      backgroundImage: typeof appearance.backgroundImage === 'string' ? appearance.backgroundImage : '',
+      backgroundOverlay: typeof appearance.backgroundOverlay === 'number' ? appearance.backgroundOverlay : 0,
+      imageLayout: appearance.imageLayout === 'stacked' ? 'stacked' as const : 'split' as const,
+    }} : {}),
   };
 }

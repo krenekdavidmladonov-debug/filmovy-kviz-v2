@@ -325,3 +325,14 @@ test('native audio pause and resume keep generation; stopped callbacks remain st
   expect(applyMediaPlaybackReport(paused,'playing',4,'staff-1',now).mediaPlaybackState).toBe('playing');
   expect(()=>applyMediaPlaybackReport({...paused,mediaGeneration:5},'playing',4,'staff-1',now)).toThrow();
 });
+
+
+test('player explanation is revealed explicitly and moderator note remains private', () => {
+  const slide = { ...questionSlide(), imageLayout:'stacked', answerExplanation:'PRIVATE-EXPLANATION' };
+  const before = buildPublicSessionState(session(),slide);
+  expect(before).toMatchObject({imageLayout:'stacked'});
+  expect(JSON.stringify(before)).not.toContain('PRIVATE-EXPLANATION');
+  const after = buildPublicSessionState(session({answerRevealed:true}),slide);
+  expect(after.answerExplanation).toBe('PRIVATE-EXPLANATION');
+  expectNoPrivateFields(after);
+});

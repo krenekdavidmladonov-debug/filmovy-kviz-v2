@@ -276,3 +276,31 @@ describe('quiz editor tolerant Firestore mapper', () => {
     expect(quiz.revision).toBe(0);
   });
 });
+
+
+describe('private authoring drafts and independent answers', () => {
+  test('persists a safe incomplete draft without losing opaque legacy fields', () => {
+    const input = validateSlideInput(slideInput({kind:'audio', authoringStatus:'draft', answerMode:'choice', options:['','',''], correctAnswer:'', text:'', mediaSource:'https://example.test/clip.wav', clipStartSeconds:0, clipEndSeconds:null}));
+    const updated = applyKnownSlideUpdate({position:1, legacy:{raw:{keep:42}}}, input);
+    expect(updated).toMatchObject({authoringStatus:'draft', answerMode:'choice', legacy:{raw:{keep:42}}});
+    expect(() => applyKnownSlideUpdate(updated, {...input,authoringStatus:'ready'})).toThrow('Otázka není dokončená');
+  });
+  test.each([{authoringStatus:'published'}, {answerMode:'anything'}, {imageLayout:'anything'}, {answerExplanation:{}}, {authoringStatus:'draft',clipStartSeconds:9,clipEndSeconds:2}, {authoringStatus:'draft',options:[{}]}])('draft marker never permits malformed data %j', fields => {
+    expect(() => validateSlideInput(slideInput(fields))).toThrow();
+  });
+  test.each(['image','audio','video'])('ready %s can have choices or an open answer and round-trips explanation/layout', kind => {
+    for (const answerMode of ['choice','open'] as const) {
+      const fields = {kind,authoringStatus:'ready',answerMode,options:answerMode==='choice'?['First','Second']:[],correctAnswer:'Second',questionImage:'https://example.test/prompt.png',mediaSource:kind==='audio'?'https://example.test/a.wav':kind==='video'?'https://example.test/v.webm':'',clipStartSeconds:1,clipEndSeconds:3,imageLayout:'stacked',answerExplanation:'After reveal'};
+      const updated=applyKnownSlideUpdate({position:1},validateSlideInput(slideInput(fields)));
+      expect(mapEditorSlide('q',updated)).toMatchObject({answerMode,authoringStatus:'ready',imageLayout:'stacked',answerExplanation:'After reveal'});
+    }
+  });
+  test('new choices accept 2–6 values, reject ambiguous or excessive values, preserve absent legacy contract', () => {
+    for (const count of [2,3,4,5,6]) {
+      const options=Array.from({length:count},(_,i)=>'Value '+i);
+      expect(applyKnownSlideUpdate({position:1},validateSlideInput(slideInput({authoringStatus:'ready',answerMode:'choice',options,correctAnswer:options.at(-1)})))).toMatchObject({options});
+    }
+    for (const options of [['same','same'],['a',''],['a','b','c','d','e','f','g']]) expect(() => applyKnownSlideUpdate({position:1},validateSlideInput(slideInput({authoringStatus:'ready',answerMode:'choice',options,correctAnswer:options[0]})))).toThrow();
+    expect(applyKnownSlideUpdate({position:1},validateSlideInput(slideInput()))).not.toHaveProperty('authoringStatus');
+  });
+});

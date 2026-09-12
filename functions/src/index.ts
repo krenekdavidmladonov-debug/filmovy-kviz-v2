@@ -79,3 +79,5 @@ export { previewEventTeamMessage, createEventTeamMessage, listEventTeamMessages,
 
 export { beginQuizMediaUpload, finalizeQuizMediaUpload } from './media/callables.js';
 export { readQuizMedia } from './media/endpoint.js';
+
+export { createQuizRound } from './editor/callables.js';

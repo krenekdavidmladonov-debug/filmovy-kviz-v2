@@ -1,4 +1,4 @@
-import { mapEditorSlide, directMediaKind, youtubeVideoId, parseQuizAsset } from '@filmovy-kviz/quiz-domain';
+import { validateQuestion, mapEditorSlide, directMediaKind, youtubeVideoId, parseQuizAsset } from '@filmovy-kviz/quiz-domain';
 import { createHash } from 'node:crypto';
 
 import { QuizEditorError } from './errors.js';
@@ -188,13 +188,15 @@ export function applyKnownSlideUpdate(
     // Explicit empty replacement shadows the legacy role without deleting its history.
     if (mapped[field] !== input[field]) result[field] = input[field];
   }
+  for (const field of ['authoringStatus','answerMode','imageLayout','answerExplanation'] as const) if (input[field] !== undefined) result[field] = input[field];
+  if (result.authoringStatus !== undefined && result.isQuestion !== true) throw new QuizEditorError('invalid-argument', 'Only questions can be drafts.');
   const timed = ['audio', 'music', 'video', 'youtube'].includes(input.kind);
   if (timed && input.mediaSource !== '' && mapped.mediaSource !== input.mediaSource && youtubeVideoId(input.mediaSource) === undefined
       && directMediaKind(input.mediaSource) !== (['audio', 'music'].includes(input.kind) ? 'audio' : 'video')
       && !(['audio', 'music'].includes(input.kind) && parseQuizAsset(input.mediaSource))) {
     throw new QuizEditorError('invalid-argument', 'Nepodporovaný zdroj ukázky.');
   }
-  if (timed && input.mediaSource !== '' && mapped.mediaSource !== input.mediaSource
+  if (input.authoringStatus !== 'draft' && timed && input.mediaSource !== '' && mapped.mediaSource !== input.mediaSource
       && (input.clipStartSeconds === null || input.clipEndSeconds === null || input.clipEndSeconds <= input.clipStartSeconds)) {
     throw new QuizEditorError('invalid-argument', 'Změna zdroje vyžaduje platný začátek a konec ukázky.');
   }
@@ -209,6 +211,7 @@ export function applyKnownSlideUpdate(
     applyOptionalNumber(result, current, 'clipStartSeconds', input.clipStartSeconds);
     applyOptionalNumber(result, current, 'clipEndSeconds', input.clipEndSeconds);
   }
+  if ((result.authoringStatus === 'ready' || (input.answerMode !== undefined && result.authoringStatus !== 'draft')) && validateQuestion(mapEditorSlide('current', { position: 1, ...result })).some(issue => issue.severity === 'error')) throw new QuizEditorError('invalid-argument', 'Otázka není dokončená. Uložte ji jako soukromý koncept.');
   return result;
 }
 

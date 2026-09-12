@@ -47,16 +47,19 @@ export function validateQuestion(slide: EditorSlide): readonly EditorValidationI
   if (!slide.isQuestion) return [];
   const type = semanticQuestionType(slide);
   const issues: EditorValidationIssue[] = [];
+  if (slide.authoringStatus === 'draft') issues.push(issue('QUESTION_DRAFT', 'STRUCTURE', 'authoringStatus', 'Nedokončený soukromý koncept. Dokončete jej před hraním.'));
+  if ((slide.answerMode === 'open' && slide.options.length > 0) || (slide.answerMode === 'choice' && slide.kind === 'free')) issues.push(issue('CHOICE_OPTIONS_INVALID', 'ANSWER', 'options', 'Režim odpovědi neodpovídá uloženým možnostem.'));
   const prompt = questionPrompt(slide).trim();
   if (prompt === '') issues.push(issue('QUESTION_PROMPT_MISSING', 'STRUCTURE', 'prompt', 'Chybí zadání otázky.'));
   if (!rendererQuestionKinds.has(slide.kind.toLowerCase())) {
     issues.push(issue('QUESTION_RENDERER_UNSUPPORTED', 'STRUCTURE', 'prompt', 'Tento obsah renderer neumí bezpečně zobrazit jako otázku.'));
   }
 
-  if (type === 'choice' || (type === 'image' && slide.options.length > 0)) {
+  if (slide.answerMode === 'choice' || (slide.answerMode !== 'open' && (type === 'choice' || (['image','audio','video'].includes(type) && slide.options.length > 0)))) {
     if (slide.options.filter((option) => option.trim() !== '').length < 2) {
       issues.push(issue('CHOICE_OPTIONS_TOO_FEW', 'ANSWER', 'options', 'Doplňte alespoň dvě platné možnosti.'));
     }
+    if (slide.answerMode === 'choice' && (slide.options.length > 6 || slide.options.some(o => !o.trim()) || new Set(slide.options.map(normalized)).size !== slide.options.length)) issues.push(issue('CHOICE_OPTIONS_INVALID', 'ANSWER', 'options', 'Použijte 2–6 vyplněných, navzájem odlišných možností.'));
     if (slide.correctAnswer.trim() === '') {
       issues.push(issue('CHOICE_CORRECT_MISSING', 'ANSWER', 'correctAnswer', 'Chybí správná možnost.'));
     } else if (correctOptionIndex(slide) === undefined) {
