@@ -88,3 +88,65 @@ test('entire quiz from empty library through normal UI, private drafts, structur
     if(sessionId){await identity.db.doc('sessions/'+sessionId).delete();await identity.db.doc('publicSessions/'+sessionId).delete();}if(snapshotId)await identity.db.recursiveDelete(identity.db.doc('quizSnapshots/'+snapshotId));if(eventId){await identity.db.recursiveDelete(identity.db.doc('events/'+eventId));await identity.db.doc('publicEvents/'+eventId).delete();}if(quizId)await identity.db.recursiveDelete(identity.db.doc('quizzes/'+quizId));await identity.dispose();
   }
 });
+
+// Regression: never visit/save the optional opening, rules or ending sections.
+test('minimal quiz authored through UI rehearses exactly the persisted live stream', async ({ page, context }) => {
+  const identity = await editorIdentity();
+  let quizId, sessionId;
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await context.route('**/*', route => ['localhost', '127.0.0.1'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
+  try {
+    await page.goto('/admin/login');
+    await page.getByLabel('E-mail').fill(identity.email);
+    await page.getByLabel('Heslo').fill(identity.password);
+    await page.getByRole('button', { name: 'Přihlásit se' }).click();
+    await expect(page).toHaveURL(/\/admin$/);
+    await page.getByRole('link', { name: 'Otevřít knihovnu', exact: true }).click();
+    await page.getByRole('link', { name: '+ Nový kvíz', exact: true }).first().click();
+    await page.getByLabel('Název kvízu').fill('Minimální syntetický kvíz');
+    await page.getByRole('button', { name: 'Vytvořit', exact: true }).click();
+    await expect(page).toHaveURL(/\/edit$/);
+    quizId = page.url().split('/').at(-2);
+    await page.getByRole('button', { name: '+ Přidat kolo', exact: true }).click();
+    await page.getByLabel('Název kola *').fill('Jediné kolo');
+    await save(page);
+    await round(page, 0).getByRole('button', { name: '+ Přidat otázku', exact: true }).click();
+    await page.getByRole('dialog', { name: /Typ otázky/ }).getByRole('button', { name: 'Volná odpověď', exact: true }).click();
+    await prompt(page).fill('Jediná syntetická otázka');
+    await page.getByLabel('Správná odpověď *', { exact: true }).fill('Syntetická odpověď');
+    await save(page);
+    await page.reload();
+    const stored = (await identity.db.collection('quizzes/' + quizId + '/slides').get()).docs.map(d => ({ ...d.data(), id: d.id })).sort((a, b) => a.position - b.position);
+    expect(stored.map(s => s.kind)).toEqual(['agenda', 'round', 'free', 'recap']);
+    await page.getByRole('button', { name: 'Soukromá zkouška', exact: true }).click();
+    const practice = page.getByRole('dialog', { name: 'Soukromá zkouška kvízu' });
+    const visited = [];
+    for (let i = 0; i < stored.length; i++) {
+      await expect(practice.locator('.practice-stage')).toHaveAttribute('data-slide-id', stored[i].id);
+      visited.push(await practice.locator('.practice-stage').getAttribute('data-slide-id'));
+      if (i < stored.length - 1) await practice.getByRole('button', { name: 'Další', exact: true }).click();
+    }
+    await expect(practice.getByRole('button', { name: 'Další', exact: true })).toBeDisabled();
+    await expect(practice.locator('header strong')).toHaveText('Soukromá zkouška · 4 / 4');
+    await page.screenshot({ path: dir + '/minimal-practice.png' });
+    await practice.getByRole('button', { name: 'Zavřít zkoušku' }).click();
+    expect((await identity.db.collection('publicSessions').get()).size).toBe(0);
+    // Separate technical comparison; the quiz content above was authored only in UI.
+    sessionId = (await identity.call('createLiveSession', { quizId })).sessionId;
+    for (const slide of stored) {
+      const state = (await identity.db.doc('sessions/' + sessionId).get()).data();
+      await identity.call('goToSlide', { sessionId, expectedRevision: state.revision, position: slide.position });
+      const live = (await identity.db.doc('sessions/' + sessionId).get()).data();
+      const published = (await identity.db.doc('publicSessions/' + sessionId).get()).data();
+      expect(live.currentSlideId).toBe(slide.id);
+      expect(published.slideKind).toBe(slide.kind);
+    }
+    expect(errors).toEqual([]);
+    await writeFile(dir + '/minimal-practice.json', JSON.stringify({ quizCreatedThroughUI: true, storedKinds: stored.map(s => s.kind), storedIds: stored.map(s => s.id), practiceIds: visited, technicalLiveComparison: true, pageErrors: errors }, null, 2));
+  } finally {
+    if (sessionId) { await identity.db.doc('sessions/' + sessionId).delete(); await identity.db.doc('publicSessions/' + sessionId).delete(); }
+    if (quizId) await identity.db.recursiveDelete(identity.db.doc('quizzes/' + quizId));
+    await identity.dispose();
+  }
+});

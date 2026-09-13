@@ -1,29 +1,14 @@
 import { useMemo, useState } from 'react';
-import { buildSemanticQuizModel, generatedAgendaOptions, semanticQuestionType } from '@filmovy-kviz/quiz-domain';
+import { semanticQuestionType } from '@filmovy-kviz/quiz-domain';
 import type { EditorQuiz, EditorSlide } from './types';
 import { SlideRenderer } from '../presentation/SlideRenderer';
 import { MediaPlayer } from '../presentation/MediaPlayer';
-import { defaultRules } from '../presentation/model';
 import type { MediaPlaybackCommand } from '../presentation/types';
 
 export function practiceSlides(quiz: EditorQuiz): readonly EditorSlide[] {
-  const model = buildSemanticQuizModel(quiz);
-  const blank = { title: '', text: '', moderatorNote: '', options: [], correctAnswer: '', media: [], presentation: { videoStart: null, videoEnd: null, audioTrigger: null, backgroundOverlay: null, answerOverlay: null, sourceQuestionNumber: null }, backgroundImage: '', questionImage: '', answerImage: '', mediaSource: '', backgroundOverlay: null, clipStartSeconds: null, clipEndSeconds: null, hasLegacyData: false, isQuestion: false, position: 0 };
-  const virtual = (kind: 'intro' | 'agenda' | 'rules' | 'recap' | 'end', id: string, title: string): EditorSlide => ({ ...blank, id, kind, storedKind: kind, title });
-  const result: EditorSlide[] = [];
-  for (const section of model.introduction) {
-    if (section.slide) { result.push(section.key === 'agenda' ? { ...section.slide, options: generatedAgendaOptions(model.rounds) } : section.slide); continue; }
-    const kind = section.key === 'opening' ? 'intro' : section.key;
-    result.push({ ...virtual(kind, 'practice-' + kind, kind === 'intro' ? quiz.title : section.label), options: kind === 'agenda' ? generatedAgendaOptions(model.rounds) : kind === 'rules' ? [...defaultRules] : [] });
-  }
-  for (const slide of quiz.slides) {
-    if (model.introduction.some(section => section.slide?.id === slide.id)) continue;
-    result.push(slide.kind === 'agenda' ? { ...slide, options: generatedAgendaOptions(model.rounds) } : slide);
-    const round = model.rounds.find(item => item.lastPosition === slide.position);
-    if (round && round.recaps.length === 0) result.push({ ...virtual('recap', 'practice-recap-' + round.id, round.title), roundId: round.id });
-  }
-  if (!model.closing.length) result.push(virtual('end', 'practice-end', 'Děkujeme za hru'));
-  return result;
+  // Rehearse the same persisted stream consumed by snapshots and live sessions.
+  // Missing system sections and manually authored agendas must stay unchanged.
+  return [...quiz.slides].sort((a, b) => a.position - b.position);
 }
 
 /** Private in-memory rehearsal. No session, channel, persistence or public URL. */

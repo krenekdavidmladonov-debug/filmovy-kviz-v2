@@ -25,6 +25,11 @@ test('mixed, missing, production, and emulator staging configurations fail close
 });
 
 const stagingConfig = JSON.parse(readFileSync(new URL('../firebase.staging.json', import.meta.url), 'utf8'));
+
+test('YouTube embeds receive only the staging origin on cross-origin requests', () => {
+  const headers = stagingConfig.hosting.headers.find(item => item.source === '**').headers;
+  assert.equal(headers.find(item => item.key.toLowerCase() === 'referrer-policy')?.value, 'strict-origin-when-cross-origin');
+});
 test('team tooling backend deploy accepts only the two exact callables with no hooks or overrides', () => {
   assert.equal(deploymentMode([STAGING_PROJECT, '--team-tools-functions']), 'team-tools-functions');
   assert.deepEqual(teamToolFunctionArgs(STAGING_PROJECT, valid, stagingConfig, 'functions.json'), ['deploy', '--project', STAGING_PROJECT, '--config', 'functions.json', '--only', 'functions:adminAddEventTeam,functions:adminUpdateEventTeam', '--non-interactive']);

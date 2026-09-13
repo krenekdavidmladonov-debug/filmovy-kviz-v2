@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test, vi } from 'vitest';
 
 import { EditorPreview, QuestionForm } from '../apps/web/src/features/editor/EditorForms';
+import { practiceSlides } from '../apps/web/src/features/editor/QuizPractice';
 import {
   buildSemanticQuizModel,
   creatableQuestionTypes,
@@ -61,6 +62,16 @@ function renderQuestion(value: EditorSlide, showAllIssues = true): string {
     />,
   );
 }
+
+test('private rehearsal preserves persisted legacy order and manual agenda without inventing sections', () => {
+  const manualAgenda = slide({ id: 'manual-agenda', position: 9, kind: 'agenda', storedKind: 'agenda', isQuestion: false, options: ['Ručně napsaný program', 'Přestávka'] });
+  const question = slide({ id: 'only-question', position: 4 });
+  const quiz = { ...quizFixture(), slides: [manualAgenda, question] };
+  const originalOrder = [...quiz.slides];
+  expect(practiceSlides(quiz)).toEqual([question, manualAgenda]);
+  expect(quiz.slides).toEqual(originalOrder);
+  expect(practiceSlides({ ...quiz, slides: [] })).toEqual([]);
+});
 
 describe('round-first semantic editor model', () => {
   test('builds intro system sections, rounds, round-local questions, and generated recap nodes', () => {

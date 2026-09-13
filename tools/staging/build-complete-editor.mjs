@@ -34,6 +34,7 @@ cpSync('packages/quiz-domain/lib', path.join(backend, 'vendor/quiz-domain/lib'),
 cpSync('packages/quiz-domain/package.json', path.join(backend, 'vendor/quiz-domain/package.json'));
 const staging = JSON.parse(readFileSync('firebase.staging.json', 'utf8'));
 assert.equal(staging.hosting.site, STAGING_PROJECT);
+assert.equal(staging.hosting.headers.find(item => item.source === '**')?.headers.find(item => item.key.toLowerCase() === 'referrer-policy')?.value, 'strict-origin-when-cross-origin', 'YouTube requires the HTTP Referer origin');
 const config = { functions: { source: backend, codebase: 'default', runtime: 'nodejs22' }, hosting: { ...staging.hosting, public: path.join(output, 'hosting') }, storage: { rules: path.join(output, 'storage.rules') } };
 assert(!config.functions.predeploy && !config.functions.postdeploy && !config.hosting.predeploy && !config.hosting.postdeploy);
 cpSync('storage.rules', path.join(output, 'storage.rules'));
@@ -55,8 +56,17 @@ writeFileSync(path.join(output, 'manifest.json'), JSON.stringify({ builtAt: new 
   stagingRelease: '1789157941594000', stagingVersion: '90df28ec3c46ec01',
   componentSources: { frontend: sha, editorFunctions: sha, editorBaseline: baseline, domain: sha },
   functionsExports: editorReleaseFunctions, existingDependencies,
+  requiredServices: ['firebasestorage.googleapis.com', 'storage.googleapis.com', 'firebaserules.googleapis.com', 'firestore.googleapis.com', 'cloudfunctions.googleapis.com', 'run.googleapis.com', 'cloudbuild.googleapis.com', 'artifactregistry.googleapis.com'],
   excludedFunctions: ['dispatchRegistrationEmail','deliverEmailTask','previewEventTeamMessage','createEventTeamMessage','listEventTeamMessages','getEventTeamMessage'],
-  storage: { bucket: 'filmovy-kviz-v2-staging.firebasestorage.app', observedExisting: false, proposedLocation: 'europe-west1', access: 'immutable upload grants and authenticated gateway; no public bucket reads' },
+  storage: { bucket: 'filmovy-kviz-v2-staging.firebasestorage.app', observedExisting: false, proposedLocation: 'europe-west1', access: 'immutable upload grants and authenticated gateway; no public bucket reads',
+    runtimeServiceAccount: '177615774316-compute@developer.gserviceaccount.com',
+    runtimeBucketConfiguration: 'FIREBASE_CONFIG.storageBucket must equal storage.bucket',
+    requiredRuntimeBucketPermissions: ['storage.objects.get', 'storage.objects.update'],
+    metadataUpdatePurpose: 'Remove firebaseStorageDownloadTokens before marking an asset ready',
+    crossServiceRules: { serviceAccount: 'service-177615774316@gcp-sa-firebasestorage.iam.gserviceaccount.com', projectRole: 'roles/firebaserules.firestoreServiceAgent', purpose: 'Read the server-issued upload grant from default Firestore database' },
+    firebaseStorageApiObservedEnabled: false,
+    prerequisitesVerified: false,
+    verificationRequired: ['Firebase Storage API enabled and Storage service agent provisioned', 'Bucket exists and is registered with Firebase Storage', 'Runtime permissions effective on this bucket', 'Cross-service Rules role assigned to Storage service agent', 'Finalized cloud metadata contains no download token; captured token replay denied', 'Grant upload, authenticated gateway/CORS and anonymous current-publication allowlist pass online'] },
   firestore: { rulesChanged: false, indexesChanged: false },
   configuration, node: process.version, checksums,
 }, null, 2));
