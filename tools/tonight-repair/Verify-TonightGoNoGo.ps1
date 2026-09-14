@@ -7,7 +7,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 . (Join-Path $repoRoot 'tools\local-qa\LocalQa.Common.ps1')
 . (Join-Path $repoRoot 'tools\event-night\EventNight.Common.ps1')
 . (Join-Path $PSScriptRoot 'TonightRepair.Common.ps1')
-$Host.UI.RawUI.WindowTitle = 'Kvízová platforma - tonight go/no-go'
+$Host.UI.RawUI.WindowTitle = 'JustKvíz - tonight go/no-go'
 
 function Complete-GoNoGoWindow {
   if (-not $NonInteractive) {
@@ -18,7 +18,7 @@ function Complete-GoNoGoWindow {
 
 try {
   Write-Host ''
-  Write-Host 'KVÍZOVÁ PLATFORMA - TONIGHT GO/NO-GO' -ForegroundColor White
+  Write-Host 'JustKvíz - TONIGHT GO/NO-GO' -ForegroundColor White
   Write-Host '=====================================' -ForegroundColor DarkGray
   $eventPaths = Get-EventNightPaths $repoRoot
   $repairPaths = Get-TonightRepairPaths $repoRoot

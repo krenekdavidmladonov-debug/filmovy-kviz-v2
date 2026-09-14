@@ -2,7 +2,7 @@
 
 ## Goals
 
-Filmový Kvíz V2 is a small but real application for preparing and running pub quizzes. The architecture favors clear boundaries and operational reliability over unnecessary layers.
+JustKvíz is a small but real application for preparing and running pub quizzes. The architecture favors clear boundaries and operational reliability over unnecessary layers.
 
 ## Repository layout
 

@@ -50,7 +50,7 @@ export function AdminLoginPage() {
         <p className="eyebrow">Soukromá část</p>
         <h1>Přihlášení do administrace</h1>
         <p className="lead">
-          Přístup je určen pouze administrátorům a moderátorům kvízové platformy.
+          Přístup je určen pouze administrátorům a moderátorům {productConfig.name}.
         </p>
       </div>
 

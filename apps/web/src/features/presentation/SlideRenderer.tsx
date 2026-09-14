@@ -1,3 +1,4 @@
+import { Brand } from '../../ui/Brand';
 import { parseQuizAsset } from '@filmovy-kviz/quiz-domain';
 import { AssetImage } from '../media/AssetImage';
 import { useMemo, useState } from 'react';
@@ -148,7 +149,7 @@ export function SlideRenderer({
   } else if (model.contentKind === 'rules') {
     content = <div className="slide-centered slide-list"><p className="slide-kicker">PRAVIDLA</p><h1>{model.title || 'Hrajeme fér'}</h1><Options options={model.options.length > 0 ? model.options : defaultRules} /></div>;
   } else if (model.contentKind === 'intro' || model.contentKind === 'roundIntro') {
-    content = <div key={introGeneration} className={`slide-centered round-intro-content ${introGeneration > 0 ? 'intro-running' : ''}`}><p className="slide-kicker">{model.contentKind === 'intro' ? productConfig.name : 'NOVÉ KOLO'}</p><h1>{model.title || quizTitle}</h1>{model.text && <p>{model.text}</p>}</div>;
+    content = <div key={introGeneration} className={`slide-centered round-intro-content ${introGeneration > 0 ? 'intro-running' : ''}`}><p className="slide-kicker">{model.contentKind === 'intro' ? <Brand /> : 'NOVÉ KOLO'}</p><h1>{model.title || quizTitle}</h1>{model.text && <p>{model.text}</p>}</div>;
   } else if (model.contentKind === 'end') {
     content = <div className="slide-centered"><p className="slide-kicker">DĚKUJEME</p><h1>{model.title || 'To je pro dnešek vše'}</h1>{model.text && <p>{model.text}</p>}</div>;
   } else if (model.contentKind === 'audio') {
@@ -197,7 +198,7 @@ export function SlideRenderer({
       <div className="slide-background" aria-hidden="true">{model.backgroundImage && <AssetImage source={model.backgroundImage} alt="" sessionId={mediaSessionId} />}</div>
       <div className="slide-background-overlay" style={{ opacity: model.backgroundOverlay / 100 }} aria-hidden="true" />
       <div className="slide-safe-area">
-        <header className="slide-brand"><span>{quizTitle}</span><span>{productConfig.name}</span></header>
+        <header className="slide-brand"><span>{quizTitle}</span><Brand /></header>
         {content}
       </div>
     </article>

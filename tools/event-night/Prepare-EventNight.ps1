@@ -10,7 +10,7 @@ Set-StrictMode -Version 2.0
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 . (Join-Path $repoRoot 'tools\local-qa\LocalQa.Common.ps1')
 . (Join-Path $PSScriptRoot 'EventNight.Common.ps1')
-$Host.UI.RawUI.WindowTitle = 'Kvízová platforma - první event-night příprava'
+$Host.UI.RawUI.WindowTitle = 'JustKvíz - první event-night příprava'
 $worker = $null
 
 function Complete-PrepareWindow {
@@ -22,7 +22,7 @@ function Complete-PrepareWindow {
 
 try {
   Write-Host ''
-  Write-Host 'KVÍZOVÁ PLATFORMA - FIRST PREPARE' -ForegroundColor White
+  Write-Host 'JustKvíz - FIRST PREPARE' -ForegroundColor White
   Write-Host '==================================' -ForegroundColor DarkGray
   Write-QaInfo 'Tato jednorázová akce vytvoří nový production build a první lokální snapshot.'
 

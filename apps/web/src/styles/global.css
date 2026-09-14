@@ -1213,3 +1213,6 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
   .print-preview-frame { height: 520px; }
   .registration-form { grid-template-columns: 1fr; }
 }
+
+/* Preserve the exact spelling even inside uppercase projector captions. */
+.brand-wordmark { text-transform: none; letter-spacing: normal; font-weight: 800; white-space: nowrap; }

@@ -622,7 +622,7 @@ function Show-LocalQaReady {
   if ($AlreadyRunning) {
     Write-QaSuccess 'Správné lokální QA prostředí již běží. Další procesy nebyly spuštěny.'
   } else {
-    Write-QaSuccess 'Kvízová platforma běží lokálně.'
+    Write-QaSuccess 'JustKvíz běží lokálně.'
   }
   Write-Host ''
   Write-Host 'Adresa: http://localhost:5173/admin/login'

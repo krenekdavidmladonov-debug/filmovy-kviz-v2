@@ -1,3 +1,4 @@
+import { brand } from '@filmovy-kviz/quiz-domain';
 export type RegistrationEmailType = 'registration-confirmed' | 'registration-updated' | 'registration-cancelled';
 
 export interface RegistrationEmailContent {
@@ -41,7 +42,7 @@ export function registrationEmail(type: RegistrationEmailType, content: Registra
   const when = new Intl.DateTimeFormat('cs-CZ', { dateStyle: 'full', timeStyle: 'short', timeZone: content.timeZone }).format(content.startsAtMillis);
   const where = [content.venueName, content.publicLocation].filter(Boolean).join(' · ');
   const rows = [`Akce: ${content.eventTitle}`, `Kdy: ${when}`, ...(where ? [`Místo: ${where}`] : []), `Tým: ${content.teamName}`, `Počet hráčů: ${content.memberCount}`];
-  const footer = 'QUIZ PLATFORM';
+  const footer = brand.name;
   const cta = type === 'registration-confirmed' ? link : undefined;
   const text = [title, introduction, ...rows, ...(cta ? [`Spravovat přihlášku: ${cta}`, 'Odkaz je soukromý. Umožňuje přihlášku upravit nebo zrušit; nepřeposílejte jej.'] : []), footer].join('\n\n');
   return {

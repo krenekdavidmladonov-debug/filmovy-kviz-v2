@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 
 import { useAuth, type StaffRole } from '../auth/AuthProvider';
 import { productConfig } from '../config/product';
+import { Brand } from '../ui/Brand';
 
 const navigation = [
   { to: '/admin', label: 'Přehled', end: true },
@@ -51,8 +52,7 @@ export function AdminShell() {
     <div className="admin-shell">
       <aside className="admin-sidebar">
         <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
-          <span className="brand-mark" aria-hidden="true">{productConfig.shortName}</span>
-          <span><strong>{productConfig.name}</strong><small>Administrace</small></span>
+          <span><strong><Brand /></strong><small>Administrace</small></span>
         </NavLink>
         <AdminNavigation />
         <div className="admin-account">
@@ -66,8 +66,7 @@ export function AdminShell() {
 
       <header className="admin-mobile-header">
         <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
-          <span className="brand-mark" aria-hidden="true">{productConfig.shortName}</span>
-          <strong>{productConfig.name}</strong>
+          <strong><Brand /></strong>
         </NavLink>
         <details className="admin-nav-disclosure">
           <summary aria-label="Otevřít navigaci administrace">Menu</summary>
