@@ -4,7 +4,7 @@
 
 1. V Průzkumníku otevřete root projektu.
 2. Dvakrát klikněte na `START_LOCAL_QA.cmd`.
-3. Počkejte na zprávu **Kvízová platforma běží lokálně** a otevření prohlížeče.
+3. Počkejte na zprávu **JustKvíz běží lokálně** a otevření prohlížeče.
 4. Na `http://localhost:5173/admin/login` použijte:
    - login: `admin@example.test`
    - heslo: `LocalQuiz123!`

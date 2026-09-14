@@ -1,9 +1,9 @@
+import { Brand } from '../../ui/Brand';
 import { FinalRevealView } from '../../features/final-reveal/FinalRevealView';
 import { ResultsTable } from '../../features/leaderboard/ResultsTable';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
-import { productConfig } from '../../config/product';
 import {
   broadcastPlaybackState,
   openProjectorChannel,
@@ -19,7 +19,7 @@ function ProjectorMessage({ title, text, quizTitle, error = false }: {
 }) {
   return (
     <article className={`projector-message-canvas${error ? ' is-error' : ''}`}>
-      <div><p className="slide-kicker">{quizTitle ?? productConfig.name}</p><h1>{title}</h1>{text && <p>{text}</p>}</div>
+      <div><p className="slide-kicker">{quizTitle ?? <Brand />}</p><h1>{title}</h1>{text && <p>{text}</p>}</div>
     </article>
   );
 }

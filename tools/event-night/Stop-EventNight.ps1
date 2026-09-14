@@ -6,7 +6,7 @@ Set-StrictMode -Version 2.0
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 . (Join-Path $repoRoot 'tools\local-qa\LocalQa.Common.ps1')
 . (Join-Path $PSScriptRoot 'EventNight.Common.ps1')
-$Host.UI.RawUI.WindowTitle = 'Kvízová platforma - event-night stop a export'
+$Host.UI.RawUI.WindowTitle = 'JustKvíz - event-night stop a export'
 
 function Complete-StopWindow {
   if (-not $NonInteractive) {
@@ -17,7 +17,7 @@ function Complete-StopWindow {
 
 try {
   Write-Host ''
-  Write-Host 'KVÍZOVÁ PLATFORMA - EVENT NIGHT STOP' -ForegroundColor White
+  Write-Host 'JustKvíz - EVENT NIGHT STOP' -ForegroundColor White
   Write-Host '=====================================' -ForegroundColor DarkGray
   $paths = Get-EventNightPaths $repoRoot
   $state = Get-EventNightState $paths

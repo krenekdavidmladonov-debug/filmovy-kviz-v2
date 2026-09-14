@@ -1,4 +1,5 @@
 import fontkit from '@pdf-lib/fontkit';
+import { brand } from '@filmovy-kviz/quiz-domain';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
@@ -315,9 +316,9 @@ export async function renderPrintArtifact(event: PrintEvent, options: PrintOptio
       extended: await doc.embedFont(boldExtendedBytes, { subset: true }),
     },
   };
-  doc.setTitle('Filmový kvíz — tiskové centrum');
-  doc.setAuthor('Filmový kvíz V2');
-  doc.setCreator('Filmový kvíz V2');
+  doc.setTitle(`${brand.name} — tiskové centrum`);
+  doc.setAuthor(brand.name);
+  doc.setCreator(brand.name);
   doc.setProducer('pdf-lib');
   doc.setCreationDate(FIXED_DATE);
   doc.setModificationDate(FIXED_DATE);

@@ -428,7 +428,7 @@ function Write-EventNightReady {
   param([Parameter(Mandatory = $true)][psobject]$Health)
 
   Write-Host ''
-  Write-QaSuccess 'Kvízová platforma běží lokálně.'
+  Write-QaSuccess 'JustKvíz běží lokálně.'
   Write-Host ''
   Write-Host "Kvíz: $($Health.candidateTitle)"
   $readiness = if ([int]$Health.readiness.blockers -eq 0) { 'READY' } else { "BLOCKED — $($Health.readiness.blockers) problémů" }

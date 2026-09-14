@@ -5,7 +5,7 @@ Set-StrictMode -Version 2.0
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 . (Join-Path $PSScriptRoot 'LocalQa.Common.ps1')
-$Host.UI.RawUI.WindowTitle = 'Kvízová platforma - zastavení lokálního QA'
+$Host.UI.RawUI.WindowTitle = 'JustKvíz - zastavení lokálního QA'
 
 function Complete-StopWindow {
   if (-not $NonInteractive) {
@@ -16,7 +16,7 @@ function Complete-StopWindow {
 
 try {
   Write-Host ''
-  Write-Host 'KVÍZOVÁ PLATFORMA - ZASTAVENÍ LOKÁLNÍHO QA' -ForegroundColor White
+  Write-Host 'JustKvíz - ZASTAVENÍ LOKÁLNÍHO QA' -ForegroundColor White
   Write-Host '=================================================' -ForegroundColor DarkGray
   $paths = Get-LocalQaPaths $repoRoot
   $state = Get-LocalQaState $paths.StatePath
