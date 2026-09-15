@@ -11,7 +11,7 @@ const { projectId, authEndpoint, functionsEndpoint } = requireFullEmulatorEnviro
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
 const { initializeApp, deleteApp } = require('firebase-admin/app');
 const { getAuth: adminAuth } = require('firebase-admin/auth');
-const { getFirestore, Timestamp } = require('firebase-admin/firestore');
+const { getFirestore, Timestamp, FieldValue } = require('firebase-admin/firestore');
 const app = initializeApp({ projectId }), db = getFirestore(app), auth = adminAuth(app);
 const prefix = 'access-' + randomBytes(5).toString('hex'), password = randomBytes(24).toString('base64url') + '!';
 const accounts = [], documents = [];
@@ -74,12 +74,15 @@ try {
     }
   });
   await test('viewer with stale admin claim receives no private answer, note, raw, or contact', async () => {
+    const malformed = db.doc(`quizzes/${quizA}/slides/question`);
+    await malformed.update({ mediaSource: [{ raw: 'RAW_PRIVATE_SENTINEL' }] });
     for (const request of [{ operation: 'editor', quizId: quizA }, { operation: 'quiz', quizId: quizA }, { operation: 'snapshotSlides', snapshotId: eventA + '-snapshot' }, { operation: 'roster', eventId: eventA }]) {
       const response = JSON.stringify(await viewer.call('readAccessData', request));
       for (const secret of ['ANSWER_PRIVATE_SENTINEL', 'NOTE_PRIVATE_SENTINEL', 'RAW_PRIVATE_SENTINEL', 'EXPLANATION_PRIVATE_SENTINEL', 'CONTACT_PRIVATE_SENTINEL']) assert.equal(response.includes(secret), false);
     }
     await denied(() => viewer.call('readAccessData', { operation: 'registrations', eventId: eventA }));
     await denied(() => viewer.call('updateQuizMetadata', { quizId: quizA }));
+    await malformed.update({ mediaSource: FieldValue.delete() });
   });
   await test('redacted structure save preserves exact unseen and legacy fields', async () => {
     const before = (await db.doc(`quizzes/${quizA}/slides/question`).get()).data();

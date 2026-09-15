@@ -16,11 +16,12 @@ try {
   const registrationSummary = (await eventRef.collection('registrations').doc(team.registrationId).get()).data().emailDelivery;
   phase = 'roles and input';
   const calls = [publicCall, await fixture.roleCall(null), await fixture.roleCall('moderator'), await fixture.roleCall('referee')];
-  for (const call of calls) {
-    await deny(call('previewEventTeamMessage', copy), 'permission-denied');
-    await deny(call('createEventTeamMessage', { ...copy, requestId: randomUUID(), previewFingerprint: 'a'.repeat(64), confirmed: true }), 'permission-denied');
-    await deny(call('listEventTeamMessages', { eventId }), 'permission-denied');
-    await deny(call('getEventTeamMessage', { eventId, campaignId: 'a'.repeat(64) }), 'permission-denied');
+  for (const [index, call] of calls.entries()) {
+    const code = index === 0 ? 'unauthenticated' : 'permission-denied';
+    await deny(call('previewEventTeamMessage', copy), code);
+    await deny(call('createEventTeamMessage', { ...copy, requestId: randomUUID(), previewFingerprint: 'a'.repeat(64), confirmed: true }), code);
+    await deny(call('listEventTeamMessages', { eventId }), code);
+    await deny(call('getEventTeamMessage', { eventId, campaignId: 'a'.repeat(64) }), code);
   }
   await fixture.setAdminRole('moderator'); await deny(adminCall('previewEventTeamMessage', copy), 'permission-denied'); await fixture.setAdminRole('admin');
   await deny(adminCall('previewEventTeamMessage', { ...copy, recipients: ['attack@example.test'] }), 'invalid-argument');

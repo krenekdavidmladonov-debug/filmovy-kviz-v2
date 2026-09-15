@@ -35,6 +35,8 @@ export function slideView(slideId: string, data: Record<string, unknown>, answer
   const safeData = { ...data };
   // Legacy objects in nominal text fields must never serialize hidden nested metadata.
   for (const key of ['title', 'text']) if (typeof safeData[key] !== 'string') safeData[key] = '';
+  // A legacy array is not a playable source and must not stringify nested private metadata.
+  if (Array.isArray(safeData.mediaSource)) safeData.mediaSource = '';
   if (Array.isArray(safeData.options)) safeData.options = safeData.options.map((value: unknown) => typeof value === 'string' ? value : '');
   const slide = mapEditorSlide(slideId, safeData);
   return { ...slide, correctAnswer: answers ? slide.correctAnswer : '', answerImage: answers ? slide.answerImage : '',
