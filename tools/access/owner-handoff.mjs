@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { permissions } from '../../packages/quiz-domain/lib/access.js';
+import { legacyStagingAccounts } from './legacy-staging-accounts.mjs';
 
 // Operator CLI only. This file is never exported by deployed Functions.
 // Default is a read-only plan; identity approval is a local review artifact, never guessed.
@@ -17,7 +18,7 @@ const fields = ['projectId', 'targetUid', 'targetEmail', 'expectedMembershipVers
 if (Object.keys(approval).some(key => !fields.includes(key)) || fields.some(key => !(key in approval))) throw new Error('Approval must contain only the documented identity/review fields, never credentials.');
 if (approval.projectId !== 'filmovy-kviz-v2-staging') throw new Error('Only filmovy-kviz-v2-staging is permitted.');
 if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST || process.env.FIREBASE_CONFIG) throw new Error('Unexpected target override; run with an explicitly reviewed operator environment.');
-if (!/^[A-Za-z0-9_-]{1,128}$/u.test(approval.targetUid) || typeof approval.targetEmail !== 'string' || !approval.targetEmail.includes('@') || approval.targetEmail.toLowerCase().endsWith('.test') || ['OT395koGquNshAMFT3Oj98xuU9A3', 'qnw4VgkI1kgN0sWliZ4kIDTTrvw1', 'nR4Kr4i6xSV44Q3YBhCADUelGhm2'].includes(approval.targetUid)) throw new Error('An exact approved personal UID and email are required. Synthetic accounts cannot become the personal owner.');
+if (!/^[A-Za-z0-9_-]{1,128}$/u.test(approval.targetUid) || typeof approval.targetEmail !== 'string' || !approval.targetEmail.includes('@') || approval.targetEmail.toLowerCase().endsWith('.test') || Object.values(legacyStagingAccounts).includes(approval.targetUid)) throw new Error('An exact approved personal UID and email are required. Synthetic accounts cannot become the personal owner.');
 if (!Number.isSafeInteger(approval.expectedMembershipVersion) || approval.expectedMembershipVersion < 0 || !approval.approvalReference || !approval.approvedBy) throw new Error('Reviewed identity approval and expected version are required.');
 const require = createRequire(new URL('../../functions/package.json', import.meta.url));
 const { initializeApp, applicationDefault, deleteApp } = require('firebase-admin/app');

@@ -9,10 +9,12 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getFirestore, getDoc, getDocs, doc, collection } from 'firebase/firestore';
 import { assertStagingProject, STAGING_PROJECT, STAGING_URL } from './guard.mjs';
 import { stagingWebConfig } from './cloud.mjs';
+import { assertIsolatedQaManifest } from './qa-identity-guard.mjs';
 
 assertStagingProject(process.argv[2]);
 if (!process.argv[3] || process.argv.length !== 4) throw new Error('Pass the local synthetic staging seed manifest path.');
 const seed = JSON.parse(readFileSync(process.argv[3], 'utf8')); assertStagingProject(seed.project);
+assertIsolatedQaManifest(seed);
 const app = initializeApp(await stagingWebConfig(), 'event-team-tools-qa');
 await signInWithEmailAndPassword(getAuth(app), seed.users.admin.email, seed.users.admin.password);
 const db = getFirestore(app);

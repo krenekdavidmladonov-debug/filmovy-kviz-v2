@@ -5,11 +5,13 @@ import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { assertStagingProject, STAGING_URL } from './guard.mjs';
 import { stagingWebConfig } from './cloud.mjs';
+import { assertIsolatedQaManifest } from './qa-identity-guard.mjs';
 
 assertStagingProject(process.argv[2]);
 const expect = baseExpect.configure({ timeout: 30000 });
 const seed = JSON.parse(readFileSync('.local-data/staging/seed.json', 'utf8'));
 assertStagingProject(seed.project);
+assertIsolatedQaManifest(seed);
 mkdirSync('.local-data/staging/pdf', { recursive: true });
 const app = initializeApp(await stagingWebConfig(), 'staging-browser-setup');
 await signInWithEmailAndPassword(getAuth(app), seed.users.admin.email, seed.users.admin.password);
