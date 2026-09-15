@@ -170,6 +170,7 @@ export function QuizEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const handledDeepLink = useRef<string | undefined>(undefined);
+  const loadGeneration = useRef(0);
   const dirty = dirtySlide || dirtyQuiz || dirtyRound;
   const blocker = useBlocker(dirty || uploading);
   const semantic = useMemo(() => quiz === null ? null : buildSemanticQuizModel(quiz), [quiz]);
@@ -193,6 +194,7 @@ export function QuizEditorPage() {
   }), [dirty, preflightNonce, preflightQuiz]);
 
   const reload = useCallback(async (preferredKey = 'quiz', preferredSlideId?: string): Promise<EditorQuiz | null> => {
+    const attempt = ++loadGeneration.current;
     if (!quizId) {
       setError('Kvíz nelze otevřít, protože chybí jeho identifikátor.');
       setLoading(false);
@@ -200,6 +202,7 @@ export function QuizEditorPage() {
     }
     try {
       const loaded = await getEditorQuiz(quizId);
+      if (attempt !== loadGeneration.current) return null;
       if (loaded === null) {
         setError('Kvíz nebyl nalezen.');
         return null;
@@ -221,14 +224,18 @@ export function QuizEditorPage() {
       setError(null);
       return loaded;
     } catch (loadError) {
-      setError(safeErrorMessage(loadError));
+      if (attempt === loadGeneration.current) setError(safeErrorMessage(loadError));
       return null;
     } finally {
-      setLoading(false);
+      if (attempt === loadGeneration.current) setLoading(false);
     }
   }, [quizId]);
 
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    void reload();
+    // StrictMode and route changes can leave an earlier request in flight.
+    return () => { loadGeneration.current++; };
+  }, [reload]);
 
   useEffect(() => {
     if (semantic === null || quiz?.id !== quizId) return;
