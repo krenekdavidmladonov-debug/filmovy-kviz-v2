@@ -21,11 +21,11 @@ describe('JustKvíz presentation boundaries', () => {
     expect(pageTitle(path)).toBe(expected);
   });
   test('typographic logo has no author, and existing content retains its title', () => {
-    expect(renderToStaticMarkup(<Brand />)).toBe('<span class="brand-wordmark">JustKvíz</span>');
+    expect(renderToStaticMarkup(<Brand />)).toBe('<span class="brand-wordmark">Just<span class="brand-wordmark-accent">Kvíz</span></span>');
     const html = renderToStaticMarkup(<SlideRenderer quizTitle="Filmový kvíz – září" slide={{kind:'intro',title:'Filmový kvíz – září',text:'Původní obsah',options:[],media:[]}} />);
     expect(html).toContain('Filmový kvíz – září');
     expect(html).toContain('Původní obsah');
-    expect(html).toContain('JustKvíz');
+    expect(html.replace(/<[^>]+>/g, '')).toContain('JustKvíz');
     expect(html).not.toContain(productConfig.author);
   });
   test('HTML starts with the same public metadata and a temporary JK icon', () => {
