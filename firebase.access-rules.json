@@ -1,0 +1,5 @@
+{
+  "firestore": { "rules": "tests/access/firestore.candidate.rules" },
+  "storage": { "rules": "tests/access/storage.candidate.rules" },
+  "emulators": { "firestore": { "port": 8188 }, "storage": { "port": 9299 }, "ui": { "enabled": false }, "singleProjectMode": true }
+}

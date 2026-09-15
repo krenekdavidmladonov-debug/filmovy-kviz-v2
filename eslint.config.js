@@ -63,7 +63,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['tests/**/*.{ts,tsx}', 'tools/migration-v1/test/**/*.ts', 'tools/event-night/**/*.ts', 'playwright.config.ts', 'vitest.config.ts', 'vitest.rules.config.ts'],
+    files: ['tests/**/*.{ts,tsx}', 'tools/migration-v1/test/**/*.ts', 'tools/event-night/**/*.ts', 'playwright.config.ts', 'vitest.config.ts', 'vitest.rules.config.ts', 'vitest.access-rules.config.ts'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
       parserOptions: {
