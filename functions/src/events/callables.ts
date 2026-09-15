@@ -14,7 +14,8 @@ import {
   type QueryDocumentSnapshot,
   type Transaction,
 } from 'firebase-admin/firestore';
-import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { accessActor, securedOnCall, runAccessTransaction, grantCreatedResource } from '../access/authorization.js';
 
 import {
   buildPublicEventProjection,
@@ -74,11 +75,7 @@ interface StoredEvent {
 }
 
 export function authorizeEventAdmin(auth: CallableRequest<unknown>['auth']): AdminActor {
-  if (auth === undefined) throw new HttpsError('unauthenticated', 'Authentication is required.');
-  if (auth.token.role !== 'admin') {
-    throw new HttpsError('permission-denied', 'Only an administrator can change events.');
-  }
-  return { uid: auth.uid, role: 'admin' };
+  return accessActor(auth);
 }
 
 function snapshotData(snapshot: DocumentSnapshot, location: string): Record<string, unknown> {
@@ -187,7 +184,7 @@ function safePreflightIssues(issues: readonly PreflightIssue[]): readonly Record
   }));
 }
 
-export const createEvent = onCall(callableOptions, async (request): Promise<EventMutationResponse> => {
+export const createEvent = securedOnCall('createEvent', callableOptions, async (request): Promise<EventMutationResponse> => {
   const actor = authorizeEventAdmin(request.auth);
   const initialRevision = expectedRevision(request.data);
   if (initialRevision !== 0) throw new HttpsError('invalid-argument', 'A new event must use expectedRevision 0.');
@@ -215,10 +212,11 @@ export const createEvent = onCall(callableOptions, async (request): Promise<Even
     updatedAt: now,
     updatedBy: actor.uid,
   };
-  await db.runTransaction(async (transaction) => {
+  await runAccessTransaction(db, async (transaction) => {
     if ((await transaction.get(eventRef)).exists) {
       throw new HttpsError('already-exists', 'Event identifier collision. Try again.');
     }
+    grantCreatedResource(transaction, 'event', eventRef.id);
     transaction.create(eventRef, eventData);
     transaction.create(publicRef, publicProjection({
       title: configuration.title,
@@ -240,14 +238,14 @@ export const createEvent = onCall(callableOptions, async (request): Promise<Even
   return response(eventRef.id, 1, lifecycleStatus, registrationStatus);
 });
 
-export const updateEvent = onCall(callableOptions, async (request): Promise<EventMutationResponse> => {
+export const updateEvent = securedOnCall('updateEvent', callableOptions, async (request): Promise<EventMutationResponse> => {
   const actor = authorizeEventAdmin(request.auth);
   const eventId = requiredId(request.data, 'eventId');
   const requestedRevision = expectedRevision(request.data);
   const configuration = requestedEventConfiguration(request.data);
   const eventRef = db.collection('events').doc(eventId);
   const publicRef = db.collection('publicEvents').doc(eventId);
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const current = storedEvent(await transaction.get(eventRef));
     assertExpectedRevision(current, requestedRevision);
     if (!canMutateEvent(current.lifecycleStatus)) {
@@ -277,13 +275,13 @@ export const updateEvent = onCall(callableOptions, async (request): Promise<Even
   });
 });
 
-export const cancelEvent = onCall(callableOptions, async (request): Promise<EventMutationResponse> => {
+export const cancelEvent = securedOnCall('cancelEvent', callableOptions, async (request): Promise<EventMutationResponse> => {
   const actor = authorizeEventAdmin(request.auth);
   const eventId = requiredId(request.data, 'eventId');
   const requestedRevision = expectedRevision(request.data);
   const eventRef = db.collection('events').doc(eventId);
   const publicRef = db.collection('publicEvents').doc(eventId);
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const current = storedEvent(await transaction.get(eventRef));
     assertExpectedRevision(current, requestedRevision);
     await closeEventPresentation(transaction, eventId, actor.uid);
@@ -301,13 +299,13 @@ export const cancelEvent = onCall(callableOptions, async (request): Promise<Even
   });
 });
 
-export const archiveEvent = onCall(callableOptions, async (request): Promise<EventMutationResponse> => {
+export const archiveEvent = securedOnCall('archiveEvent', callableOptions, async (request): Promise<EventMutationResponse> => {
   const actor = authorizeEventAdmin(request.auth);
   const eventId = requiredId(request.data, 'eventId');
   const requestedRevision = expectedRevision(request.data);
   const eventRef = db.collection('events').doc(eventId);
   const publicRef = db.collection('publicEvents').doc(eventId);
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const current = storedEvent(await transaction.get(eventRef));
     assertExpectedRevision(current, requestedRevision);
     await closeEventPresentation(transaction, eventId, actor.uid);
@@ -325,7 +323,7 @@ export const archiveEvent = onCall(callableOptions, async (request): Promise<Eve
   });
 });
 
-export const lockEventQuiz = onCall(callableOptions, async (request): Promise<EventMutationResponse> => {
+export const lockEventQuiz = securedOnCall('lockEventQuiz', callableOptions, async (request): Promise<EventMutationResponse> => {
   const actor = authorizeEventAdmin(request.auth);
   const eventId = requiredId(request.data, 'eventId');
   const quizId = requiredId(request.data, 'quizId');
@@ -337,7 +335,7 @@ export const lockEventQuiz = onCall(callableOptions, async (request): Promise<Ev
   const quizRef = db.collection('quizzes').doc(quizId);
   const snapshotRef = db.collection('quizSnapshots').doc();
 
-  return db.runTransaction(async (transaction: Transaction) => {
+  return runAccessTransaction(db, async (transaction: Transaction) => {
     const eventSnapshot = await transaction.get(eventRef);
     const quizSnapshot = await transaction.get(quizRef);
     const slideSnapshot = await transaction.get(quizRef.collection('slides').orderBy('position'));

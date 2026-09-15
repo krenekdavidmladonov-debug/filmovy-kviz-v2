@@ -1,5 +1,6 @@
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
+import { securedOnCall, runAccessTransaction } from '../access/authorization.js';
 import { bound, id, object, previewIn, revision, staff } from '../leaderboard/callables.js';
 import { fingerprint, type ResultRow } from '../leaderboard/model.js';
 import { authorizeStaff, loadSlide } from '../live/callables.js';
@@ -8,10 +9,10 @@ import { buildPublicSessionState } from '../live/publication.js';
 import { advanceFinal, initialFinal, publicFinalPage, type FinalAction } from './model.js';
 const options = { region: 'europe-west1', cors: true, maxInstances: 10 };
 
-export const previewFinalResults = onCall(options, async request => {
+export const previewFinalResults = securedOnCall('previewFinalResults', options, async request => {
   const data = object(request.data);
   if (Object.keys(data).some(k => !['eventId', 'sessionId'].includes(k))) throw new HttpsError('invalid-argument', 'Nepovolená pole.');
-  return getFirestore().runTransaction(async tx => {
+  return runAccessTransaction(getFirestore(), async tx => {
     await staff(request);
     const { session, result } = await previewIn(tx, id(data, 'eventId'), id(data, 'sessionId'), null);
     return { ...result, sessionRevision: session.revision, publishedVersionId: session.finalReveal?.versionId ?? null };
@@ -19,7 +20,7 @@ export const previewFinalResults = onCall(options, async request => {
 });
 
 interface FinalResponse { sessionId: string; versionId: string; revision: number; winnerRevealed: boolean; replayed: boolean }
-export const controlFinalReveal = onCall(options, async request => {
+export const controlFinalReveal = securedOnCall('controlFinalReveal', options, async request => {
   const uid = authorizeStaff(request.auth).uid, data = object(request.data);
   const eventId = id(data, 'eventId'), sessionId = id(data, 'sessionId'), requestId = id(data, 'requestId');
   const action = data.action as FinalAction, expected = revision(data);
@@ -32,7 +33,7 @@ export const controlFinalReveal = onCall(options, async request => {
   const operationId = fingerprint([uid, sessionId, requestId]);
   const receiptRef = ref.collection('finalOperations').doc(operationId);
   const commandFingerprint = fingerprint([eventId, sessionId, action, expected, data.versionId, data.sourceFingerprint ?? null, data.page ?? null]);
-  return db.runTransaction(async tx => {
+  return runAccessTransaction(db, async tx => {
     await staff(request); // Current role, including every transaction retry.
     const { session } = await bound(tx, eventId, sessionId);
     const receipt = (await tx.get(receiptRef)).data();

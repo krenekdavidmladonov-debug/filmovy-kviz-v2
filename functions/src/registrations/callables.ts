@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type DocumentSnapshot } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { accessActor, securedOnCall, runAccessTransaction } from '../access/authorization.js';
 
 import { buildPublicEventProjection } from '../events/model.js';
 import { enqueueRegistrationEmail } from '../email/intent.js';
@@ -63,9 +64,7 @@ function eventState(snapshot: DocumentSnapshot): EventState {
 }
 
 function requireAdmin(auth: CallableRequest<unknown>['auth']): string {
-  if (auth === undefined) throw new HttpsError('unauthenticated', 'Authentication is required.');
-  if (auth.token.role !== 'admin') throw new HttpsError('permission-denied', 'Administrator access is required.');
-  return auth.uid;
+  return accessActor(auth).uid;
 }
 
 function requirePublicCaller(auth: CallableRequest<unknown>['auth']): void {
@@ -152,7 +151,7 @@ function safeResponse(id: string, data: Record<string, unknown>, managementToken
   };
 }
 
-export const configureEventRegistration = onCall(callableOptions, async (request) => {
+export const configureEventRegistration = securedOnCall('configureEventRegistration', callableOptions, async (request) => {
   const uid = requireAdmin(request.auth);
   const eventId = requestId(request.data, 'eventId');
   const expectedRevision = record(request.data).expectedRevision;
@@ -162,7 +161,7 @@ export const configureEventRegistration = onCall(callableOptions, async (request
   const window = registrationWindow(request.data);
   const eventRef = db.collection('events').doc(eventId);
   const publicRef = db.collection('publicEvents').doc(eventId);
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const current = eventState(await transaction.get(eventRef));
     if (current.revision !== expectedRevision) throw new HttpsError('aborted', 'Event changed. Reload and try again.');
     const now = Timestamp.now();
@@ -349,7 +348,7 @@ async function cancelRegistration(
   const registrationRef = eventRef.collection('registrations').doc(registrationId);
   const publicRef = db.collection('publicEvents').doc(eventId);
   const intentId = randomUUID();
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const event = eventState(await transaction.get(eventRef));
     const registrationSnapshot = await transaction.get(registrationRef);
     if (!registrationSnapshot.exists) throw new HttpsError('not-found', 'Registration was not found.');
@@ -390,7 +389,7 @@ export const cancelEventRegistration = onCall(callableOptions, async (request) =
   );
 });
 
-export const adminCancelEventRegistration = onCall(callableOptions, async (request) => {
+export const adminCancelEventRegistration = securedOnCall('adminCancelEventRegistration', callableOptions, async (request) => {
   const uid = requireAdmin(request.auth);
   return cancelRegistration(
     requestId(request.data, 'eventId'),
@@ -408,7 +407,7 @@ function assertManualTeamAllowed(event: EventState): void {
   }
 }
 
-export const adminAddEventTeam = onCall(callableOptions, async (request) => {
+export const adminAddEventTeam = securedOnCall('adminAddEventTeam', callableOptions, async (request) => {
   const uid = requireAdmin(request.auth);
   const eventId = requestId(request.data, 'eventId');
   const operationId = requestId(request.data, 'requestId');
@@ -419,7 +418,7 @@ export const adminAddEventTeam = onCall(callableOptions, async (request) => {
   const registrationRef = eventRef.collection('registrations').doc('manual_' + tokenHash(`${uid}:${operationId}`));
   const fingerprint = tokenHash(JSON.stringify(input));
   const nameRef = eventRef.collection('registrationNames').doc(nameKey(input.normalizedTeamName));
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const event = eventState(await transaction.get(eventRef));
     const previous = await transaction.get(registrationRef);
     if (previous.exists) {
@@ -450,7 +449,7 @@ export const adminAddEventTeam = onCall(callableOptions, async (request) => {
   });
 });
 
-export const adminUpdateEventTeam = onCall(callableOptions, async (request) => {
+export const adminUpdateEventTeam = securedOnCall('adminUpdateEventTeam', callableOptions, async (request) => {
   const uid = requireAdmin(request.auth);
   const eventId = requestId(request.data, 'eventId');
   const registrationId = requestId(request.data, 'registrationId');
@@ -459,7 +458,7 @@ export const adminUpdateEventTeam = onCall(callableOptions, async (request) => {
   const input = manualTeamInput(request.data);
   const eventRef = db.collection('events').doc(eventId);
   const registrationRef = eventRef.collection('registrations').doc(registrationId);
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const event = eventState(await transaction.get(eventRef));
     const snapshot = await transaction.get(registrationRef);
     if (!snapshot.exists) throw new HttpsError('not-found', 'Registration was not found.');

@@ -8,7 +8,9 @@ import {
   type DocumentSnapshot,
   type Transaction,
 } from 'firebase-admin/firestore';
-import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { accessActor, securedOnCall, runAccessTransaction, grantCreatedResource, currentMembership } from '../access/authorization.js';
+import { preserveHiddenFields, protectPrivateMedia, protectSlideFields } from '../access/editor-fields.js';
 
 import { QuizEditorError } from './errors.js';
 import {
@@ -59,11 +61,7 @@ interface QuizState {
 }
 
 export function authorizeEditorAdmin(auth: CallableRequest<unknown>['auth']): AdminActor {
-  if (auth === undefined) throw new HttpsError('unauthenticated', 'Authentication is required.');
-  if (auth.token.role !== 'admin') {
-    throw new HttpsError('permission-denied', 'Only an administrator can edit quizzes.');
-  }
-  return { uid: auth.uid, role: 'admin' };
+  return accessActor(auth);
 }
 
 function snapshotData(snapshot: DocumentSnapshot, location: string): Record<string, unknown> {
@@ -297,13 +295,13 @@ function mapError(error: unknown): never {
   throw new HttpsError('internal', 'Quiz editor operation failed.');
 }
 
-export const createQuiz = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const createQuiz = securedOnCall('createQuiz', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const creation = requestedQuizCreation(request.data);
     const identity = quizCreationIdentity(actor.uid, creation.requestId, creation.title);
     const quizRef = db.collection('quizzes').doc(identity.quizId);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const existing = await transaction.get(quizRef);
       if (existing.exists) {
         const quiz = snapshotData(existing, 'Quiz');
@@ -319,6 +317,7 @@ export const createQuiz = onCall(callableOptions, async (request): Promise<Edito
         };
       }
       const now = Timestamp.now();
+      grantCreatedResource(transaction, 'quiz', identity.quizId);
       transaction.create(quizRef, {
         schemaVersion: 1,
         title: creation.title,
@@ -347,16 +346,20 @@ export const createQuiz = onCall(callableOptions, async (request): Promise<Edito
   }
 });
 
-export const updateQuizMetadata = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const updateQuizMetadata = securedOnCall('updateQuizMetadata', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
     const revision = expectedRevision(request.data);
     if (!isObject(request.data)) throw new HttpsError('invalid-argument', 'Request data is required.');
     const metadata = validateQuizMetadata(request.data.quiz);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
-      if (metadata.defaultAppearance) await assertQuizAssets(transaction, db, quizId, [metadata.defaultAppearance]);
+      if (metadata.defaultAppearance) {
+        protectPrivateMedia(state.slides, [metadata.defaultAppearance]);
+        if (!currentMembership().permissions.includes('quiz.media.attach') && metadata.defaultAppearance.backgroundImage !== (state.quiz.defaultAppearance as { backgroundImage?: string } | undefined)?.backgroundImage) throw new HttpsError('permission-denied', 'Změna pozadí vyžaduje připojování médií.');
+        await assertQuizAssets(transaction, db, quizId, [metadata.defaultAppearance]);
+      }
       transaction.update(state.quizRef, {
         ...metadata,
         revision: state.revision + 1,
@@ -370,31 +373,34 @@ export const updateQuizMetadata = onCall(callableOptions, async (request): Promi
   }
 });
 
-export const updateQuizSlide = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const updateQuizSlide = securedOnCall('updateQuizSlide', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
     const slideId = requiredId(request.data, 'slideId');
     const revision = expectedRevision(request.data);
     const input = requestedSlide(request.data);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
       await assertQuizAssets(transaction, db, quizId, [input as unknown as Record<string, unknown>]);
+      protectPrivateMedia(state.slides, [input as unknown as Record<string, unknown>]);
       const current = state.slides.find((slide) => slide.id === slideId);
       if (current === undefined) throw new QuizEditorError('not-found', 'Quiz slide was not found.');
+      const protectedInput = protectSlideFields(current.data, input);
       const currentIsRound = isRoundKind(storedKind(current));
       if (currentIsRound !== isRoundKind(input.kind)) {
         throw new QuizEditorError('invalid-argument', 'Round headers cannot be converted to another slide type.');
       }
       const updated = orderedWithPositions(state.slides.map((slide) => {
         if (slide.id !== slideId) return slide;
-        const data = applyKnownSlideUpdate(slide.data, input);
+        const data = preserveHiddenFields(slide.data, applyKnownSlideUpdate(slide.data, protectedInput));
         if (slideRoundId(slide) === undefined && data.isQuestion === true) {
           data.roundId = state.quizRef.collection('rounds').doc().id;
         }
         return { id: slide.id, data };
       }));
       if (current.data.isQuestion === true && !updated.find((slide) => slide.id === slideId)?.data.isQuestion) {
+        if (!currentMembership().permissions.includes('quiz.delete')) throw new HttpsError('permission-denied', 'Odstranění otázky vyžaduje právo mazat.');
         deleteOldDerivedQuestion(transaction, state, current);
       }
       const result = writeQuizState(transaction, state, updated, actor);
@@ -405,14 +411,14 @@ export const updateQuizSlide = onCall(callableOptions, async (request): Promise<
   }
 });
 
-export const repairQuizPreflightIssue = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const repairQuizPreflightIssue = securedOnCall('repairQuizPreflightIssue', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
     const slideId = requiredId(request.data, 'slideId');
     const revision = expectedRevision(request.data);
     const repair = requestedPreflightRepair(request.data);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
       const current = state.slides.find((slide) => slide.id === slideId);
       if (current === undefined) throw new QuizEditorError('not-found', 'Quiz slide was not found.');
@@ -438,7 +444,7 @@ export const repairQuizPreflightIssue = onCall(callableOptions, async (request):
   }
 });
 
-export const createQuizSlide = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const createQuizSlide = securedOnCall('createQuizSlide', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
@@ -450,8 +456,10 @@ export const createQuizSlide = onCall(callableOptions, async (request): Promise<
     if ((request.data.scope !== undefined && !globalSection) || (globalSection && !['intro','agenda','rules','end'].includes(input.kind))) throw new HttpsError('invalid-argument', 'Invalid quiz-level section.');
     const quizRef = db.collection('quizzes').doc(quizId);
     const slideRef = quizRef.collection('slides').doc();
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
+      protectSlideFields(undefined, input);
       const state = await loadQuizState(transaction, quizId, revision);
+      protectPrivateMedia(state.slides, [input as unknown as Record<string, unknown>]);
       await assertQuizAssets(transaction, db, quizId, [input as unknown as Record<string, unknown>]);
       if (state.slides.length >= maximumSlideCount || position > state.slides.length + 1) {
         throw new QuizEditorError('invalid-argument', 'Slide position is outside the quiz range.');
@@ -478,7 +486,7 @@ export const createQuizSlide = onCall(callableOptions, async (request): Promise<
   }
 });
 
-export const duplicateQuizSlide = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const duplicateQuizSlide = securedOnCall('duplicateQuizSlide', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
@@ -486,7 +494,7 @@ export const duplicateQuizSlide = onCall(callableOptions, async (request): Promi
     const revision = expectedRevision(request.data);
     const quizRef = db.collection('quizzes').doc(quizId);
     const duplicateRef = quizRef.collection('slides').doc();
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
       if (state.slides.length >= maximumSlideCount) {
         throw new QuizEditorError('failed-precondition', 'Quiz reached the safe slide limit.');
@@ -508,13 +516,13 @@ export const duplicateQuizSlide = onCall(callableOptions, async (request): Promi
   }
 });
 
-export const deleteQuizSlide = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const deleteQuizSlide = securedOnCall('deleteQuizSlide', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
     const slideId = requiredId(request.data, 'slideId');
     const revision = expectedRevision(request.data);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
       if (state.slides.length <= 1) {
         throw new QuizEditorError('failed-precondition', 'A quiz must keep at least one slide.');
@@ -540,14 +548,14 @@ export const deleteQuizSlide = onCall(callableOptions, async (request): Promise<
   }
 });
 
-export const moveQuizSlide = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const moveQuizSlide = securedOnCall('moveQuizSlide', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
     const slideId = requiredId(request.data, 'slideId');
     const revision = expectedRevision(request.data);
     const direction = requestedDirection(request.data);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
       const index = state.slides.findIndex((slide) => slide.id === slideId);
       if (index < 0) throw new QuizEditorError('not-found', 'Quiz slide was not found.');
@@ -570,14 +578,14 @@ export const moveQuizSlide = onCall(callableOptions, async (request): Promise<Ed
   }
 });
 
-export const updateQuizRound = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const updateQuizRound = securedOnCall('updateQuizRound', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
     const roundId = requiredId(request.data, 'roundId');
     const title = requestedRoundTitle(request.data);
     const revision = expectedRevision(request.data);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
       const members = state.slides.filter((slide) => slideRoundId(slide) === roundId);
       if (members.length === 0) throw new QuizEditorError('not-found', 'Quiz round was not found.');
@@ -596,14 +604,14 @@ export const updateQuizRound = onCall(callableOptions, async (request): Promise<
   }
 });
 
-export const reorderQuizQuestion = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const reorderQuizQuestion = securedOnCall('reorderQuizQuestion', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
     const slideId = requiredId(request.data, 'slideId');
     const direction = requestedDirection(request.data);
     const revision = expectedRevision(request.data);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
       const current = state.slides.find((slide) => slide.id === slideId);
       const roundId = current === undefined ? undefined : slideRoundId(current);
@@ -628,14 +636,14 @@ export const reorderQuizQuestion = onCall(callableOptions, async (request): Prom
   }
 });
 
-export const moveQuizQuestionToRound = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const moveQuizQuestionToRound = securedOnCall('moveQuizQuestionToRound', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
     const slideId = requiredId(request.data, 'slideId');
     const targetRoundId = requiredId(request.data, 'targetRoundId');
     const revision = expectedRevision(request.data);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
       const current = state.slides.find((slide) => slide.id === slideId);
       const sourceRoundId = current === undefined ? undefined : slideRoundId(current);
@@ -672,13 +680,13 @@ export const moveQuizQuestionToRound = onCall(callableOptions, async (request): 
   }
 });
 
-export const duplicateQuizRound = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const duplicateQuizRound = securedOnCall('duplicateQuizRound', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
     const roundId = requiredId(request.data, 'roundId');
     const revision = expectedRevision(request.data);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
       const source = state.slides.filter((slide) => slideRoundId(slide) === roundId);
       if (source.length === 0) throw new QuizEditorError('not-found', 'Quiz round was not found.');
@@ -710,14 +718,14 @@ export const duplicateQuizRound = onCall(callableOptions, async (request): Promi
   }
 });
 
-export const moveQuizRound = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const moveQuizRound = securedOnCall('moveQuizRound', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
     const roundId = requiredId(request.data, 'roundId');
     const direction = requestedDirection(request.data);
     const revision = expectedRevision(request.data);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
       const roundIds = [...new Set(state.slides.map(slideRoundId).filter((value): value is string => value !== undefined))];
       const roundIndex = roundIds.indexOf(roundId);
@@ -738,7 +746,7 @@ export const moveQuizRound = onCall(callableOptions, async (request): Promise<Ed
   }
 });
 
-export const removeQuizRound = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const removeQuizRound = securedOnCall('removeQuizRound', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth);
     const quizId = requiredId(request.data, 'quizId');
@@ -746,7 +754,7 @@ export const removeQuizRound = onCall(callableOptions, async (request): Promise<
     const revision = expectedRevision(request.data);
     const mode = requestedRoundRemovalMode(request.data);
     const targetRoundId = mode === 'move' ? requiredId(request.data, 'targetRoundId') : undefined;
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const state = await loadQuizState(transaction, quizId, revision);
       const source = state.slides.filter((slide) => slideRoundId(slide) === roundId);
       if (source.length === 0) throw new QuizEditorError('not-found', 'Quiz round was not found.');
@@ -789,11 +797,11 @@ export const removeQuizRound = onCall(callableOptions, async (request): Promise<
 });
 
 /** Native round creation keeps its header and recap in the same bounded transaction. */
-export const createQuizRound = onCall(callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
+export const createQuizRound = securedOnCall('createQuizRound', callableOptions, async (request): Promise<EditorQuizMutationResponse> => {
   try {
     const actor = authorizeEditorAdmin(request.auth), quizId = requiredId(request.data, 'quizId');
     const revision = expectedRevision(request.data), title = requestedRoundTitle(request.data);
-    return await db.runTransaction(async transaction => {
+    return await runAccessTransaction(db, async transaction => {
       const state = await loadQuizState(transaction, quizId, revision);
       if (state.slides.length + 3 > maximumSlideCount) throw new QuizEditorError('failed-precondition', 'Quiz slide limit reached.');
       const roundId = state.quizRef.collection('rounds').doc().id;

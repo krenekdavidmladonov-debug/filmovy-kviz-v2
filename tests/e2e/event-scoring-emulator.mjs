@@ -1,3 +1,4 @@
+import { seedEmulatorMembership } from '../../functions/lib/dev/seed-membership.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -23,7 +24,7 @@ const login = async (client, role) => {
   const email = 'score-' + randomUUID() + '@example.test';
   const password = randomUUID();
   const user = await adminAuth.createUser({ email, password });
-  await adminAuth.setCustomUserClaims(user.uid, role === 'user' ? {} : { role });
+  await adminAuth.setCustomUserClaims(user.uid, role === 'user' ? {} : { role }); await seedEmulatorMembership(user.uid, role);
   return signInWithEmailAndPassword(client.auth, email, password);
 };
 const denied = (promise, code) => assert.rejects(promise, error => error.code === `functions/${code}`);
@@ -94,10 +95,10 @@ try {
   for (let i = 1; i < entries.length; i++) assert.equal(entries[i].previousHalfPoints, entries[i - 1].halfPoints);
   assert(entries.every(item => item.createdAt && item.actorUid));
   assert.deepEqual(await write({ requestId }), first); // Old receipt after later corrections.
-  // Current claims must be checked even with an otherwise valid stale ID token and receipt.
-  await adminAuth.setCustomUserClaims(staff.auth.currentUser.uid, { role: 'user' });
+  // Current membership must be checked even with an otherwise valid stale ID token and receipt.
+  await seedEmulatorMembership(staff.auth.currentUser.uid, 'user');
   try { await denied(write({ requestId }), 'permission-denied'); }
-  finally { await adminAuth.setCustomUserClaims(staff.auth.currentUser.uid, { role: 'admin' }); }
+  finally { await seedEmulatorMembership(staff.auth.currentUser.uid, 'admin'); }
   // Scoring uses immutable round IDs after library edits.
   const libraryRound = db.doc(`quizzes/preflight-ready-e2e/rounds/${roundId}`);
   const originalRound = (await libraryRound.get()).data();

@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { getAuth } from 'firebase-admin/auth';
+import { accessActor, authorize, freshIdentity, securedOnCall, runAccessTransaction } from '../access/authorization.js';
 import { getFirestore, Timestamp, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { isObject } from '../events/validation.js';
@@ -15,11 +15,8 @@ function id(data: Record<string, unknown>, field: string): string { const value 
 function revision(data: Record<string, unknown>): number { if (!Number.isSafeInteger(data.expectedVersion) || (data.expectedVersion as number) < 1) throw new HttpsError('invalid-argument', 'Invalid access version.'); return data.expectedVersion as number; }
 function expiry(data: Record<string, unknown>): Timestamp { const value = typeof data.expiresAt === 'string' ? Date.parse(data.expiresAt) : NaN; const now = Date.now(); if (!Number.isFinite(value) || value <= now || value > now + 30 * 86400000) throw new HttpsError('invalid-argument', 'Expiry must be within the next 30 days.'); return Timestamp.fromMillis(value); }
 function label(data: Record<string, unknown>): string { const value = data.label; if (typeof value !== 'string' || !value.trim() || value.trim().length > 80 || /[\p{Cc}\p{Cf}]/u.test(value)) throw new HttpsError('invalid-argument', 'Invalid access label.'); return value.trim(); }
-async function organizer(request: CallableRequest) {
-  if (!request.auth || request.auth.token.role !== 'admin') throw new HttpsError('permission-denied', 'Event administrator required.');
-  const user = await getAuth().getUser(request.auth.uid).catch(() => null);
-  if (!user || user.disabled || user.customClaims?.role !== 'admin') throw new HttpsError('permission-denied', 'Current event administrator required.');
-  return user.uid;
+function organizer(request: CallableRequest) {
+  return Promise.resolve(accessActor(request.auth).uid);
 }
 async function eventIn(transaction: Transaction, eventId: string, referee = false) {
   const event = (await transaction.get(db().doc('events/' + eventId))).data();
@@ -29,15 +26,15 @@ async function eventIn(transaction: Transaction, eventId: string, referee = fals
 function metadata(accessId: string, data: Record<string, unknown>) { return { accessId, label: String(data.label), expiresAt: (data.expiresAt as Timestamp).toDate().toISOString(), version: data.version as number,
   status: data.revoked === true ? 'revoked' : (data.expiresAt as Timestamp).toMillis() <= Date.now() ? 'expired' : 'active' }; }
 
-export const listRefereeAccess = onCall(options, async request => {
+export const listRefereeAccess = securedOnCall('listRefereeAccess', options, async request => {
   await organizer(request); const eventId = id(record(request.data), 'eventId');
-  return db().runTransaction(async transaction => { await eventIn(transaction, eventId); const grants = await transaction.get(db().collection('events/' + eventId + '/refereeAccess')); return grants.docs.map(d => metadata(d.id, d.data())); });
+  return runAccessTransaction(db(), async transaction => { await eventIn(transaction, eventId); const grants = await transaction.get(db().collection('events/' + eventId + '/refereeAccess')); return grants.docs.map(d => metadata(d.id, d.data())); });
 });
-export const issueRefereeAccess = onCall(options, async request => {
+export const issueRefereeAccess = securedOnCall('issueRefereeAccess', options, async request => {
   const uid = await organizer(request), data = record(request.data), eventId = id(data, 'eventId'), requestId = id(data, 'requestId');
   const name = label(data), expiresAt = expiry(data), accessId = scoreHash([uid, eventId, requestId]), secret = randomBytes(32).toString('base64url');
   const ref = db().doc(`events/${eventId}/refereeAccess/${accessId}`), fingerprint = scoreHash([name, data.expiresAt]);
-  return db().runTransaction(async transaction => {
+  return runAccessTransaction(db(), async transaction => {
     await eventIn(transaction, eventId); const old = (await transaction.get(ref)).data();
     if (old) { if (old.fingerprint !== fingerprint) throw new HttpsError('already-exists', 'Issuance request changed.'); return { ...metadata(accessId, old), key: null }; }
     const grants = await transaction.get(db().collection(`events/${eventId}/refereeAccess`));
@@ -46,11 +43,11 @@ export const issueRefereeAccess = onCall(options, async request => {
     transaction.create(ref, grant); return { ...metadata(accessId, grant), key: secret };
   });
 });
-export const changeRefereeAccess = onCall(options, async request => {
+export const changeRefereeAccess = securedOnCall('changeRefereeAccess', options, async request => {
   const uid = await organizer(request), data = record(request.data), eventId = id(data, 'eventId'), accessId = id(data, 'accessId'), expectedVersion = revision(data);
   if (!['revoke', 'rotate'].includes(data.action as string)) throw new HttpsError('invalid-argument', 'Invalid access action.');
   const nextExpiry = data.action === 'rotate' ? expiry(data) : null, secret = randomBytes(32).toString('base64url'), ref = db().doc(`events/${eventId}/refereeAccess/${accessId}`);
-  return db().runTransaction(async transaction => {
+  return runAccessTransaction(db(), async transaction => {
     await eventIn(transaction, eventId); const old = (await transaction.get(ref)).data();
     if (!old) throw new HttpsError('not-found', 'Access not found.');
     if (old.version !== expectedVersion) throw new HttpsError('aborted', 'Access changed. Reload the list.');
@@ -80,7 +77,9 @@ async function accessIn(transaction: Transaction, c: RefereeCredential) {
 }
 export const readRefereeEvent = onCall(options, async request => {
   const c = credential(request.data); await throttle(request);
+  if (request.auth) await freshIdentity(request.auth);
   return db().runTransaction(async transaction => {
+    if (request.auth) await authorize(request.auth, ['event.read'], { kind: 'event', id: c.eventId }, transaction);
     const { grant, event } = await accessIn(transaction, c);
     const snapshotId = record(event.quizAssignment).snapshotId;
     if (typeof snapshotId !== 'string') throw deny();
@@ -96,7 +95,9 @@ export const readRefereeEvent = onCall(options, async request => {
 });
 export const readRefereeHistory = onCall(options, async request => {
   const c = credential(request.data), data = record(request.data), teamId = id(data, 'teamId'), roundId = id(data, 'roundId'); await throttle(request);
+  if (request.auth) await freshIdentity(request.auth);
   return db().runTransaction(async transaction => {
+    if (request.auth) await authorize(request.auth, ['event.read'], { kind: 'event', id: c.eventId }, transaction);
     const { event } = await accessIn(transaction, c);
     const team = (await transaction.get(db().doc(`events/${c.eventId}/registrations/${teamId}`))).data();
     if (!team || team.eventId !== c.eventId || team.status !== 'accepted') throw deny();
@@ -107,6 +108,10 @@ export const readRefereeHistory = onCall(options, async request => {
 });
 export const saveRefereeScore = onCall(options, async request => {
   const data = record(request.data), c = credential(data.credential); await throttle(request);
+  if (request.auth) await freshIdentity(request.auth);
   const input = parseScoreRequest(data.score); if (input.eventId !== c.eventId) throw deny();
-  return commitScore(input, async transaction => { const { grant } = await accessIn(transaction, c); return { key: 'referee:' + c.accessId, audit: { actorAccessId: c.accessId, actorLabel: String(grant.label) } }; });
+  return commitScore(input, async transaction => {
+    if (request.auth) await authorize(request.auth, ['event.score'], { kind: 'event', id: c.eventId }, transaction);
+    const { grant } = await accessIn(transaction, c); return { key: 'referee:' + c.accessId, audit: { actorAccessId: c.accessId, actorLabel: String(grant.label) } };
+  });
 });

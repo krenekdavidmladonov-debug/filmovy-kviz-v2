@@ -1,17 +1,14 @@
-import { getAuth } from 'firebase-admin/auth';
+import { accessActor, securedOnCall, runAccessTransaction } from '../access/authorization.js';
 import { getFirestore, Timestamp, type Transaction } from 'firebase-admin/firestore';
-import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 
 import type { EventTeamEmailIntent } from './intent.js';
 import { deliverySummary, MAX_ACCEPTED_ROSTER, MAX_TEAM_MESSAGE_RECIPIENTS, messageCopy, messageId, messageInput,
   recipientSnapshot, teamMessageEventTitle, teamMessageHash, type TeamMessageContent } from './team-message.js';
 
 const options = { region: 'europe-west1', cors: true, maxInstances: 10 };
-async function admin(request: CallableRequest): Promise<string> {
-  if (!request.auth || request.auth.token.role !== 'admin') throw new HttpsError('permission-denied', 'Zprávy týmům může posílat pouze administrátor.');
-  const user = await getAuth().getUser(request.auth.uid).catch(() => null);
-  if (!user || user.disabled || user.customClaims?.role !== 'admin') throw new HttpsError('permission-denied', 'Je potřeba aktuální oprávnění administrátora.');
-  return user.uid;
+function admin(request: CallableRequest): Promise<string> {
+  return Promise.resolve(accessActor(request.auth).uid);
 }
 const eventRef = (id: string) => getFirestore().collection('events').doc(id);
 async function previewIn(transaction: Transaction, eventId: string, uid: string, copy: Pick<TeamMessageContent, 'subject' | 'message'>) {
@@ -31,18 +28,18 @@ function metadata(id: string, data: Record<string, unknown>) {
     total: data.total as number, createdAt: (data.createdAt as Timestamp).toDate().toISOString() };
 }
 const copyFields = ['eventId', 'subject', 'message'];
-export const previewEventTeamMessage = onCall(options, async request => {
+export const previewEventTeamMessage = securedOnCall('previewEventTeamMessage', options, async request => {
   const data = messageInput(request.data, copyFields), id = messageId(data.eventId), copy = messageCopy(data);
-  return getFirestore().runTransaction(async transaction => {
+  return runAccessTransaction(getFirestore(), async transaction => {
     const uid = await admin(request), preview = await previewIn(transaction, id, uid, copy);
     return { ...preview.content, total: preview.recipients.length, previewFingerprint: preview.previewFingerprint };
   });
 });
-export const createEventTeamMessage = onCall(options, async request => {
+export const createEventTeamMessage = securedOnCall('createEventTeamMessage', options, async request => {
   const data = messageInput(request.data, [...copyFields, 'requestId', 'previewFingerprint', 'confirmed']);
   const id = messageId(data.eventId), requestId = messageId(data.requestId), copy = messageCopy(data);
   if (data.confirmed !== true || typeof data.previewFingerprint !== 'string' || !/^[a-f0-9]{64}$/u.test(data.previewFingerprint)) throw new HttpsError('invalid-argument', 'Nejdřív zobrazte a potvrďte náhled.');
-  return getFirestore().runTransaction(async transaction => {
+  return runAccessTransaction(getFirestore(), async transaction => {
     const uid = await admin(request), ref = eventRef(id), campaignId = teamMessageHash([id, uid, requestId]);
     const campaignRef = ref.collection('emailCampaigns').doc(campaignId);
     const previous = (await transaction.get(campaignRef)).data(), fingerprint = teamMessageHash(copy);
@@ -67,16 +64,16 @@ export const createEventTeamMessage = onCall(options, async request => {
     return metadata(campaignId, campaign);
   });
 });
-export const listEventTeamMessages = onCall(options, async request => {
+export const listEventTeamMessages = securedOnCall('listEventTeamMessages', options, async request => {
   await admin(request);
   const data = messageInput(request.data, ['eventId']), id = messageId(data.eventId), ref = eventRef(id);
   if (!(await ref.get()).exists) throw new HttpsError('not-found', 'Akce neexistuje.');
   const campaigns = await ref.collection('emailCampaigns').orderBy('createdAt', 'desc').limit(20).get();
   return campaigns.docs.map(doc => metadata(doc.id, doc.data()));
 });
-export const getEventTeamMessage = onCall(options, async request => {
+export const getEventTeamMessage = securedOnCall('getEventTeamMessage', options, async request => {
   const data = messageInput(request.data, ['eventId', 'campaignId']), id = messageId(data.eventId), campaignId = messageId(data.campaignId);
-  return getFirestore().runTransaction(async transaction => {
+  return runAccessTransaction(getFirestore(), async transaction => {
     await admin(request);
     const ref = eventRef(id), campaign = (await transaction.get(ref.collection('emailCampaigns').doc(campaignId))).data();
     if (!campaign || campaign.eventId !== id) throw new HttpsError('not-found', 'Zpráva neexistuje.');

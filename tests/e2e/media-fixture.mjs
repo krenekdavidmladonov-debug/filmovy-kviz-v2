@@ -1,3 +1,4 @@
+import { seedEmulatorMembership } from '../../functions/lib/dev/seed-membership.js';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { initializeApp, deleteApp } from 'firebase/app';
@@ -31,7 +32,7 @@ export async function mediaFixture() {
     return {auth,storage,call:async(name,data)=>(await httpsCallable(functions,name)(data)).data};
   }
   const admin=await client(f.loginEmail,f.loginPassword), anonymous=await client();
-  async function roleClient(role) { const email='media-'+randomUUID()+'@example.test',password=randomUUID();const user=await authAdmin.createUser({email,password});users.push(user.uid);await authAdmin.setCustomUserClaims(user.uid,{role});return client(email,password); }
+  async function roleClient(role) { const email='media-'+randomUUID()+'@example.test',password=randomUUID();const user=await authAdmin.createUser({email,password});users.push(user.uid);await authAdmin.setCustomUserClaims(user.uid,{role});await seedEmulatorMembership(user.uid, role);return client(email,password); }
   const {quizId}=await admin.call('createQuiz',{title:'Syntetická vlastní média',requestId:'media-'+randomUUID()});
   const quizRef=f.db.collection('quizzes').doc(quizId);
   const ids={}; let revision=0;

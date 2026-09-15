@@ -81,3 +81,5 @@ export { beginQuizMediaUpload, finalizeQuizMediaUpload } from './media/callables
 export { readQuizMedia } from './media/endpoint.js';
 
 export { createQuizRound } from './editor/callables.js';
+export { getMyAccess, listAccessUsers, createAccessInvitation, changeAccessInvitation, acceptAccessInvitation, updateAccessMembership, listAccessAudit, revokeMySessions } from './access/callables.js';
+export { readAccessData } from './access/reads.js';

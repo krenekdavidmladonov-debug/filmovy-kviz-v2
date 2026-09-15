@@ -9,6 +9,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, test } from 'vitest';
+import { permissions } from '../packages/quiz-domain/src/access';
 
 const projectId = 'demo-filmovy-kviz-v2';
 const privateQuizPath = 'quizzes/security-test-quiz';
@@ -31,7 +32,7 @@ describe('transactional registration email privacy', () => {
   for (const role of [null, 'user', 'moderator', 'admin']) {
     test('only server owns intents, encrypted capabilities and receipts: ' + String(role), async () => {
       const db = role === null ? testEnvironment.unauthenticatedContext().firestore()
-        : testEnvironment.authenticatedContext('email-' + role, { role }).firestore();
+        : testEnvironment.authenticatedContext('email-' + role, { role, email_verified: true, auth_time: 2000000000 }).firestore();
       for (const child of ['emailIntents', 'emailSecrets', 'emailCampaigns', 'registrationOperations']) {
         const path = `${privateEventPath}/${child}/synthetic`;
         await testEnvironment.withSecurityRulesDisabled(async context => { await setDoc(doc(context.firestore(), path), { status: 'pending' }); });
@@ -57,6 +58,11 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    // Legacy compatibility cases now prove explicit current memberships, never claims authority.
+    for (const role of ['admin', 'moderator']) for (const uid of [`${role}-user`, `email-${role}`, `score-${role}`, `leaderboard-${role}`, `media-${role}`, `ref-${role}`, `migration-${role}`]) {
+      await setDoc(doc(context.firestore(), `memberships/${uid}`), { uid, status: 'active', version: 1, sessionValidAfter: 0,
+        role: role === 'admin' ? 'manager' : 'moderator', permissions, quizzes: { mode: 'all', ids: [] }, events: { mode: 'all', ids: [] } });
+    }
     await setDoc(doc(context.firestore(), privateQuizPath), {
       title: 'Security test quiz',
       status: 'draft',
@@ -178,35 +184,35 @@ describe('authenticated user without a role', () => {
 describe('moderator', () => {
   test('can read a quiz document', async () => {
     const db = testEnvironment
-      .authenticatedContext('moderator-user', { role: 'moderator' })
+      .authenticatedContext('moderator-user', { role: 'moderator', email_verified: true, auth_time: 2000000000 })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateQuizPath)));
   });
 
   test('can read a round document', async () => {
     const db = testEnvironment
-      .authenticatedContext('moderator-user', { role: 'moderator' })
+      .authenticatedContext('moderator-user', { role: 'moderator', email_verified: true, auth_time: 2000000000 })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateRoundPath)));
   });
 
   test('can read a private question document', async () => {
     const db = testEnvironment
-      .authenticatedContext('moderator-user', { role: 'moderator' })
+      .authenticatedContext('moderator-user', { role: 'moderator', email_verified: true, auth_time: 2000000000 })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateQuestionPath)));
   });
 
   test('can read a private source slide document', async () => {
     const db = testEnvironment
-      .authenticatedContext('moderator-user', { role: 'moderator' })
+      .authenticatedContext('moderator-user', { role: 'moderator', email_verified: true, auth_time: 2000000000 })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateSlidePath)));
   });
 
   test('can read but cannot directly write private live sessions', async () => {
     const db = testEnvironment
-      .authenticatedContext('moderator-user', { role: 'moderator' })
+      .authenticatedContext('moderator-user', { role: 'moderator', email_verified: true, auth_time: 2000000000 })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateSessionPath)));
     await assertFails(setDoc(doc(db, privateSessionPath), { status: 'ended' }));
@@ -214,14 +220,14 @@ describe('moderator', () => {
 
   test('cannot write a quiz', async () => {
     const db = testEnvironment
-      .authenticatedContext('moderator-user', { role: 'moderator' })
+      .authenticatedContext('moderator-user', { role: 'moderator', email_verified: true, auth_time: 2000000000 })
       .firestore();
     await assertFails(setDoc(doc(db, 'quizzes/moderator-write'), { title: 'Denied' }));
   });
 
   test('can read event registrations but not uniqueness state or write registration data', async () => {
     const db = testEnvironment
-      .authenticatedContext('moderator-user', { role: 'moderator' })
+      .authenticatedContext('moderator-user', { role: 'moderator', email_verified: true, auth_time: 2000000000 })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateEventPath)));
     await assertSucceeds(getDoc(doc(db, privateRegistrationPath)));
@@ -239,14 +245,14 @@ describe('moderator', () => {
 describe('admin', () => {
   test('can read a quiz document', async () => {
     const db = testEnvironment
-      .authenticatedContext('admin-user', { role: 'admin' })
+      .authenticatedContext('admin-user', { role: 'admin', email_verified: true, auth_time: 2000000000 })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateQuizPath)));
   });
 
   test('can read but cannot directly write a private live session', async () => {
     const db = testEnvironment
-      .authenticatedContext('admin-user', { role: 'admin' })
+      .authenticatedContext('admin-user', { role: 'admin', email_verified: true, auth_time: 2000000000 })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateSessionPath)));
     await assertFails(setDoc(doc(db, privateSessionPath), { status: 'ended' }));
@@ -254,14 +260,14 @@ describe('admin', () => {
 
   test('cannot bypass trusted editor Functions with a direct quiz write', async () => {
     const db = testEnvironment
-      .authenticatedContext('admin-user', { role: 'admin' })
+      .authenticatedContext('admin-user', { role: 'admin', email_verified: true, auth_time: 2000000000 })
       .firestore();
     await assertFails(setDoc(doc(db, 'quizzes/admin-write'), { title: 'Denied' }));
   });
 
   test('can read event and snapshot data but cannot directly mutate authoritative event paths', async () => {
     const db = testEnvironment
-      .authenticatedContext('admin-user', { role: 'admin' })
+      .authenticatedContext('admin-user', { role: 'admin', email_verified: true, auth_time: 2000000000 })
       .firestore();
     await assertSucceeds(getDoc(doc(db, privateEventPath)));
     await assertSucceeds(getDoc(doc(db, privateRegistrationPath)));
@@ -279,7 +285,7 @@ describe('admin', () => {
 
 test('an unknown path remains denied even for an admin', async () => {
   const db = testEnvironment
-    .authenticatedContext('admin-user', { role: 'admin' })
+    .authenticatedContext('admin-user', { role: 'admin', email_verified: true, auth_time: 2000000000 })
     .firestore();
   await assertFails(getDoc(doc(db, 'unknown/private-document')));
 });
@@ -288,7 +294,7 @@ describe('internal event scoring', () => {
   for (const role of [null, 'user', 'admin', 'moderator']) {
     test('score/history access for ' + String(role), async () => {
       const db = role === null ? testEnvironment.unauthenticatedContext().firestore()
-        : testEnvironment.authenticatedContext('score-' + role, { role, managementToken: 'not-scoring-authority' }).firestore();
+        : testEnvironment.authenticatedContext('score-' + role, { role, email_verified: true, auth_time: 2000000000, managementToken: 'not-scoring-authority' }).firestore();
       const staff = role === 'admin' || role === 'moderator';
       for (const path of ['events/security-test-event/scores/pair', 'events/security-test-event/scores/pair/history/1']) {
         await (staff ? assertSucceeds : assertFails)(getDoc(doc(db, path)));
@@ -306,7 +312,7 @@ describe('internal event scoring', () => {
 
 describe('referee grants are server-only, capabilities do not grant Firestore roles', () => {
   for (const role of [null, 'referee', 'moderator', 'admin']) test('deny grant and limiter paths for ' + String(role), async () => {
-    const db = role === null ? testEnvironment.unauthenticatedContext().firestore() : testEnvironment.authenticatedContext('ref-' + role, { role, refereeAccessId: 'fake', eventId: 'security-test-event' }).firestore();
+    const db = role === null ? testEnvironment.unauthenticatedContext().firestore() : testEnvironment.authenticatedContext('ref-' + role, { role, email_verified: true, auth_time: 2000000000, refereeAccessId: 'fake', eventId: 'security-test-event' }).firestore();
     for (const path of ['events/security-test-event/refereeAccess/access', 'refereeRateLimits/ip']) {
       await assertFails(getDoc(doc(db, path))); await assertFails(setDoc(doc(db, path), { keyHash: 'forged' }));
       await assertFails(updateDoc(doc(db, path), { revoked: false })); await assertFails(deleteDoc(doc(db, path)));
@@ -321,15 +327,17 @@ describe('interim result versions and publication authority', () => {
   for (const role of [null, 'user', 'referee', 'moderator', 'admin']) {
     test('private versions and read-only publication for ' + String(role), async () => {
       const db = role === null ? testEnvironment.unauthenticatedContext().firestore()
-        : testEnvironment.authenticatedContext('leaderboard-' + role, { role, managementToken: 'not-staff', refereeAccessId: 'not-staff' }).firestore();
+        : testEnvironment.authenticatedContext('leaderboard-' + role, { role, email_verified: true, auth_time: 2000000000, managementToken: 'not-staff', refereeAccessId: 'not-staff' }).firestore();
       const staff = role === 'admin' || role === 'moderator';
       for (const child of ['interimVersions', 'interimOperations', 'finalVersions', 'finalOperations']) {
         const path = `${privateSessionPath}/${child}/version`;
         await testEnvironment.withSecurityRulesDisabled(async context => {
           await setDoc(doc(context.firestore(), path), { rows: [{ teamName: 'Private' }], actorUid: 'staff', eventId: 'security-test-event' });
         });
-        await (staff ? assertSucceeds : assertFails)(getDoc(doc(db, path)));
-        await (staff ? assertSucceeds : assertFails)(getDocs(collection(db, `${privateSessionPath}/${child}`)));
+        // Idempotency operation records remain server-only; only display versions are readable.
+        const readable = staff && child.endsWith('Versions');
+        await (readable ? assertSucceeds : assertFails)(getDoc(doc(db, path)));
+        await (readable ? assertSucceeds : assertFails)(getDocs(collection(db, `${privateSessionPath}/${child}`)));
         await assertFails(setDoc(doc(db, path), { rows: [] }));
         await assertFails(updateDoc(doc(db, path), { rows: [] }));
         await assertFails(deleteDoc(doc(db, path)));
@@ -345,7 +353,7 @@ describe('interim result versions and publication authority', () => {
 describe('owned quiz asset metadata', () => {
   for (const role of [null, 'user', 'moderator', 'admin']) {
     test('server-only immutable metadata and staff-only reads: ' + String(role), async () => {
-      const db = role === null ? testEnvironment.unauthenticatedContext().firestore() : testEnvironment.authenticatedContext('media-' + role, {role}).firestore();
+      const db = role === null ? testEnvironment.unauthenticatedContext().firestore() : testEnvironment.authenticatedContext('media-' + role, {role, email_verified: true, auth_time: 2000000000}).firestore();
       const path=privateQuizPath+'/mediaAssets/synthetic';
       await testEnvironment.withSecurityRulesDisabled(async context => {await setDoc(doc(context.firestore(),path),{status:'ready',generation:'1'});});
       if(role==='admin'||role==='moderator') await assertSucceeds(getDoc(doc(db,path))); else await assertFails(getDoc(doc(db,path)));
@@ -359,7 +367,7 @@ describe('owned quiz asset metadata', () => {
 for (const role of [null, 'user', 'moderator', 'admin']) {
   test('migration journals stay server-only: ' + String(role), async () => {
     const db = role === null ? testEnvironment.unauthenticatedContext().firestore()
-      : testEnvironment.authenticatedContext('migration-' + role, { role }).firestore();
+      : testEnvironment.authenticatedContext('migration-' + role, { role, email_verified: true, auth_time: 2000000000 }).firestore();
     for (const suffix of ['', '/state/complete']) {
       const ref = doc(db, 'migrationV1Imports/synthetic' + suffix);
       await assertFails(getDoc(ref));

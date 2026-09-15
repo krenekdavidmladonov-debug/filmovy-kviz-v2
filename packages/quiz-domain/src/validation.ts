@@ -126,7 +126,7 @@ function isImportedUnsetTiming(slide: EditorSlide): boolean {
     && slide.clipEndSeconds === null;
 }
 
-export function hasSaveBlockingIssues(slide: EditorSlide, persistedSlide?: EditorSlide): boolean {
+export function hasSaveBlockingIssues(slide: EditorSlide, persistedSlide?: EditorSlide, answersRedacted = false): boolean {
   const preserveImportedUnsetTiming = persistedSlide !== undefined
     && persistedSlide.id === slide.id
     && persistedSlide.kind === slide.kind
@@ -134,6 +134,7 @@ export function hasSaveBlockingIssues(slide: EditorSlide, persistedSlide?: Edito
     && isImportedUnsetTiming(persistedSlide)
     && isImportedUnsetTiming(slide);
   return validateQuestion(slide).some((item) => item.severity === 'error'
+    && !(answersRedacted && item.field === 'correctAnswer')
     && !(preserveImportedUnsetTiming
       && (item.code === 'CLIP_START_MISSING' || item.code === 'CLIP_END_MISSING')));
 }

@@ -5,7 +5,7 @@
 1. Correct answers never reach public/projector clients before reveal.
 2. Public clients cannot read private quiz sources, registrations, contacts, or staff data.
 3. `request.auth != null` is authentication, not administrative authorization.
-4. Staff privileges are explicit `admin` or `moderator` custom claims set only by trusted server tooling.
+4. Staff privileges require a current active server-managed membership, concrete permissions and resource scope. Legacy role claims grant no authority.
 5. Sensitive state changes are validated and authorized server-side.
 6. Firestore and Storage start deny-by-default; access is added narrowly and tested in emulators.
 7. Production access and deployment require explicit user approval.
@@ -22,46 +22,13 @@ Private answer media must use protected paths or server-controlled delivery; pro
 
 ## Authorization
 
-- `admin`: full administration, including roles and destructive lifecycle operations.
-- `moderator`: event operation, registration/check-in, live control, and scoring within allowed scope.
-- public: read explicitly public documents and invoke narrowly defined registration endpoints only.
+The current policy is defined in [PERSONAL_ACCESS.md](PERSONAL_ACCESS.md) and the shared permission module. Firebase Auth verifies identity; current membership, permissions and resource scope authorize each operation. Role labels are editable presets. Legacy custom claims are preserved but ignored as authority.
 
-Custom claims are the staff authorization source. Functions independently verify claims and resource scope; they do not trust client-supplied roles.
+Every legacy staff callable uses the explicit fail-closed policy wrapper. Permission and scope are reread inside each content transaction, so revocation conflicts with delayed saves. HTTP media and print gateways check the same current membership. Storage grants bind member version, quiz scope, MIME, size and expiry. No browser writes membership, content, snapshots or audit directly.
 
-### Current administrative policy
+Limited clients use bounded server views; hidden answers, answer media, notes, raw legacy records and contacts are removed before transport. Saving redacted content preserves the authoritative protected fields. Raw Firestore reads require every sensitive permission contained in that document and its resource scope. Public projections remain explicit allowlists. Full inventories, invite activation gate, owner bootstrap and rollback are documented in PERSONAL_ACCESS.md.
 
-The web `AuthProvider` reads `role` from the verified Firebase ID token and uses it only to select routes and UI. Firestore Rules independently read `request.auth.token.role` and remain the data authorization boundary.
-
-Current Firestore access is intentionally narrow:
-
-- anonymous and ordinary authenticated users cannot read or write private collections;
-- moderators and admins can read private `quizzes` and their slide/round/question subcollections;
-- every direct client quiz write is denied to both roles; admin editor writes exist only as trusted callable Functions;
-- event roots are staff-readable, unknown event subpaths are denied, and every event write is denied to clients; admin-only callable Functions own event mutations;
-- immutable quiz snapshots are staff-readable private data and every direct client write is denied;
-- `publicEvents` is anonymously readable/queryable sanitized data with every client write denied;
-- private event registration records are staff-readable, direct-write denied; uniqueness reservations are server-only;
-- existing media policy remains staff-read and admin-write until that flow is revisited;
-- staff profiles are self-readable, while all user management is admin-only;
-- staff may read private `sessions`, but all client writes are denied;
-- anyone may get one known `publicSessions` document, collection listing is denied, and every client write is denied;
-- every other path falls through to deny.
-
-Moderator quiz writes are not enabled. The editor route is read-only for moderators, and all editor callables independently require the `admin` claim. Quiz creation accepts only a bounded title and request ID, derives the opaque document ID from the authenticated admin plus that request ID, and creates one private empty draft in a transaction. Its private creation fingerprint makes an identical retry idempotent and rejects reuse for a different title. No client chooses actor fields, timestamps, status, revision, counters, snapshot, or public projection. Each future operational write must be introduced as a narrowly scoped trusted workflow and accompanied by emulator tests.
-
-The quiz library and live-control UI query private documents only after staff authentication. Correct answers remain in private slide/question documents and may also be present inside private `legacy.raw`. The library mapper omits them; the moderator live preview may show only the current top-level private answer to staff. Anonymous projector code has no query path to `quizzes` or `sessions`.
-
-Live callable Functions independently require an `admin` or `moderator` custom claim. Quiz editor callables require `admin` specifically, including quiz creation and the round duplicate/move/remove and question reorder/move operations. Existing-quiz mutations validate identifiers, positions, supported edit shapes, round removal mode/destination, media schemes, quiz/slide existence, transaction size, and the caller's `expectedRevision`; creation instead validates its bounded idempotency request before any document exists. Function success responses contain only IDs, revision, and counters; errors and application logs contain no slide, question, answer, note, or raw data.
-
-Editor preview is not a publication operation. It renders the current unsaved, already-authorized private draft inside the admin route and may optionally show the answer there, but it never creates or mutates `publicSessions`. The anonymous projector still receives only the live allowlist projection. Unknown fields and `legacy.raw` never enter the editor mutation response or projector model. A separate projector window for unsaved drafts is intentionally absent until an isolated non-live transport is designed.
-
-Quiz preflight is also a private staff-only read operation. Its result contains codes, Czech human messages, aggregate counts, and semantic references, but never embeds correct-answer values, question copy, media URLs, moderator notes, or `legacy.raw`. Running readiness in the editor is local and running it before live start does not write `publicSessions`; only the existing explicit live-session callable may publish its independently sanitized allowlist. The preflight feature changes neither Rules nor projector/BroadcastChannel authority.
-
-Guided repair keeps the same route guard but does not treat it as write authorization. The `repairQuizPreflightIssue` callable requires an `admin` claim, an exact current quiz revision, an existing authoritative question, and one strict discriminated request shape. Choice requests carry only `optionIndex`; the server verifies that the current option exists and uniquely identifies one stored value before assigning it privately. Video requests carry only finite numeric START/END values satisfying `0 <= START < END <= 86400` and are accepted only for a current Video question with a source. Unknown request fields are rejected. Moderator and ordinary-user writes fail, direct Firestore writes remain denied, success responses contain no private value, and the callable never touches `publicSessions` or BroadcastChannel code. The browser removes a repair issue only after a fresh private reload proves that shared preflight no longer reports it.
-
-Event lock uses that same shared quiz-domain/preflight implementation inside an admin-only transaction. It rereads the expected event and quiz revisions, rejects blockers, requires explicit warning acknowledgement, creates a complete private immutable snapshot, derives `ready`, and replaces the safe public event projection atomically. Browsers cannot submit readiness, assignment, snapshot data, scoring state, revisions, actors, timestamps, or public fields. Snapshot answers stay private and never enter `publicEvents`; existing `publicSessions` answer authority is unchanged.
-
-The PDF endpoint verifies an ID token, resolves the snapshot from the private event, accepts only allowlisted document settings, and returns a bounded `no-store` PDF. Admins may generate all PDFs. Moderators may generate answer-free team sheets and score tables but are denied the answer key. Anonymous, ordinary authenticated, and projector clients are denied. Questions, answers, options, contacts, media sources, notes, and legacy data are excluded from logs.
+Invitation and membership changes serialize on accessControl/state, validate permission dependencies and delegation bounds, prohibit self changes and protect the last owner. Only owners manage managers. Audit entries contain safe before/after grants, never passwords, tokens or quiz answers. New Auth identities without membership have no private access. Browser caches and drafts are cleared on identity or membership-version transitions.
 
 ## Public registration
 

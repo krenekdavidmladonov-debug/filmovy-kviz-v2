@@ -2,14 +2,15 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
-import { onRequest } from 'firebase-functions/v2/https';
+import { HttpsError, onRequest } from 'firebase-functions/v2/https';
+import { authorize, freshIdentity } from '../access/authorization.js';
 import { PrintCenterError } from './errors.js';
 import { PRINT_LIMITS } from './limits.js';
 import { renderPrintArtifact } from './renderer.js';
 import { mapSnapshotToPrintEvent } from './snapshot-mapper.js';
 import { registrationToPrintTeam } from '../registrations/print-adapter.js';
 import type { PrintLogMetadata, PrintOptions, PrintRequestOptions, PrintTeam } from './types.js';
-import { authorizePrintArtifact, parsePrintRequestOptions } from './validation.js';
+import { parsePrintRequestOptions } from './validation.js';
 
 if (getApps().length === 0) initializeApp();
 
@@ -99,8 +100,11 @@ export const generatePrintArtifact = onRequest(
 
       const eventId = eventIdFromBody(request.body);
       const requestedOptions = parsePrintRequestOptions(optionsFromBody(request.body));
-      const token = await getAuth().verifyIdToken(bearerToken(request.header('authorization')));
-      authorizePrintArtifact(token.role, requestedOptions.artifactType);
+      const token = await getAuth().verifyIdToken(bearerToken(request.header('authorization')), true);
+      const auth = { uid: token.uid, token };
+      await freshIdentity(auth);
+      const assertAccess = () => authorize(auth, requestedOptions.artifactType === 'answer-key' ? ['event.export', 'event.answers.read', 'event.answers.export'] : ['event.export'], { kind: 'event', id: eventId });
+      await assertAccess();
       const options = await resolvePrintOptions(eventId, requestedOptions);
 
       const db = getFirestore();
@@ -131,6 +135,7 @@ export const generatePrintArtifact = onRequest(
         slides.docs.map((document) => ({ id: document.id, data: record(document.data()) })),
       );
       const artifact = await renderPrintArtifact(printEvent, options);
+      await assertAccess();
       const questionCount = printEvent.quiz.rounds.reduce((total, round) => total + round.questions.length, 0);
       const metadata: PrintLogMetadata = {
         artifactType: options.artifactType,
@@ -152,6 +157,7 @@ export const generatePrintArtifact = onRequest(
       });
       response.status(200).send(Buffer.from(artifact.bytes));
     } catch (error: unknown) {
+      if (error instanceof HttpsError) { response.status(error.code === 'unauthenticated' ? 401 : 403).json({ code: error.code, message: error.message }); return; }
       if (error instanceof PrintCenterError) {
         response.status(error.status).json({ code: error.code, message: error.message });
         return;

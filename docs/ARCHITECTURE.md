@@ -77,7 +77,7 @@ The PDF Print Center adds `/admin/events/:eventId/print` and a binary HTTPS Func
 
 ## Firebase services
 
-- Authentication: staff sign-in; role authorization via custom claims.
+- Authentication: staff sign-in; authorization through current server-managed membership, permissions and resource scopes.
 - Firestore: operational and public projection data.
 - Storage: quiz media, with metadata/access controlled by Firestore and Rules.
 - Functions: validation, explicit staff authorization, revision-checked live transactions, sanitized publication, and other trusted operations.
@@ -95,7 +95,7 @@ No production project identifiers or credentials are stored in this repository.
 
 The quality gate includes static checks, production builds, unit/migration tests, Firestore Rules emulator tests, and Auth/Firestore/Functions emulator E2E flows for live control, editor CRUD, guided repair, and trusted event/snapshot workflows. Separate local-only migrated-data checks open all 4 offline V1 quizzes and 315 slides through the editor read shape, round-trip one representative of each observed slide kind, and run whole-quiz readiness over all 263 questions without printing private values. The real export is never available to CI. Event-night repair reports and progress live only below Git-ignored `.local-data/tonight-repair/` and contain semantic references/counts, never question copy, options, answers, media URLs, notes, or raw legacy values.
 
-Internal scoring lives at /admin/events/:eventId/scoring, linked from the event detail. It uses the existing registration roster and immutable snapshot round IDs. Revision-checked score changes, append-only history, idempotency receipts, and the first scoring.started transition share one transaction. Current staff claims are rechecked on every callable invocation. Private subscriptions preserve local drafts; there is no publication or BroadcastChannel path. See EVENT_SCORING.md for the data and lifecycle contract.
+Internal scoring lives at /admin/events/:eventId/scoring, linked from the event detail. It uses the existing registration roster and immutable snapshot round IDs. Revision-checked score changes, append-only history, idempotency receipts, and the first scoring.started transition share one transaction. Current membership and event scope are rechecked on every callable invocation and inside the score transaction. Private subscriptions preserve local drafts; there is no publication or BroadcastChannel path. See EVENT_SCORING.md for the data and lifecycle contract.
 
 ## Referee access
 
@@ -119,3 +119,7 @@ Media authoring extends the shared picker/gateway/renderer to question, private 
 
 
 Complete editor extends the same private ordered stream with explicit draft/ready authoring, independent answer mode, default appearance, atomic round/recap creation and private in-memory rehearsal. Drafts block preflight, snapshot lock and live publication. See [COMPLETE_EDITOR_RELEASE.md](COMPLETE_EDITOR_RELEASE.md) for field compatibility, authorization, verification and the integrated deployment manifest.
+
+## Current personal access boundary
+
+[PERSONAL_ACCESS.md](PERSONAL_ACCESS.md) supersedes the historical admin/moderator descriptions above. Private repositories use scoped server views; raw data is available only with all sensitive permissions. Every existing staff callable and gateway enforces current membership independently. Preset labels do not authorize access. AuthProvider watches its own server membership and remounts private views on identity/version changes. See the release document for the explicit deployment inventory and invitation activation gate.
