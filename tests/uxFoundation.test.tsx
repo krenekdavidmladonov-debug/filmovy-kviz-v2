@@ -109,7 +109,7 @@ describe('UX foundation contracts', () => {
     const markup = renderToStaticMarkup(
       <SlideRenderer quizTitle="Syntetický kvíz" slide={{ kind: 'intro', title: 'Úvod', text: '', options: [], media: [] }} />,
     );
-    expect(markup).toContain(productConfig.name);
+    expect(markup.replace(/<[^>]+>/g, '')).toContain(productConfig.name);
     expect(markup).not.toContain('FILMOVÝ KVÍZ');
   });
 

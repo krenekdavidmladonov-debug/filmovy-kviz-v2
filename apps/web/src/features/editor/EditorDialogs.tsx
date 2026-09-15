@@ -17,12 +17,16 @@ export function UnsavedChangesDialog({
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const [opener] = useState(() => document.activeElement);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog !== null && !dialog.open) dialog.showModal();
     cancelRef.current?.focus();
-    return () => { if (dialog?.open) dialog.close(); };
-  }, []);
+    return () => {
+      if (dialog?.open) dialog.close();
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, [opener]);
   return (
     <dialog ref={dialogRef} className="editor-dialog" aria-labelledby="unsaved-dialog-title" onCancel={(event) => { event.preventDefault(); onCancel(); }}>
       <h2 id="unsaved-dialog-title">Máte neuložené změny.</h2>
@@ -55,12 +59,16 @@ export function RemoveRoundDialog({
   const [targetRoundId, setTargetRoundId] = useState(targets[0]?.id ?? '');
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const [opener] = useState(() => document.activeElement);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog !== null && !dialog.open) dialog.showModal();
     cancelRef.current?.focus();
-    return () => { if (dialog?.open) dialog.close(); };
-  }, []);
+    return () => {
+      if (dialog?.open) dialog.close();
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, [opener]);
   return (
     <dialog ref={dialogRef} className="editor-dialog" aria-labelledby="remove-round-title" onCancel={(event) => { event.preventDefault(); onCancel(); }}>
       <h2 id="remove-round-title">Odstranit {round.position}. kolo?</h2>
