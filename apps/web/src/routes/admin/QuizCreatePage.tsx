@@ -47,7 +47,7 @@ function creationError(error: unknown): { readonly message: string; readonly tec
 }
 
 export function QuizCreatePage() {
-  const { role } = useAuth();
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [pending, setPending] = useState(false);
@@ -75,7 +75,7 @@ export function QuizCreatePage() {
     }
   };
 
-  if (role !== 'admin') {
+  if (!can('quiz.create')) {
     return (
       <section className="quiz-state-card">
         <div><h2>Pouze pro administrátora</h2><p>Moderátor může kvízy prohlížet, ale nemůže vytvářet nový obsah.</p></div>

@@ -6,7 +6,7 @@ This is a first design, not a migration contract. Fields should be introduced on
 
 ### `users/{uid}`
 
-Staff profile: `displayName`, `email`, `disabled`, and timestamps. Authorization is based on server-managed custom claims (`admin` or `moderator`), not a browser-writable role field.
+Legacy profile documents are no longer authority and are denied to clients. Personal identity lives in Firebase Auth. Current permissions, scope and revocation live in server-managed `memberships/{uid}`; invitations, control state and immutable audit are defined in [PERSONAL_ACCESS.md](PERSONAL_ACCESS.md). Content documents and historical authors remain unchanged.
 
 ### `quizzes/{quizId}`
 

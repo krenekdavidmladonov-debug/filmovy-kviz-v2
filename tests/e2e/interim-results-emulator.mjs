@@ -1,3 +1,4 @@
+import { seedEmulatorMembership } from '../../functions/lib/dev/seed-membership.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { doc, getDoc, getDocs, collection, setDoc } from 'firebase/firestore';
@@ -25,9 +26,9 @@ try {
     const grant = await f.referee();
     await deny(f.anonymous.call('previewInterimResults', { ...grant, sessionId: f.sessionId, throughRoundId: 'r2' }), 'unauthenticated');
     await deny(f.anonymous.call('controlInterimResults', { ...cmd('publish', p.sessionRevision, { throughRoundId: 'r2', sourceFingerprint: p.sourceFingerprint }), ...grant }), 'unauthenticated');
-    await f.authAdmin.setCustomUserClaims(f.moderator.uid, { role: 'user' });
+    await seedEmulatorMembership(f.moderator.uid, 'user');
     await deny(f.preview(), 'permission-denied');
-    await f.authAdmin.setCustomUserClaims(f.moderator.uid, { role: 'moderator' });
+    await seedEmulatorMembership(f.moderator.uid, 'moderator');
     pass();
     await f.score(0, 1, 41);
     await deny(publish(p), 'aborted');

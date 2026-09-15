@@ -1,3 +1,4 @@
+import { seedEmulatorMembership } from '../../functions/lib/dev/seed-membership.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { doc, getDocFromServer, getDocs, collection, setDoc } from 'firebase/firestore';
@@ -16,9 +17,9 @@ try {
   await deny(f.anonymous.call('previewFinalResults', { eventId: f.eventId, sessionId: f.sessionId }), 'unauthenticated');
   const grant = await f.referee();
   await deny(f.anonymous.call('controlFinalReveal', { ...grant, sessionId: f.sessionId, action: 'start', token: 'management' }), 'unauthenticated');
-  await f.authAdmin.setCustomUserClaims(f.moderator.uid, { role: 'user' });
+  await seedEmulatorMembership(f.moderator.uid, 'user');
   await deny(f.previewFinal(), 'permission-denied');
-  await f.authAdmin.setCustomUserClaims(f.moderator.uid, { role: 'moderator' }); groups++;
+  await seedEmulatorMembership(f.moderator.uid, 'moderator'); groups++;
 
   await f.score(0, 2, null); p = await f.previewFinal();
   assert.equal(p.complete, false); assert(p.missing.some(m => m.teamId === f.teamIds[0] && m.roundId === 'r3'));

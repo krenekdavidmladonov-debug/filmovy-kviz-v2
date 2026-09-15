@@ -6,6 +6,7 @@ on:
       - main
   pull_request:
     branches:
+      - codex/justkviz-dark-mode
       - codex/justkviz-rebrand
       - codex/complete-quiz-editor
       - release/staging-editor-core-hotfix
@@ -23,7 +24,7 @@ jobs:
   quality-gate:
     name: Quality gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       VITE_FIREBASE_API_KEY: demo-api-key
       VITE_FIREBASE_AUTH_DOMAIN: demo-filmovy-kviz-v2.firebaseapp.com
@@ -77,6 +78,16 @@ jobs:
 
       - name: Install Playwright Chromium for browser E2E
         run: pnpm exec playwright install chromium
+
+      - name: Personal access Firestore and Storage isolation contracts
+        run: >-
+          pnpm exec firebase emulators:exec --only firestore,storage --project demo-justkviz-access --config firebase.access-rules.json
+          "pnpm exec vitest run --config vitest.access-rules.config.ts"
+
+      - name: Personal invitations, five browser identities, revoked grants and password recovery
+        run: >-
+          pnpm exec firebase emulators:exec --only auth,firestore,functions,storage --project demo-filmovy-kviz-v2
+          "node tools/local-emulator-environment.mjs full tests/access/emulator.mjs && node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/personal-access.config.ts && node tools/local-emulator-environment.mjs full tests/access/media-sessions.mjs"
 
       - name: Editor core workflow browser E2E (local emulators only)
         run: |

@@ -12,7 +12,7 @@ const initialValues: EventFormValues = {
 };
 
 export function AdminEventCreatePage() {
-  const { role } = useAuth();
+  const { can } = useAuth();
   const navigate = useNavigate();
   const [values, setValues] = useState(initialValues);
   const [pending, setPending] = useState(false);
@@ -29,7 +29,7 @@ export function AdminEventCreatePage() {
       setPending(false);
     }
   };
-  if (role !== 'admin') {
+  if (!can('event.create')) {
     return <section className="quiz-state-card"><div><h2>Pouze pro administrátora</h2><p>Moderátor může akce prohlížet, ale nemůže měnit jejich konfiguraci.</p></div><Link className="secondary-link" to="/admin/events">Zpět na akce</Link></section>;
   }
   return (

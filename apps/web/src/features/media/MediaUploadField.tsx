@@ -3,13 +3,14 @@ import { isSafeHttpUrl, parseQuizAsset, directMediaKind, youtubeVideoId, type Ow
 import { uploadQuizMedia, listQuizMedia } from './mediaApi';
 import { AssetImage } from './AssetImage';
 
-export const MediaAuthoringContext = createContext<{ quizId: string; onPending: (pending: boolean) => void } | null>(null);
+export const MediaAuthoringContext = createContext<{ quizId: string; onPending: (pending: boolean) => void; canUpload?: boolean; canAttach?: boolean } | null>(null);
 
 /** One picker for prompt, answer and background. Only ready references enter the draft. */
-export function MediaUploadField({ kind, label, value, disabled, onReady }: {
+export function MediaUploadField({ kind, label, value, disabled: disabledProp, onReady }: {
   kind: OwnedMediaKind | 'video'; label: string; value: string; disabled: boolean; onReady: (reference: string) => void;
 }) {
   const context = useContext(MediaAuthoringContext);
+  const disabled = disabledProp || context?.canAttach === false;
   const [mode, setMode] = useState<'closed' | 'url' | 'library' | 'file'>('closed');
   const [url, setUrl] = useState('');
   const [pending, setPending] = useState(false);
@@ -25,7 +26,7 @@ export function MediaUploadField({ kind, label, value, disabled, onReady }: {
   const cancel = () => { epoch.current++; controller.current?.abort(); controller.current = null; setPending(false); pendingCallback.current?.(false); setError('Nahrávání bylo zrušeno. Rozepsaný obsah zůstal zachovaný.'); };
   const assign = (reference: string) => { epoch.current++; controller.current?.abort(); setError(''); setMode('closed'); callback.current(reference); };
   const upload = async (file: File) => {
-    if (!context || kind === 'video') return;
+    if (!context || kind === 'video' || context.canUpload === false || disabled) return;
     controller.current?.abort(); const abort = new AbortController(); controller.current = abort;
     const run = ++epoch.current; lastFile.current = file; setPending(true); setProgress(0); setError(''); pendingCallback.current?.(true);
     try {
@@ -57,7 +58,7 @@ export function MediaUploadField({ kind, label, value, disabled, onReady }: {
     {value && <p className="field-help">{parseQuizAsset(value) ? 'Ověřené médium tohoto kvízu' : 'Odkaz na médium'} · přiřazení potvrďte tlačítkem Uložit.</p>}
     <div className="media-picker-actions">
       {value && <><button type="button" className="secondary-button" disabled={disabled || pending} onClick={() => { setUrl(parseQuizAsset(value) ? '' : value); setMode('url'); }}>Změnit</button><button type="button" className="secondary-button" disabled={disabled || pending} onClick={() => assign('')}>Odebrat</button></>}
-      {kind !== 'video' && <button type="button" className="secondary-button" disabled={disabled || pending || !context} onClick={() => { setMode('file'); fileInput.current?.click(); }}>Nahrát z počítače</button>}
+      {kind !== 'video' && <button type="button" className="secondary-button" disabled={disabled || pending || !context || context.canUpload === false} onClick={() => { setMode('file'); fileInput.current?.click(); }}>Nahrát z počítače</button>}
       <button type="button" className="secondary-button" disabled={disabled || pending} onClick={() => { setUrl(parseQuizAsset(value) ? '' : value); setMode('url'); setError(''); }}>Vložit odkaz</button>
       {kind !== 'video' && <button type="button" className="secondary-button" disabled={disabled || pending || !context} onClick={() => void library()}>Vybrat z médií tohoto kvízu</button>}
     </div>

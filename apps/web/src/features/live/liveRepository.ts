@@ -1,4 +1,6 @@
-import { collection, doc, getDocFromServer, onSnapshot, orderBy, query, type Unsubscribe } from 'firebase/firestore';
+import { doc, getDocFromServer, onSnapshot, type Unsubscribe } from 'firebase/firestore';
+import { watchPrivate } from '../access/api';
+import type { EditorSlide } from '@filmovy-kviz/quiz-domain';
 
 import { getFirebaseFirestore } from '../../services/firebase/firestore';
 import { mapLiveControlSlide, mapLiveControlState, mapPublicLiveState } from './liveMappers';
@@ -8,7 +10,8 @@ type ValueHandler<T> = (value: T | null) => void;
 type ErrorHandler = (error: Error) => void;
 
 export function subscribeLiveControl(sessionId: string, onValue: ValueHandler<LiveControlState>, onError: ErrorHandler): Unsubscribe {
-  return onSnapshot(doc(getFirebaseFirestore(), 'sessions', sessionId), (snapshot) => {
+  return onSnapshot(doc(getFirebaseFirestore(), 'sessions', sessionId), { includeMetadataChanges: true }, (snapshot) => {
+    if (snapshot.metadata.fromCache) return;
     onValue(snapshot.exists() ? mapLiveControlState(snapshot.id, snapshot.data()) : null);
   }, onError);
 }
@@ -19,8 +22,9 @@ export function subscribeLiveControlSlide(
   onValue: ValueHandler<LiveControlSlide>,
   onError: ErrorHandler,
 ): Unsubscribe {
-  return onSnapshot(doc(getFirebaseFirestore(), 'quizzes', quizId, 'slides', slideId), (snapshot) => {
-    onValue(snapshot.exists() ? mapLiveControlSlide(snapshot.id, snapshot.data()) : null);
+  return watchPrivate<EditorSlide[]>('quizSlides', { quizId }, slides => {
+    const slide = slides.find(item => item.id === slideId);
+    onValue(slide ? mapLiveControlSlide(slide.id, { ...slide }) : null);
   }, onError);
 }
 
@@ -30,8 +34,7 @@ export function subscribeLiveControlSlides(
   onError: ErrorHandler,
   snapshotId?: string,
 ): Unsubscribe {
-  const slides = query(collection(getFirebaseFirestore(), snapshotId ? 'quizSnapshots' : 'quizzes', snapshotId ?? quizId, 'slides'), orderBy('position'));
-  return onSnapshot(slides, (snapshot) => onValue(snapshot.docs.map((item) => mapLiveControlSlide(item.id, item.data()))), onError);
+  return watchPrivate<EditorSlide[]>(snapshotId ? 'snapshotSlides' : 'quizSlides', snapshotId ? { snapshotId } : { quizId }, slides => onValue(slides.map(item => mapLiveControlSlide(item.id, { ...item }))), onError);
 }
 
 export function subscribePublicLiveState(

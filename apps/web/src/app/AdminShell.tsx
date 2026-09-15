@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
-import { useAuth, type StaffRole } from '../auth/AuthProvider';
+import { useAuth } from '../auth/AuthProvider';
+import { roleLabels } from '@filmovy-kviz/quiz-domain';
 import { productConfig } from '../config/product';
 import { Brand } from '../ui/Brand';
 
@@ -11,15 +12,11 @@ const navigation = [
   { to: '/admin/events', label: 'Akce', end: false },
 ] as const;
 
-const roleLabels: Readonly<Record<StaffRole, string>> = {
-  admin: 'Administrátor',
-  moderator: 'Moderátor',
-};
-
 function AdminNavigation() {
+  const { can } = useAuth();
   return (
     <nav className="admin-navigation" aria-label="Administrace">
-      {navigation.map((item) => (
+      {navigation.filter(item => item.to === '/admin' || (item.to === '/admin/quizzes' ? can('quiz.read') : can('event.read'))).map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
@@ -29,12 +26,14 @@ function AdminNavigation() {
           {item.label}
         </NavLink>
       ))}
+      {can('users.manage') && <NavLink className="admin-nav-link" to="/admin/users">Uživatelé a přístupy</NavLink>}
+      <NavLink className="admin-nav-link" to="/account">Můj účet</NavLink>
     </nav>
   );
 }
 
 export function AdminShell() {
-  const { currentUser, role, signOut } = useAuth();
+  const { currentUser, membership, signOut } = useAuth();
   const [pending, setPending] = useState(false);
 
   async function handleSignOut() {
@@ -46,7 +45,7 @@ export function AdminShell() {
     }
   }
 
-  const accountLabel = role ? roleLabels[role] : 'Uživatel';
+  const accountLabel = membership ? roleLabels[membership.role] : 'Uživatel';
 
   return (
     <div className="admin-shell">

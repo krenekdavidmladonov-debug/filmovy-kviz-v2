@@ -1,5 +1,6 @@
 import { deleteApp, initializeApp } from 'firebase-admin/app';
 import { getAuth, type UserRecord } from 'firebase-admin/auth';
+import { seedEmulatorMembership } from './seed-membership.js';
 
 const testPassword = 'LocalQuiz123!';
 const testUsers = [
@@ -54,10 +55,11 @@ async function seed(): Promise<void> {
     for (const testUser of testUsers) {
       const user = await ensureUser(testUser.email, testUser.displayName);
       await getAuth().setCustomUserClaims(user.uid, testUser.claims);
+      await seedEmulatorMembership(user.uid, 'role' in testUser.claims ? testUser.claims.role : 'user');
       console.log(`Seeded emulator-only user: ${testUser.email}`);
     }
 
-    console.log(`Development-only password for all seeded users: ${testPassword}`);
+    console.log('Emulator accounts and explicit memberships prepared.');
   } finally {
     await deleteApp(app);
   }

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
 import { getCzechAuthError } from '../../auth/authErrors';
@@ -50,7 +50,7 @@ export function AdminLoginPage() {
         <p className="eyebrow">Soukromá část</p>
         <h1>Přihlášení do administrace</h1>
         <p className="lead">
-          Přístup je určen pouze administrátorům a moderátorům {productConfig.name}.
+          Přihlaste se osobním účtem s přiděleným přístupem do {productConfig.name}.
         </p>
       </div>
 
@@ -96,6 +96,7 @@ export function AdminLoginPage() {
         <button className="primary-button" type="submit" disabled={submitting || Boolean(initializationError)}>
           {submitting ? 'Přihlašuji…' : 'Přihlásit se'}
         </button>
+        <Link to="/account">Osobní účet a zapomenuté heslo</Link>
       </form>
     </section>
   );

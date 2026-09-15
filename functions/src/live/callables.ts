@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type DocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
-import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { accessActor, securedOnCall, runAccessTransaction } from '../access/authorization.js';
 
 import { LiveSessionError } from './errors.js';
 import { buildPublicSessionState } from './publication.js';
@@ -44,11 +45,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 export function authorizeStaff(auth: CallableRequest<unknown>['auth']): StaffActor {
-  if (auth === undefined) throw new HttpsError('unauthenticated', 'Authentication is required.');
-  const token: Record<string, unknown> = auth.token;
-  const role = token.role;
-  if (role !== 'admin' && role !== 'moderator') throw new HttpsError('permission-denied', 'A staff role is required.');
-  return { uid: auth.uid, role };
+  return accessActor(auth);
 }
 
 function snapshotData(snapshot: DocumentSnapshot, location: string): Record<string, unknown> {
@@ -208,14 +205,14 @@ function mapError(error: unknown): never {
   throw new HttpsError('internal', 'Live session operation failed.');
 }
 
-export const createLiveSession = onCall(callableOptions, async (request): Promise<ControlResponse> => {
+export const createLiveSession = securedOnCall('createLiveSession', callableOptions, async (request): Promise<ControlResponse> => {
   try {
     const actor = authorizeStaff(request.auth);
     const quizId = requiredId(request.data, 'quizId');
     const quizRef = db.collection('quizzes').doc(quizId);
     const sessionRef = db.collection('sessions').doc();
     const publicRef = db.collection('publicSessions').doc(sessionRef.id);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const quizSnapshot = await transaction.get(quizRef);
       if (!quizSnapshot.exists) throw new LiveSessionError('not-found', 'Quiz was not found.');
       const quiz = snapshotData(quizSnapshot, 'Quiz');
@@ -246,7 +243,7 @@ async function mutateSession(request: CallableRequest<unknown>, kind: MutationKi
     const finishGeneration = kind === 'finish-media' ? requestedMediaGeneration(request.data) : undefined;
     const sessionRef = db.collection('sessions').doc(sessionId);
     const publicRef = db.collection('publicSessions').doc(sessionId);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const session = parseSession(await transaction.get(sessionRef));
       if (session.eventId) {
         const event = (await transaction.get(db.doc('events/' + session.eventId))).data();
@@ -292,7 +289,7 @@ async function mutateSession(request: CallableRequest<unknown>, kind: MutationKi
   } catch (error) { return mapError(error); }
 }
 
-export const reportMediaPlayback = onCall(callableOptions, async (request): Promise<ControlResponse> => {
+export const reportMediaPlayback = securedOnCall('reportMediaPlayback', callableOptions, async (request): Promise<ControlResponse> => {
   try {
     const actor = authorizeStaff(request.auth);
     const sessionId = requiredId(request.data, 'sessionId');
@@ -300,7 +297,7 @@ export const reportMediaPlayback = onCall(callableOptions, async (request): Prom
     const playbackState = requestedPlaybackState(request.data);
     const sessionRef = db.collection('sessions').doc(sessionId);
     const publicRef = db.collection('publicSessions').doc(sessionId);
-    return await db.runTransaction(async (transaction) => {
+    return await runAccessTransaction(db, async (transaction) => {
       const session = parseSession(await transaction.get(sessionRef));
       if (session.eventId) {
         const event = (await transaction.get(db.doc('events/' + session.eventId))).data();
@@ -325,15 +322,15 @@ export const reportMediaPlayback = onCall(callableOptions, async (request): Prom
   } catch (error) { return mapError(error); }
 });
 
-export const goToSlide = onCall(callableOptions, (request) => mutateSession(request, 'go-to-slide'));
-export const nextSlide = onCall(callableOptions, (request) => mutateSession(request, 'next-slide'));
-export const previousSlide = onCall(callableOptions, (request) => mutateSession(request, 'previous-slide'));
-export const revealAnswer = onCall(callableOptions, (request) => mutateSession(request, 'reveal-answer'));
-export const hideAnswer = onCall(callableOptions, (request) => mutateSession(request, 'hide-answer'));
-export const selectRecapQuestion = onCall(callableOptions, (request) => mutateSession(request, 'select-recap-question'));
-export const playMedia = onCall(callableOptions, (request) => mutateSession(request, 'play-media'));
-export const stopMedia = onCall(callableOptions, (request) => mutateSession(request, 'stop-media'));
-export const replayMedia = onCall(callableOptions, (request) => mutateSession(request, 'replay-media'));
-export const finishMedia = onCall(callableOptions, (request) => mutateSession(request, 'finish-media'));
-export const startIntro = onCall(callableOptions, (request) => mutateSession(request, 'start-intro'));
-export const endLiveSession = onCall(callableOptions, (request) => mutateSession(request, 'end-session'));
+export const goToSlide = securedOnCall('goToSlide', callableOptions, (request) => mutateSession(request, 'go-to-slide'));
+export const nextSlide = securedOnCall('nextSlide', callableOptions, (request) => mutateSession(request, 'next-slide'));
+export const previousSlide = securedOnCall('previousSlide', callableOptions, (request) => mutateSession(request, 'previous-slide'));
+export const revealAnswer = securedOnCall('revealAnswer', callableOptions, (request) => mutateSession(request, 'reveal-answer'));
+export const hideAnswer = securedOnCall('hideAnswer', callableOptions, (request) => mutateSession(request, 'hide-answer'));
+export const selectRecapQuestion = securedOnCall('selectRecapQuestion', callableOptions, (request) => mutateSession(request, 'select-recap-question'));
+export const playMedia = securedOnCall('playMedia', callableOptions, (request) => mutateSession(request, 'play-media'));
+export const stopMedia = securedOnCall('stopMedia', callableOptions, (request) => mutateSession(request, 'stop-media'));
+export const replayMedia = securedOnCall('replayMedia', callableOptions, (request) => mutateSession(request, 'replay-media'));
+export const finishMedia = securedOnCall('finishMedia', callableOptions, (request) => mutateSession(request, 'finish-media'));
+export const startIntro = securedOnCall('startIntro', callableOptions, (request) => mutateSession(request, 'start-intro'));
+export const endLiveSession = securedOnCall('endLiveSession', callableOptions, (request) => mutateSession(request, 'end-session'));

@@ -1,3 +1,4 @@
+import { seedEmulatorMembership } from '../../functions/lib/dev/seed-membership.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -13,7 +14,7 @@ const db = require('firebase-admin/firestore').getFirestore(adminApp), adminAuth
 const apps = [], users = [];
 function client(name) { const app = initializeApp({ apiKey: 'demo-api-key', projectId: env.projectId }, name); apps.push(app); const auth = getAuth(app); connectAuthEmulator(auth, `http://${env.authEndpoint.host}:${env.authEndpoint.port}`, { disableWarnings: true }); const functions = getFunctions(app, 'europe-west1'); connectFunctionsEmulator(functions, env.functionsEndpoint.host, env.functionsEndpoint.port); const store = getFirestore(app); connectFirestoreEmulator(store,env.firestoreEndpoint.host,env.firestoreEndpoint.port); return { auth, store, call: async (name, data) => (await httpsCallable(functions, name)(data)).data }; }
 const staff = client('ref-admin'), mod = client('ref-mod'), anon = client('ref-anon');
-async function login(c, role) { const email = randomUUID()+'@example.test', password = randomUUID(); const user = await adminAuth.createUser({email,password}); users.push(user.uid); await adminAuth.setCustomUserClaims(user.uid,{role}); await signInWithEmailAndPassword(c.auth,email,password); }
+async function login(c, role) { const email = randomUUID()+'@example.test', password = randomUUID(); const user = await adminAuth.createUser({email,password}); users.push(user.uid); await adminAuth.setCustomUserClaims(user.uid,{role}); await seedEmulatorMembership(user.uid, role); await signInWithEmailAndPassword(c.auth,email,password); }
 const denied = (p,code='permission-denied') => assert.rejects(p,e=>e.code==='functions/'+code);
 const expiry = () => new Date(Date.now()+86400000).toISOString();
 let checks=0;const pass=()=>checks++;
@@ -22,14 +23,14 @@ try {
  async function event(title) { const e = await staff.call('createEvent',{expectedRevision:0,event:{title,startsAt:'2031-11-20T18:00:00Z',timeZone:'Europe/Prague',venue:{name:'Synthetic',publicLocation:'Synthetic'},teamCapacity:10,peopleCapacity:40,teamSizeMin:2,teamSizeMax:6}}); const ref=db.doc('events/'+e.eventId); const r=await staff.call('adminAddEventTeam',{eventId:e.eventId,requestId:randomUUID(),teamName:'Synthetic team',memberCount:2,contactEmail:'private-contact@example.test'}); const locked=await staff.call('lockEventQuiz',{eventId:e.eventId,expectedRevision:(await ref.get()).data().revision,quizId:'preflight-ready-e2e',expectedQuizRevision:0,acknowledgeWarnings:false});return {...e,ref,teamId:r.registrationId,snapshotId:locked.snapshotId}; }
  const a=await event('Referee A'), b=await event('Referee B');
  const issueData={eventId:a.eventId,requestId:randomUUID(),label:'Rozhodčí A',expiresAt:expiry()};
- await denied(anon.call('issueRefereeAccess',issueData));await denied(mod.call('issueRefereeAccess',issueData));
- await adminAuth.setCustomUserClaims(staff.auth.currentUser.uid,{role:'moderator'});await denied(staff.call('issueRefereeAccess',issueData));await adminAuth.setCustomUserClaims(staff.auth.currentUser.uid,{role:'admin'});pass();
+ await denied(anon.call('issueRefereeAccess',issueData),'unauthenticated');await denied(mod.call('issueRefereeAccess',issueData));
+ await seedEmulatorMembership(staff.auth.currentUser.uid, 'moderator');await denied(staff.call('issueRefereeAccess',issueData));await seedEmulatorMembership(staff.auth.currentUser.uid, 'admin');pass();
  const grant=await staff.call('issueRefereeAccess',issueData), c={eventId:a.eventId,accessId:grant.accessId,key:grant.key};
  assert.equal(typeof grant.key,'string');const storedGrant=(await db.doc(`events/${a.eventId}/refereeAccess/${c.accessId}`).get()).data();assert(!JSON.stringify(storedGrant).includes(grant.key));
  const retry=await staff.call('issueRefereeAccess',issueData);assert.equal(retry.accessId,grant.accessId);assert.equal(retry.key,null);assert.equal((await staff.call('listRefereeAccess',{eventId:a.eventId})).length,1);pass();
  for(const x of await staff.call('listRefereeAccess',{eventId:a.eventId}))assert.deepEqual(Object.keys(x).sort(),['accessId','expiresAt','label','status','version']);
  const payload=await anon.call('readRefereeEvent',c);assert.deepEqual(Object.keys(payload).sort(),['eventId','label','rounds','scores','snapshotId','teams','title']);assert.deepEqual(Object.keys(payload.teams[0]).sort(),['id','name']);assert.deepEqual(Object.keys(payload.rounds[0]).sort(),['id','title']);assert(!JSON.stringify(payload).includes('private-contact'));assert.equal(anon.auth.currentUser,null);pass();
- await denied(anon.call('readRefereeEvent',{...c,eventId:b.eventId}));await denied(anon.call('readRefereeEvent',{...c,key:'x'.repeat(43)}));await denied(anon.call('listRefereeAccess',{eventId:a.eventId,...c}));
+ await denied(anon.call('readRefereeEvent',{...c,eventId:b.eventId}));await denied(anon.call('readRefereeEvent',{...c,key:'x'.repeat(43)}));await denied(anon.call('listRefereeAccess',{eventId:a.eventId,...c}),'unauthenticated');
  for(const endpoint of ['updateEvent','lockEventQuiz','createLiveSession','createQuizSlide','adminAddEventTeam'])await assert.rejects(anon.call(endpoint,{...c,credential:c,eventId:a.eventId}),e=>['functions/permission-denied','functions/unauthenticated'].includes(e.code));pass();
  const roundId=payload.rounds[0].id;let revision=0;
  const score=(patch={})=>({eventId:a.eventId,snapshotId:a.snapshotId,teamId:a.teamId,roundId,requestId:randomUUID(),expectedRevision:revision,halfPoints:5,reason:'',...patch});

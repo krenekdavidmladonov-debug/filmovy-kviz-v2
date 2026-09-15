@@ -1,3 +1,4 @@
+import { seedEmulatorMembership } from '../../functions/lib/dev/seed-membership.js';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { initializeApp, deleteApp } from 'firebase/app';
@@ -14,7 +15,7 @@ export async function mediaEventFixture() {
   const db = require('firebase-admin/firestore').getFirestore(app);
   const loginEmail = 'media-' + randomUUID() + '@example.test', loginPassword = randomUUID();
   const user = await auth.createUser({ email: loginEmail, password: loginPassword });
-  await auth.setCustomUserClaims(user.uid, { role: 'admin' });
+  await auth.setCustomUserClaims(user.uid, { role: 'admin' }); await seedEmulatorMembership(user.uid, 'admin');
   const clients = [], extraUsers = [];
   const client = () => {
     const app = initializeApp({ projectId: env.projectId, apiKey: 'demo-api-key' }, randomUUID());

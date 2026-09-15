@@ -159,6 +159,19 @@ function applyOptionalNumber(result: Record<string, unknown>, current: Record<st
   } else result[field] = input;
 }
 
+/** Restore unseen legacy values before validating the actual document to be saved. */
+function preserveRedactedFields(current: Record<string, unknown>, input: EditorSlideInput, updated: Record<string, unknown>) {
+  for (const key of ['title', 'text'] as const) {
+    if (Object.hasOwn(current, key) && typeof current[key] !== 'string' && input[key] === '') updated[key] = current[key];
+  }
+  if (Array.isArray(current.mediaSource) && input.mediaSource === '') updated.mediaSource = current.mediaSource;
+  if (Array.isArray(current.options) && current.options.length === input.options.length) {
+    const stored: unknown[] = current.options;
+    const merged = updated.options as unknown[];
+    updated.options = merged.map((value, index) => typeof stored[index] !== 'string' && input.options[index] === '' ? stored[index] : value);
+  } else if (Object.hasOwn(current, 'options') && !Array.isArray(current.options) && input.options.length === 0) updated.options = current.options;
+}
+
 export function applyKnownSlideUpdate(
   current: Record<string, unknown>,
   input: EditorSlideInput,
@@ -211,6 +224,7 @@ export function applyKnownSlideUpdate(
     applyOptionalNumber(result, current, 'clipStartSeconds', input.clipStartSeconds);
     applyOptionalNumber(result, current, 'clipEndSeconds', input.clipEndSeconds);
   }
+  preserveRedactedFields(current, input, result);
   if ((result.authoringStatus === 'ready' || (input.answerMode !== undefined && result.authoringStatus !== 'draft')) && validateQuestion(mapEditorSlide('current', { position: 1, ...result })).some(issue => issue.severity === 'error')) throw new QuizEditorError('invalid-argument', 'Otázka není dokončená. Uložte ji jako soukromý koncept.');
   return result;
 }

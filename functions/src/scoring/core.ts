@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { runAccessTransaction } from '../access/authorization.js';
 import { getFirestore, Timestamp, FieldValue, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { isObject } from '../events/validation.js';
@@ -15,7 +16,7 @@ export async function commitScore(input: ScoreInput, authorize: (transaction: Tr
   const scoreId = scoreHash([input.teamId, input.roundId]);
   const scoreRef = eventRef.collection('scores').doc(scoreId);
   const fingerprint = scoreHash(input);
-  return db.runTransaction(async transaction => {
+  return runAccessTransaction(db, async transaction => {
     const actor = await authorize(transaction);
     const event: Record<string, unknown> | undefined = (await transaction.get(eventRef)).data();
     if (!event) throw new HttpsError('not-found', 'Event was not found.');

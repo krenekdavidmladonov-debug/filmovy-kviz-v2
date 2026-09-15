@@ -1,3 +1,4 @@
+import { seedEmulatorMembership } from '../../functions/lib/dev/seed-membership.js';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { initializeApp, deleteApp } from 'firebase/app';
@@ -19,7 +20,7 @@ export async function emailFixture({ gmail = false } = {}) {
   const db = require('firebase-admin/firestore').getFirestore(app);
   const loginEmail = 'email-' + randomUUID() + '@example.test', loginPassword = randomUUID();
   const user = await auth.createUser({ email: loginEmail, password: loginPassword });
-  await auth.setCustomUserClaims(user.uid, { role: 'admin' });
+  await auth.setCustomUserClaims(user.uid, { role: 'admin' }); await seedEmulatorMembership(user.uid, 'admin');
   const clients = [], extraUsers = [];
   const client = () => {
     const app = initializeApp({ projectId: env.projectId, apiKey: 'demo-api-key' }, randomUUID());
@@ -45,11 +46,11 @@ export async function emailFixture({ gmail = false } = {}) {
   const vault = emulatorTokenVault();
   return {
     db, eventId, eventRef, loginEmail, loginPassword, capture,
-    setAdminRole: role => auth.setCustomUserClaims(user.uid, { role }),
+    setAdminRole: async role => { await auth.setCustomUserClaims(user.uid, { role }); await seedEmulatorMembership(user.uid, role); },
     async roleCall(role) {
       const email = 'role-' + randomUUID() + '@example.test', password = randomUUID();
       const person = await auth.createUser({ email, password }); extraUsers.push(person.uid);
-      if (role) await auth.setCustomUserClaims(person.uid, { role });
+      if (role) { await auth.setCustomUserClaims(person.uid, { role }); await seedEmulatorMembership(person.uid, role); }
       const session = client(); await signInWithEmailAndPassword(session.auth, email, password);
       return session.call;
     },

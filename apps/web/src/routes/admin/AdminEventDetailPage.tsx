@@ -49,7 +49,8 @@ function formValues(event: EventRecord): EventFormValues {
 
 export function AdminEventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const { role, currentUser } = useAuth();
+  const { can, currentUser } = useAuth();
+  const canChooseQuiz = can('event.manage') && can('quiz.read') && can('quiz.export') && can('quiz.answers.read') && can('quiz.notes.read');
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [values, setValues] = useState<EventFormValues | null>(null);
   const [quizzes, setQuizzes] = useState<readonly QuizSummary[]>([]);
@@ -69,7 +70,7 @@ export function AdminEventDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [loadedEvent, loadedQuizzes] = await Promise.all([getEvent(eventId), listQuizzes()]);
+      const [loadedEvent, loadedQuizzes] = await Promise.all([getEvent(eventId), canChooseQuiz ? listQuizzes() : Promise.resolve([])]);
       setEvent(loadedEvent);
       setValues(loadedEvent ? formValues(loadedEvent) : null);
       setQuizzes(loadedQuizzes);
@@ -81,7 +82,7 @@ export function AdminEventDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [eventId]);
+  }, [eventId, canChooseQuiz]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
@@ -89,14 +90,14 @@ export function AdminEventDetailPage() {
     setAcknowledgeWarnings(false);
     setPreflight(null);
     setSelectedQuiz(null);
-    if (selectedQuizId === '') return () => { current = false; };
+    if (!canChooseQuiz || selectedQuizId === '' || !quizzes.some(quiz => quiz.id === selectedQuizId)) return () => { current = false; };
     void getEditorQuiz(selectedQuizId).then((quiz) => {
       if (!current || quiz === null) return;
       setSelectedQuiz(quiz);
       setPreflight(runQuizPreflight(quiz));
     }).catch(() => { if (current) setError('Vybraný kvíz se nepodařilo načíst.'); });
     return () => { current = false; };
-  }, [selectedQuizId]);
+  }, [selectedQuizId, canChooseQuiz, quizzes]);
 
   const runAction = async (action: () => Promise<unknown>, success: string) => {
     setPending(true);
@@ -117,7 +118,7 @@ export function AdminEventDetailPage() {
   if (error && event === null) return <QuizErrorState message={error} onRetry={() => void load()} />;
   if (!event || !values) return <section className="quiz-state-card"><div><h2>Akce neexistuje</h2><p>Požadovaný záznam nebyl nalezen.</p></div><Link className="secondary-link" to="/admin/events">Zpět na akce</Link></section>;
 
-  const admin = role === 'admin';
+  const admin = can('event.manage');
   const locked = event.quizAssignment;
   const lockDisabled = pending || selectedQuiz === null || preflight === null
     || preflight.blockerCount > 0 || (preflight.warningCount > 0 && !acknowledgeWarnings);
@@ -131,19 +132,19 @@ export function AdminEventDetailPage() {
       {error && <p className="round-editor-error" role="alert">{error}</p>}
       {notice && <p className="event-notice" role="status">{notice}</p>}
 
-      <section className="event-section">
+      {can('event.contacts') && <section className="event-section">
         <div className="event-section-heading"><div><p className="eyebrow">Registrace</p><h2>Týmy a kapacita</h2></div><span>{event.acceptedTeams} / {event.teamCapacity} týmů</span></div>
         <p className="event-muted">Registrační okno, souhrn osob a privátní kontakty týmů.</p>
         <div className="team-tool-actions">{admin && <button className="primary-button" type="button" onClick={() => setAddingTeam(true)}>+ Přidat tým</button>}<Link className="secondary-link" to={`/admin/events/${event.id}/registrations`}>Spravovat týmy a registrace</Link></div>
         {addedTeam && <p className="event-notice" role="status">Přidán tým: <Link to={`/admin/events/${event.id}/registrations?team=${addedTeam.id}`}>{addedTeam.name}</Link></p>}
-      </section>
+      </section>}
 
       <section className="event-section">
         <div className="event-section-heading"><div><p className="eyebrow">Interní zápis</p><h2>Bodování</h2></div></div>
         <p className="event-muted">Body přijatých týmů za kola připraveného kvízu a historie oprav.</p>
         <Link className="secondary-link" to={`/admin/events/${event.id}/scoring`}>Otevřít bodování</Link>
       </section>
-      {admin && EventTeamMessagePanel && <Suspense fallback={null}><EventTeamMessagePanel key={event.id + ':' + currentUser?.uid} eventId={event.id} actorId={currentUser!.uid} canCreate={['draft', 'scheduled', 'ready', 'live'].includes(event.lifecycleStatus)} /></Suspense>}
+      {admin && can('event.contacts') && EventTeamMessagePanel && <Suspense fallback={null}><EventTeamMessagePanel key={event.id + ':' + currentUser?.uid} eventId={event.id} actorId={currentUser!.uid} canCreate={['draft', 'scheduled', 'ready', 'live'].includes(event.lifecycleStatus)} /></Suspense>}
       <RegistrationSharePanel event={event} />
       {admin && addingTeam && <ManualTeamDialog event={event} onClose={() => setAddingTeam(false)} onSaved={async (id, name) => { setAddedTeam({ id, name }); setEvent(await getEvent(event.id)); }} />}
 
@@ -156,7 +157,7 @@ export function AdminEventDetailPage() {
       <section className="event-section" data-testid="event-quiz-assignment">
         <div className="event-section-heading"><div><p className="eyebrow">Kvíz</p><h2>{locked ? 'Kvíz připraven' : 'Vybrat kvíz'}</h2></div>{locked && <span>Zdrojová revize {locked.quizRevision}</span>}</div>
         {locked && <div className="event-locked-quiz"><strong>{locked.quizTitle}</strong><span>{locked.roundCount} kol · {locked.questionCount} otázek</span><small>Snapshot je privátní a nemění se při dalších úpravách zdrojového kvízu.</small></div>}
-        {admin ? (
+        {canChooseQuiz ? (
           <div className="event-quiz-lock">
             <label className="editor-field"><span>{locked ? 'Aktualizovat kvíz pro akci' : 'Kvíz'}</span><select value={selectedQuizId} onChange={(change) => setSelectedQuizId(change.target.value)}><option value="">Vyberte kvíz</option>{quizzes.map((quiz) => <option value={quiz.id} key={quiz.id}>{quiz.title}</option>)}</select></label>
             {selectedQuiz && preflight && <div className={`event-readiness status-${preflight.status.toLowerCase()}`} data-preflight-status={preflight.status}><strong>{selectedQuiz.title}</strong><span>{preflight.roundCount} kol · {preflight.questionCount} otázek</span><p>{preflight.blockerCount > 0 ? `${preflight.blockerCount} blockerů brání přípravě.` : preflight.warningCount > 0 ? `${preflight.warningCount} upozornění vyžaduje potvrzení.` : 'Kvíz je připraven bez blockerů.'}</p>{preflight.blockerCount > 0 && <Link className="secondary-link" to={`/admin/quizzes/${selectedQuiz.id}/readiness`}>Otevřít kontrolu kvízu</Link>}{preflight.warningCount > 0 && preflight.blockerCount === 0 && <label className="warning-confirmation"><input type="checkbox" checked={acknowledgeWarnings} onChange={(change) => setAcknowledgeWarnings(change.target.checked)} /> Potvrzuji upozornění pro tuto revizi kvízu.</label>}</div>}
@@ -165,17 +166,17 @@ export function AdminEventDetailPage() {
               void runAction(() => lockEventQuiz(event.id, event.revision, selectedQuiz.id, selectedQuiz.revision, acknowledgeWarnings), locked ? 'Kvíz pro akci byl aktualizován novým snapshotem.' : 'Kvíz byl zkontrolován a připraven.');
             }}>{pending ? 'Připravuji…' : locked ? 'Aktualizovat kvíz pro akci' : 'Zkontrolovat a připravit'}</button>
           </div>
-        ) : <p className="event-muted">Moderátor může připravenou akci číst, konfiguraci a snapshot mění pouze administrátor.</p>}
+        ) : <p className="event-muted">Výběr zdrojového kvízu vyžaduje správu akce a přístup ke kvízu včetně odpovědí a exportu.</p>}
       </section>
 
       <section className="event-section">
         <div className="event-section-heading"><div><p className="eyebrow">Dokumenty</p><h2>Tiskové centrum</h2></div>{locked && <span>Neměnný snapshot</span>}</div>
         <p className="event-muted">Hrací archy, privátní klíč odpovědí a bodovací tabulka pro ruční práci na místě.</p>
-        <Link className="secondary-link" to={`/admin/events/${event.id}/print`}>Otevřít tiskové centrum</Link>
+        {can('event.export') && <Link className="secondary-link" to={`/admin/events/${event.id}/print`}>Otevřít tiskové centrum</Link>}
       </section>
 
-      {locked && ['ready', 'live', 'finalizing'].includes(event.lifecycleStatus) && <EventLiveButton eventId={event.id} revision={event.revision} />}
-      {admin && !['archived', 'cancelled', 'completed'].includes(event.lifecycleStatus) && <RefereeAccessPanel eventId={event.id} />}
+      {can('event.live') && locked && ['ready', 'live', 'finalizing'].includes(event.lifecycleStatus) && <EventLiveButton eventId={event.id} revision={event.revision} />}
+      {admin && !['archived', 'cancelled', 'completed'].includes(event.lifecycleStatus) && <RefereeAccessPanel eventId={event.id} canIssue={can('event.score')} />}
     {admin && <section className="event-section event-danger-zone"><div><p className="eyebrow">Stav akce</p><h2>Bezpečné ukončení</h2></div>{event.lifecycleStatus === 'cancelled' ? <button className="secondary-button" type="button" disabled={pending} onClick={() => void runAction(() => archiveEvent(event.id, event.revision), 'Akce byla archivována.')}>Archivovat akci</button> : event.lifecycleStatus !== 'archived' && event.lifecycleStatus !== 'completed' ? <button className="danger-button" type="button" disabled={pending} onClick={() => { if (window.confirm('Opravdu zrušit tuto akci? Veřejná projekce bude odstraněna.')) void runAction(() => cancelEvent(event.id, event.revision), 'Akce byla zrušena.'); }}>Zrušit akci</button> : null}</section>}
     </article>
   );

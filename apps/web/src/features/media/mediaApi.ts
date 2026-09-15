@@ -1,4 +1,4 @@
-import { collection, getDocsFromServer, limit, query } from 'firebase/firestore';
+import { privateRead, type PrivateDocument } from '../access/api';
 import { httpsCallable } from 'firebase/functions';
 import { ref, uploadBytesResumable } from 'firebase/storage';
 import { parseQuizAsset, validOwnedMedia, type OwnedMediaKind } from '@filmovy-kviz/quiz-domain';
@@ -6,8 +6,8 @@ import { getFirebaseServices } from '../../services/firebase/client';
 import { getFirebaseAppContext } from '../../services/firebase/app';
 import { getFirebaseAuth } from '../../services/firebase/auth';
 export async function listQuizMedia(quizId: string, kind: OwnedMediaKind): Promise<{ reference: string; size: number }[]> {
-  const result = await getDocsFromServer(query(collection(getFirebaseServices().db, 'quizzes', quizId, 'mediaAssets'), limit(200)));
-  return result.docs.flatMap(doc => { const d = doc.data(); return d.status === 'ready' && d.quizId === quizId && d.kind === kind && typeof d.generation === 'string' && validOwnedMedia(d.kind, d.contentType, d.size) ? [{ reference: 'quiz-asset:' + quizId + '/' + doc.id, size: d.size as number }] : []; });
+  const result = await privateRead<PrivateDocument[]>('mediaAssets', { quizId });
+  return result.flatMap(doc => { const d = doc.data; return d.status === 'ready' && d.quizId === quizId && d.kind === kind && typeof d.generation === 'string' && validOwnedMedia(d.kind, d.contentType, d.size) ? [{ reference: 'quiz-asset:' + quizId + '/' + doc.id, size: d.size as number }] : []; });
 }
 export async function uploadQuizMedia(quizId: string, kind: OwnedMediaKind, file: File, options: { signal: AbortSignal; onProgress: (percent: number) => void }): Promise<string> {
   const contentType = file.type === 'audio/x-wav' ? 'audio/wav' : file.type;
@@ -36,7 +36,7 @@ export async function uploadQuizMedia(quizId: string, kind: OwnedMediaKind, file
     throw new Error('Přenos nebo ověření média selhalo. Rozepsaný obsah zůstal zachovaný. Zkuste nahrát znovu.', { cause: error });
   }
 }
-export async function readQuizMediaBlob(reference: string, signal: AbortSignal, sessionId?: string): Promise<Blob> {
+export async function readQuizMediaBlob(reference: string, signal: AbortSignal, sessionId?: string, snapshotId?: string): Promise<Blob> {
   if (!parseQuizAsset(reference)) throw new Error('Invalid asset reference');
   const { config } = getFirebaseAppContext(), projectId = config.options.projectId;
   const endpoint = config.useEmulators ? 'http://127.0.0.1:5001/' + projectId + '/europe-west1/readQuizMedia' : 'https://europe-west1-' + projectId + '.cloudfunctions.net/readQuizMedia';
@@ -44,6 +44,7 @@ export async function readQuizMediaBlob(reference: string, signal: AbortSignal, 
   const headers: Record<string, string> = {};
   if (sessionId) url.searchParams.set('sessionId', sessionId);
   else {
+    if (snapshotId) url.searchParams.set('snapshotId', snapshotId);
     const user = getFirebaseAuth().currentUser;
     if (!user) throw new Error('Přihlášení je vyžadováno.');
     headers.Authorization = 'Bearer ' + await user.getIdToken();

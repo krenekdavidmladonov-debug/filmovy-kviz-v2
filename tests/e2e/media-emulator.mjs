@@ -6,7 +6,7 @@ const denied=(promise,code)=>assert.rejects(promise,error=>error.code===code);
 try {
   f=await mediaFixture();const image=syntheticImage(),audio=syntheticAudio();const moderator=await f.roleClient('moderator');
   phase='upload rules';
-  await denied(f.begin('image',image,'image/png',f.anonymous),'functions/permission-denied');await denied(f.begin('image',image,'image/png',moderator),'functions/permission-denied');
+  await denied(f.begin('image',image,'image/png',f.anonymous),'functions/unauthenticated');await denied(f.begin('image',image,'image/png',moderator),'functions/permission-denied');
   const pending=await f.begin('image',image,'image/png');
   for(const who of [f.anonymous,moderator])await denied(uploadBytes(ref(who.storage,pending.path),image,{contentType:'image/png'}),'storage/unauthorized');
   await denied(uploadBytes(ref(f.admin.storage,pending.path),image,{contentType:'text/html'}),'storage/unauthorized');

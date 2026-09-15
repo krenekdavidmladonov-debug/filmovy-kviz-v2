@@ -9,7 +9,7 @@ import { QuizLoading } from '../../features/quizzes/QuizLoading';
 import { HumanError } from '../../ui/HumanError';
 
 export function AdminPage() {
-  const { role } = useAuth();
+  const { can } = useAuth();
   const [quizzes, setQuizzes] = useState<readonly QuizSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,13 +18,13 @@ export function AdminPage() {
     setLoading(true);
     setError(null);
     try {
-      setQuizzes(await listQuizzes());
+      setQuizzes(can('quiz.read') ? await listQuizzes() : []);
     } catch (loadError) {
       setError(getQuizDataError(loadError));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [can]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -39,9 +39,9 @@ export function AdminPage() {
         <div>
           <p className="eyebrow">Administrace</p>
           <h1>Přehled</h1>
-          <p className="lead">Rychlý návrat k práci s vašimi kvízy.</p>
+          <p className="lead">Vaše dostupné kvízy a akce.</p>
         </div>
-        <Link className="secondary-link" to="/admin/quizzes">Zobrazit všechny kvízy</Link>
+        {can('quiz.read') && <Link className="secondary-link" to="/admin/quizzes">Zobrazit dostupné kvízy</Link>}
       </header>
 
       {error && (
@@ -51,7 +51,9 @@ export function AdminPage() {
         />
       )}
 
-      {!error && quizzes.length === 0 && (
+      {can('event.read') && <Link className="primary-link" to="/admin/events">Otevřít moje akce</Link>}
+      {!can('quiz.read') && <p>Rozsah svého přístupu najdete v <Link to="/account">osobním účtu</Link>.</p>}
+      {!error && can('quiz.read') && quizzes.length === 0 && (
         <section className="dashboard-empty surface-card">
           <p className="eyebrow">Kvízy</p>
           <h2>Zatím tu nejsou žádné kvízy</h2>
@@ -70,11 +72,11 @@ export function AdminPage() {
             <p className="card-meta">Naposledy upraveno {formatQuizDate(continueQuiz.updatedAt)}</p>
             <Link
               className="primary-link"
-              to={role === 'admin'
+              to={can('quiz.edit')
                 ? `/admin/quizzes/${encodeURIComponent(continueQuiz.id)}/edit`
                 : `/admin/quizzes/${encodeURIComponent(continueQuiz.id)}`}
             >
-              {role === 'admin' ? 'Pokračovat v úpravách' : 'Otevřít detail'}
+              {can('quiz.edit') ? 'Pokračovat v úpravách' : 'Otevřít detail'}
             </Link>
           </section>
 

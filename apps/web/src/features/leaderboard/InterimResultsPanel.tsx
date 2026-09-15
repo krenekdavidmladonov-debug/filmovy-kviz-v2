@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { loadRounds } from '../scoring/api';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseServices } from '../../services/firebase/client';
-import { getFirebaseFirestore } from '../../services/firebase/firestore';
 import type { LiveControlState } from '../live/types';
 import type { ResultsPreview } from './types';
 import { ResultsTable } from './ResultsTable';
@@ -18,10 +17,9 @@ export function InterimResultsPanel({ session }: {
     const retry = useRef<Record<string, unknown> | null>(null), busy = useRef(false);
     useEffect(() => {
         let active = true;
-        void getDocs(query(collection(getFirebaseFirestore(), 'quizSnapshots', session.snapshotId!, 'rounds'), orderBy('position'))).then(r => {
+        void loadRounds(session.snapshotId!).then(data => {
             if (!active)
                 return;
-            const data = r.docs.map(d => ({ id: d.id, title: String(d.data().title) }));
             setRounds(data);
             setRoundId(data.length > 1 ? data[0]!.id : '');
         }).catch(() => { if (active)

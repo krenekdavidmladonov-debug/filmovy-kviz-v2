@@ -11,7 +11,7 @@
     "event-night:emulators:fresh": "firebase emulators:start --project demo-filmovy-kviz-v2",
     "event-night:export": "firebase emulators:export .local-data/event-night/export-staging --project demo-filmovy-kviz-v2",
     "event-night:candidate": "vitest run --config tools/event-night/vitest.config.ts --disableConsoleIntercept",
-    "seed:auth": "pnpm --filter @filmovy-kviz/quiz-domain build && pnpm --filter @filmovy-kviz/functions build && node tools/local-emulator-environment.mjs auth functions/lib/dev/seed-auth.js",
+    "seed:auth": "pnpm --filter @filmovy-kviz/quiz-domain build && pnpm --filter @filmovy-kviz/functions build && node tools/local-emulator-environment.mjs full functions/lib/dev/seed-auth.js",
     "seed:quizzes": "pnpm --filter @filmovy-kviz/quiz-domain build && pnpm --filter @filmovy-kviz/functions build && node tools/local-emulator-environment.mjs firestore functions/lib/dev/seed-quizzes.js",
     "seed:emulators": "pnpm seed:auth && pnpm seed:quizzes",
     "test:rules": "firebase emulators:exec --only firestore --project demo-filmovy-kviz-v2 \"pnpm test:rules:run\"",
