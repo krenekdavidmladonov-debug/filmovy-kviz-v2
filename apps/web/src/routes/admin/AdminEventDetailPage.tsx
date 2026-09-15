@@ -50,7 +50,7 @@ function formValues(event: EventRecord): EventFormValues {
 export function AdminEventDetailPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const { can, currentUser } = useAuth();
-  const canChooseQuiz = can('event.manage') && can('quiz.read') && can('quiz.export') && can('quiz.answers.read');
+  const canChooseQuiz = can('event.manage') && can('quiz.read') && can('quiz.export') && can('quiz.answers.read') && can('quiz.notes.read');
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [values, setValues] = useState<EventFormValues | null>(null);
   const [quizzes, setQuizzes] = useState<readonly QuizSummary[]>([]);

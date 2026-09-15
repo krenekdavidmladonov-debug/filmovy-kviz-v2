@@ -78,7 +78,7 @@ export async function authorizeOperation(name: string, request: CallableRequest,
   if (eventManagement.includes(name)) return authorize(request.auth, name.startsWith('admin') ? ['event.manage', 'event.contacts'] : ['event.manage'], event(), tx);
   if (email.includes(name)) return authorize(request.auth, ['event.manage', 'event.contacts'], event(), tx);
   if (name === 'lockEventQuiz') {
-    await authorize(request.auth, ['quiz.read', 'quiz.export', 'quiz.answers.read'], quiz(), tx);
+    await authorize(request.auth, ['quiz.read', 'quiz.export', 'quiz.answers.read', 'quiz.notes.read'], quiz(), tx);
     return authorize(request.auth, ['event.manage'], event(), tx);
   }
   if (name === 'saveEventScore') return authorize(request.auth, ['event.score'], event(), tx);

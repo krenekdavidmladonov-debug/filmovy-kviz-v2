@@ -99,6 +99,12 @@ try {
     await denied(() => moderator.call('readAccessData', { operation: 'snapshotSlides', snapshotId: eventB + '-snapshot' }));
     for (const name of ['updateEvent', 'cancelEvent', 'archiveEvent', 'configureEventRegistration', 'adminAddEventTeam', 'adminUpdateEventTeam', 'adminCancelEventRegistration', 'createEventLiveSession', 'previewInterimResults', 'controlInterimResults', 'previewFinalResults', 'controlFinalReveal', 'listRefereeAccess', 'issueRefereeAccess', 'changeRefereeAccess', 'previewEventTeamMessage', 'createEventTeamMessage', 'listEventTeamMessages', 'getEventTeamMessage']) await denied(() => moderator.call(name, { eventId: eventB }));
   });
+  await test('snapshot export cannot turn event-note access into forbidden source-note access', async () => {
+    const exporter = await account('restricted-exporter', { role: 'manager', permissions: ['quiz.read', 'quiz.export', 'quiz.answers.read', 'event.read', 'event.manage', 'event.notes.read'], quizzes: selected([quizA]), events: selected([eventA]) });
+    const before = (await db.doc(`events/${eventA}`).get()).get('quizAssignment');
+    await denied(() => exporter.call('lockEventQuiz', { quizId: quizA, eventId: eventA, expectedRevision: 1, expectedQuizRevision: 2, acknowledgeWarnings: true }));
+    assert.deepEqual((await db.doc(`events/${eventA}`).get()).get('quizAssignment'), before);
+  });
   await test('referee scores only assigned event; viewer cannot score', async () => {
     const score = { eventId: eventA, snapshotId: eventA + '-snapshot', teamId: 'team', roundId: 'round', requestId: prefix, expectedRevision: 0, halfPoints: 4, reason: '' };
     await referee.call('saveEventScore', score);

@@ -47,6 +47,8 @@ Private list/editor/event/roster/snapshot/media-picker reads use `readAccessData
 
 The editor verifies answer edit, note edit and media attachment independently. Redacted saves restore protected fields from the authoritative server document, preserving exact hidden answers/notes and unknown legacy data. Deletion and round removal require delete permission even with a forged `mode` field. Choice repair requires answer edit permission.
 
+Locking a quiz into an event requires source quiz export, answer-read and note-read permissions, because the immutable snapshot contains both private fields. Event answer/note permissions alone cannot grant access to private source fields through a new snapshot.
+
 Storage permits only a matching unexpired, create-only upload grant for a current member with the same membership version and scope. Downloads are denied in Storage Rules and served through `readQuizMedia`, which verifies Auth/membership/scope before and after byte IO. An event's media is restricted to its snapshot. Answer bytes require answer-read permission. The print endpoint independently requires event export and, for answer keys, both answer-read and answer-key-export. Public projector delivery still derives only from explicitly revealed publication state.
 
 Anonymous registration and existing referee capabilities retain their original bounded authorization and limiters. An authenticated caller to referee capability Functions must also have current scoped event authority; a legacy capability does not broaden that logged-in user's membership.
