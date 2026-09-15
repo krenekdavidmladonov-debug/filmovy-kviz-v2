@@ -1,3 +1,4 @@
+import { PermissionGate } from '../features/access/PermissionGate';
 import { RefereePage } from '../routes/referee/RefereePage';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
@@ -13,6 +14,9 @@ import { ManageRegistrationPage } from '../routes/events/ManageRegistrationPage'
 import { NotFoundPage } from '../routes/NotFoundPage';
 import { AdminShell } from './AdminShell';
 import { AppLayout } from './AppLayout';
+import { AccountPage } from '../routes/AccountPage';
+import { UsersAccessPage } from '../routes/admin/UsersAccessPage';
+import '../styles/access.css';
 
 const QuizLibraryPage = lazy(async () => {
   const module = await import('../routes/admin/QuizLibraryPage');
@@ -100,23 +104,24 @@ export const router = createBrowserRouter([
     path: 'admin',
     element: <RequireStaff />,
     children: [
-      { path: 'live/:sessionId', element: <LazyAdminRoute><LiveControlPage /></LazyAdminRoute> },
-      { path: 'quizzes/:quizId/edit', element: <LazyAdminRoute><QuizEditorPage /></LazyAdminRoute> },
+      { path: 'live/:sessionId', element: <LazyAdminRoute><PermissionGate requires={['event.live']}><LiveControlPage /></PermissionGate></LazyAdminRoute> },
+      { path: 'quizzes/:quizId/edit', element: <LazyAdminRoute><PermissionGate requires={['quiz.read']}><QuizEditorPage /></PermissionGate></LazyAdminRoute> },
       {
         element: <AdminShell />,
         children: [
           { index: true, element: <AdminPage /> },
-          { path: 'quizzes', element: <LazyAdminRoute><QuizLibraryPage /></LazyAdminRoute> },
-          { path: 'quizzes/new', element: <LazyAdminRoute><QuizCreatePage /></LazyAdminRoute> },
-          { path: 'quizzes/:quizId', element: <LazyAdminRoute><QuizDetailPage /></LazyAdminRoute> },
-          { path: 'quizzes/:quizId/readiness', element: <LazyAdminRoute><QuizPreflightPage /></LazyAdminRoute> },
-          { path: 'quizzes/:quizId/readiness/repair', element: <LazyAdminRoute><QuizRepairPage /></LazyAdminRoute> },
-          { path: 'events', element: <LazyAdminRoute><AdminEventsPage /></LazyAdminRoute> },
-          { path: 'events/new', element: <LazyAdminRoute><AdminEventCreatePage /></LazyAdminRoute> },
-          { path: 'events/:eventId/scoring', element: <LazyAdminRoute><AdminEventScoringPage /></LazyAdminRoute> },
-          { path: 'events/:eventId', element: <LazyAdminRoute><AdminEventDetailPage /></LazyAdminRoute> },
-          { path: 'events/:eventId/print', element: <LazyAdminRoute><AdminPrintCenterPage /></LazyAdminRoute> },
-          { path: 'events/:eventId/registrations', element: <LazyAdminRoute><AdminEventRegistrationsPage /></LazyAdminRoute> },
+          { path: 'users', element: <PermissionGate requires={['users.manage']}><UsersAccessPage /></PermissionGate> },
+          { path: 'quizzes', element: <LazyAdminRoute><PermissionGate requires={['quiz.read']}><QuizLibraryPage /></PermissionGate></LazyAdminRoute> },
+          { path: 'quizzes/new', element: <LazyAdminRoute><PermissionGate requires={['quiz.create']}><QuizCreatePage /></PermissionGate></LazyAdminRoute> },
+          { path: 'quizzes/:quizId', element: <LazyAdminRoute><PermissionGate requires={['quiz.read']}><QuizDetailPage /></PermissionGate></LazyAdminRoute> },
+          { path: 'quizzes/:quizId/readiness', element: <LazyAdminRoute><PermissionGate requires={['quiz.read', 'quiz.answers.read']}><QuizPreflightPage /></PermissionGate></LazyAdminRoute> },
+          { path: 'quizzes/:quizId/readiness/repair', element: <LazyAdminRoute><PermissionGate requires={['quiz.edit', 'quiz.answers.edit']}><QuizRepairPage /></PermissionGate></LazyAdminRoute> },
+          { path: 'events', element: <LazyAdminRoute><PermissionGate requires={['event.read']}><AdminEventsPage /></PermissionGate></LazyAdminRoute> },
+          { path: 'events/new', element: <LazyAdminRoute><PermissionGate requires={['event.create']}><AdminEventCreatePage /></PermissionGate></LazyAdminRoute> },
+          { path: 'events/:eventId/scoring', element: <LazyAdminRoute><PermissionGate requires={['event.read']}><AdminEventScoringPage /></PermissionGate></LazyAdminRoute> },
+          { path: 'events/:eventId', element: <LazyAdminRoute><PermissionGate requires={['event.read']}><AdminEventDetailPage /></PermissionGate></LazyAdminRoute> },
+          { path: 'events/:eventId/print', element: <LazyAdminRoute><PermissionGate requires={['event.export']}><AdminPrintCenterPage /></PermissionGate></LazyAdminRoute> },
+          { path: 'events/:eventId/registrations', element: <LazyAdminRoute><PermissionGate requires={['event.contacts']}><AdminEventRegistrationsPage /></PermissionGate></LazyAdminRoute> },
         ],
       },
       { path: '*', element: <NotFoundPage /> },
@@ -128,6 +133,8 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/events" replace /> },
       { path: 'admin/login', element: <AdminLoginPage /> },
       { path: 'admin/no-access', element: <AdminNoAccessPage /> },
+      { path: 'account', element: <AccountPage /> },
+      { path: 'invite/:inviteId', element: <AccountPage /> },
       { path: 'events', element: <EventsPage /> },
       { path: 'events/:eventId', element: <PublicEventPage /> },
       { path: 'events/:eventId/registration/manage', element: <ManageRegistrationPage /> },

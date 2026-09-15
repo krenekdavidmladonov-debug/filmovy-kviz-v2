@@ -1,4 +1,5 @@
-import { collection, doc, getDocsFromServer, onSnapshot, orderBy, query, Timestamp } from 'firebase/firestore';
+import { collection, getDocsFromServer, onSnapshot, orderBy, query, Timestamp } from 'firebase/firestore';
+import { privateRead, watchPrivate, type PrivateDocument } from '../access/api';
 import { httpsCallable } from 'firebase/functions';
 import { getFirebaseFirestore } from '../../services/firebase/firestore';
 import { getFirebaseServices } from '../../services/firebase/client';
@@ -12,8 +13,8 @@ export async function saveScore(request: ScoreRequest): Promise<Score> {
   return (await httpsCallable<ScoreRequest, Score>(getFirebaseServices().functions, 'saveEventScore')(request)).data;
 }
 export async function loadRounds(snapshotId: string) {
-  const data = await getDocsFromServer(query(collection(getFirebaseFirestore(), 'quizSnapshots', snapshotId, 'rounds'), orderBy('position')));
-  return data.docs.map(item => ({ id: item.id, title: String(item.data().title ?? 'Kolo') }));
+  const data = await privateRead<PrivateDocument[]>('snapshotRounds', { snapshotId });
+  return data.map(item => ({ id: item.id, title: typeof item.data.title === 'string' ? item.data.title : 'Kolo' }));
 }
 export function watchScores(eventId: string, receive: (scores: Record<string, Score>) => void, fail: () => void) {
   return onSnapshot(collection(getFirebaseFirestore(), 'events', eventId, 'scores'), { includeMetadataChanges: true }, snapshot => {
@@ -27,15 +28,13 @@ export function watchScores(eventId: string, receive: (scores: Record<string, Sc
   }, fail);
 }
 export function watchRoster(eventId: string, receive: (teams: { id: string; name: string; accepted: boolean }[]) => void, fail: () => void) {
-  return onSnapshot(collection(getFirebaseFirestore(), 'events', eventId, 'registrations'), { includeMetadataChanges: true }, snapshot => {
-    if (snapshot.metadata.fromCache) return;
-    receive(snapshot.docs.map(item => ({ id: item.id, name: String(item.data().teamName), accepted: item.data().status === 'accepted' })));
+  return watchPrivate<PrivateDocument[]>('roster', { eventId }, rows => {
+    receive(rows.map(item => ({ id: item.id, name: String(item.data.teamName), accepted: item.data.status === 'accepted' })));
   }, fail);
 }
 export function watchScoringEvent(eventId: string, receive: (snapshotId: string | null, allowed: boolean, title: string) => void, fail: () => void) {
-  return onSnapshot(doc(getFirebaseFirestore(), 'events', eventId), { includeMetadataChanges: true }, snapshot => {
-    if (snapshot.metadata.fromCache) return;
-    const data = snapshot.data();
+  return watchPrivate<PrivateDocument>('event', { eventId }, result => {
+    const data = result.data;
     const assignment = data?.quizAssignment as { snapshotId?: string } | undefined;
     receive(assignment?.snapshotId ?? null, ['ready', 'live', 'finalizing'].includes(data?.lifecycleStatus as string), typeof data?.title === 'string' ? data.title : 'Akce');
   }, fail);

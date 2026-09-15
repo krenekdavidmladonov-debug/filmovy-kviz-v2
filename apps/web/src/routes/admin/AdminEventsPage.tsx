@@ -17,7 +17,7 @@ function formatDate(value: Date): string {
 }
 
 export function AdminEventsPage() {
-  const { role } = useAuth();
+  const { can } = useAuth();
   const [events, setEvents] = useState<readonly EventRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export function AdminEventsPage() {
     <section className="event-library">
       <header className="section-heading">
         <div><p className="eyebrow">Administrace</p><h1>Akce</h1><p className="lead">Termíny, kapacity a připravené verze kvízů.</p></div>
-        {role === 'admin' && <Link className="primary-button" to="/admin/events/new">Vytvořit akci</Link>}
+        {can('event.create') && <Link className="primary-button" to="/admin/events/new">Vytvořit akci</Link>}
       </header>
       {events.length === 0 ? (
         <div className="quiz-state-card"><div><h2>Zatím tu nejsou žádné akce</h2><p>Vytvořte první termín a připravte pro něj kvíz.</p></div></div>

@@ -16,7 +16,7 @@ function localDateTime(value: Date): string {
 }
 export function AdminEventRegistrationsPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const { role } = useAuth();
+  const { can } = useAuth();
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [registrations, setRegistrations] = useState<readonly RegistrationRecord[]>([]);
   const [opensAt, setOpensAt] = useState('');
@@ -56,7 +56,7 @@ export function AdminEventRegistrationsPage() {
   if (loading) return <QuizLoading label="Načítám registrace…" />;
   if (error && !event) return <QuizErrorState message={error} onRetry={() => void load()} />;
   if (!event) return <section className="quiz-state-card"><h2>Akce neexistuje</h2></section>;
-  const admin = role === 'admin';
+  const admin = can('event.manage') && can('event.contacts');
   return <article className="event-detail-page"><Link className="back-link" to={`/admin/events/${event.id}`}>← Zpět na akci</Link><header className="event-page-heading"><div><p className="eyebrow">Akce · Registrace</p><h1>{event.title}</h1><p className="lead">{event.acceptedTeams} / {event.teamCapacity} týmů · {event.acceptedPeople} / {event.peopleCapacity} osob</p></div><span className={`quiz-status status-${event.registrationStatus}`}>{event.registrationStatus}</span></header>
     {error && <p className="round-editor-error" role="alert">{error}</p>}{notice && <p className="event-notice" role="status">{notice}</p>}
     <RegistrationSharePanel event={event} />

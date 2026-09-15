@@ -11,6 +11,7 @@ import { ResultsTable } from '../leaderboard/ResultsTable';
 import { FinalRevealView } from './FinalRevealView';
 import { Fanfare, type FanfareStatus } from './fanfare';
 import type { FinalResponse } from './types';
+import { watchRoster } from '../scoring/api';
 
 type Action = 'start' | 'replace' | 'reveal' | 'hide' | 'resume' | 'page' | 'table';
 interface SavedVersion { versionId: string; rows: ResultRow[]; sourceFingerprint: string }
@@ -50,7 +51,7 @@ export function FinalRevealPanel({ session, ending = false }: { session: LiveCon
       }, 80);
     };
     // Private reads detect changed inputs without replacing the confirmed version.
-    const unsubs = ['scores', 'registrations'].map(name => onSnapshot(collection(db, 'events', session.eventId!, name), check, () => { if (valid) setChanged(null); }));
+    const unsubs = [onSnapshot(collection(db, 'events', session.eventId!, 'scores'), check, () => { if (valid) setChanged(null); }), watchRoster(session.eventId!, check, () => { if (valid) setChanged(null); })];
     check();
     return () => { valid = false; generation++; clearTimeout(timer); unsubs.forEach(unsub => unsub()); };
   }, [session.eventId, session.sessionId, state?.versionId, ended]);

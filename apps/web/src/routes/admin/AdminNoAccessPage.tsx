@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
 import { AdminLoading } from './AdminLoading';
@@ -39,6 +39,7 @@ export function AdminNoAccessPage() {
       <button className="secondary-button" type="button" onClick={() => void handleSignOut()} disabled={pending}>
         {pending ? 'Odhlašuji…' : 'Odhlásit'}
       </button>
+      <Link className="primary-button" to="/account">Nastavit osobní účet</Link>
     </section>
   );
 }

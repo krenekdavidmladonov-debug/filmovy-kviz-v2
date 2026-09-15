@@ -125,6 +125,7 @@ function selectionForSlide(slideId: string | undefined, model: SemanticQuizModel
 }
 
 function safeErrorMessage(error: unknown): string {
+  if ((error as { code?: string })?.code === 'functions/permission-denied') return 'K tomuto kvízu nebo požadované úpravě nemáte oprávnění. Kontaktujte správce přístupu.';
   if (error instanceof Error && (error.message === staleEditorMessage || /aborted|revision|newer|stale/iu.test(error.message))) {
     return 'Kvíz mezitím upravil někdo jiný. Načtěte aktuální verzi a změnu proveďte znovu.';
   }
@@ -136,8 +137,8 @@ const initialAppearance = { backgroundImage: '', backgroundOverlay: 0, imageLayo
 export function QuizEditorPage() {
   const { quizId } = useParams<{ quizId: string }>();
   const [searchParams] = useSearchParams();
-  const { role } = useAuth();
-  const readOnly = role !== 'admin';
+  const { can } = useAuth();
+  const readOnly = !can('quiz.edit');
   const [quiz, setQuiz] = useState<EditorQuiz | null>(null);
   const [practicing, setPracticing] = useState(false);
   const [selectedKey, setSelectedKey] = useState('quiz');
@@ -313,7 +314,7 @@ export function QuizEditorPage() {
     const savedDraft = draft !== null && saveAs !== undefined ? { ...draft, authoringStatus: saveAs } : draft;
     if (quiz === null || readOnly || semantic === null || uploadPending.current) return null;
     const persistedDraft = savedDraft === null ? undefined : quiz.slides.find((slide) => slide.id === savedDraft.id);
-    if (savedDraft?.isQuestion && savedDraft.authoringStatus !== 'draft' && hasSaveBlockingIssues(savedDraft, persistedDraft)) {
+    if (savedDraft?.isQuestion && savedDraft.authoringStatus !== 'draft' && hasSaveBlockingIssues(savedDraft, persistedDraft, !can('quiz.answers.read'))) {
 
       setShowReadiness(true);
       setTouched(new Set(['prompt', 'options', 'correctAnswer', 'questionImage', 'mediaSource', 'clipStartSeconds', 'clipEndSeconds']));
@@ -362,7 +363,7 @@ export function QuizEditorPage() {
     } finally {
       setSaving(false);
     }
-  }, [appearance, description, dirtyQuiz, dirtyRound, dirtySlide, draft, pendingCreate, quiz, readOnly, reload, roundTitle, selectedKey, semantic, title]);
+  }, [appearance, description, dirtyQuiz, dirtyRound, dirtySlide, draft, pendingCreate, quiz, readOnly, reload, roundTitle, selectedKey, semantic, title, can]);
 
   useEffect(() => {
     const keyboardSave = (event: KeyboardEvent) => {
@@ -454,10 +455,10 @@ export function QuizEditorPage() {
     : previewBase;
   const saveLabel = uploading ? 'Nejdřív dokončete nahrávání média.' : editorSaveLabels[editorSaveStatus(dirty, saving, saveFailed)];
   const structuralDisabled = readOnly || saving || dirty || uploading;
-  const navigationAsDraft = draft?.isQuestion === true && (draft.authoringStatus === 'draft' || hasSaveBlockingIssues(draft, quiz.slides.find(slide => slide.id === draft.id)));
+  const navigationAsDraft = draft?.isQuestion === true && (draft.authoringStatus === 'draft' || hasSaveBlockingIssues(draft, quiz.slides.find(slide => slide.id === draft.id), !can('quiz.answers.read')));
 
   return (
-    <MediaAuthoringContext.Provider value={{ quizId: quiz.id, onPending: onUploadPending }}><article className="round-first-editor">
+    <MediaAuthoringContext.Provider value={{ quizId: quiz.id, onPending: onUploadPending, canUpload: can('quiz.media.upload'), canAttach: can('quiz.media.attach') }}><article className="round-first-editor">
       {(pendingSelection !== null || blocker.state === 'blocked') && (
         <UnsavedChangesDialog
           saveLabel={navigationAsDraft ? "Uložit koncept a pokračovat" : "Uložit a pokračovat"}
@@ -498,7 +499,7 @@ export function QuizEditorPage() {
           <strong>{title || quiz.title}</strong>
         </div>
         <div className="round-editor-save">
-          {readOnly && <span className="read-only-badge">Pouze pro čtení — moderátor</span>}
+          {readOnly && <span className="read-only-badge">Pouze pro čtení</span>}
           <span className={`save-state ${dirty ? 'dirty' : ''} ${saveFailed ? 'failed' : ''}`} role="status" aria-live="polite">{saveLabel}</span>
           <button type="button" className="secondary-button preflight-header-button" onClick={() => setPreflightOpen((value) => !value)}>Zkontrolovat kvíz</button><button type="button" className="secondary-button practice-button" disabled={dirty || saving || uploading || (preflightResult?.blockerCount ?? 1) > 0} onClick={() => setPracticing(true)}>Soukromá zkouška</button>
           <button type="button" className="primary-button" disabled={readOnly || saving || uploading || !dirty} onClick={() => void saveAll()}>Uložit</button>
@@ -573,13 +574,13 @@ export function QuizEditorPage() {
                 <button type="button" className="secondary-button" disabled={structuralDisabled || selectedRound.position === 1} onClick={() => void mutate((current) => moveQuizRound(current.id, current.revision, selectedRound.id, -1), `round:${selectedRound.id}`)}>Přesunout nahoru</button>
                 <button type="button" className="secondary-button" disabled={structuralDisabled || selectedRound.position === semantic.rounds.length} onClick={() => void mutate((current) => moveQuizRound(current.id, current.revision, selectedRound.id, 1), `round:${selectedRound.id}`)}>Přesunout dolů</button>
                 <button type="button" className="secondary-button" disabled={structuralDisabled} onClick={() => void mutate((current) => duplicateQuizRound(current.id, current.revision, selectedRound.id))}>Duplikovat včetně otázek</button>
-                <button type="button" className="danger-button" disabled={structuralDisabled} onClick={() => setRemoveRound(selectedRound)}>Odstranit kolo…</button>
+                <button type="button" className="danger-button" disabled={structuralDisabled || !can('quiz.delete')} onClick={() => setRemoveRound(selectedRound)}>Odstranit kolo…</button>
               </div> : <p className="field-help">Toto je bezpečný přehled starších otázek bez přiřazeného kola. Otázky můžete jednotlivě přesunout.</p>}
             </>
           )}
           {draft?.isQuestion && (selectedKey === 'draft' || selectedKey === `slide:${draft.id}`) && (
             <>
-              <QuestionForm key={draft.id} defaultAppearance={quiz.defaultAppearance ?? initialAppearance} onUploadPending={onUploadPending} quizId={quiz.id} slide={draft} number={questionNumber} disabled={readOnly || saving || uploading} showAllIssues={showReadiness} touched={touched}
+              <QuestionForm answersReadable={can('quiz.answers.read')} answersEditable={can('quiz.answers.edit')} notesReadable={can('quiz.notes.read')} notesEditable={can('quiz.notes.edit')} key={draft.id} defaultAppearance={quiz.defaultAppearance ?? initialAppearance} onUploadPending={onUploadPending} quizId={quiz.id} slide={draft} number={questionNumber} disabled={readOnly || saving || uploading} showAllIssues={showReadiness} touched={touched}
                 onTouch={(field) => setTouched((current) => new Set(current).add(field))}
                 onChange={(value) => { setDraft(value); setDirtySlide(true); setSaveFailed(false); }} />
               <div className="question-save-actions">
@@ -601,7 +602,7 @@ export function QuizEditorPage() {
                       </select>
                     </label>
                   )}
-                  <button type="button" className="danger-button" disabled={structuralDisabled || quiz.slideCount <= 1} onClick={() => {
+                  <button type="button" className="danger-button" disabled={structuralDisabled || !can('quiz.delete') || quiz.slideCount <= 1} onClick={() => {
                     if (window.confirm('Opravdu odstranit tuto otázku?')) void mutate((current) => deleteQuizSlide(current.id, current.revision, draft.id));
                   }}>Odstranit otázku</button>
                 </div>
@@ -622,7 +623,7 @@ export function QuizEditorPage() {
             <p>Nejdřív přidejte kolo a otázku. Prázdný rozpracovaný kvíz zůstává bezpečně uložený.</p>
           </aside>
         ) : (
-          <EditorPreview slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer} onShowAnswer={setShowAnswer} />
+          <EditorPreview slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer && can('quiz.answers.read')} onShowAnswer={value => { if (can('quiz.answers.read')) setShowAnswer(value); }} />
         )}
       </section>
     </article></MediaAuthoringContext.Provider>

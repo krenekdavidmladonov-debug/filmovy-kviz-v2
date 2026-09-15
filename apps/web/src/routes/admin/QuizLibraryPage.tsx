@@ -9,7 +9,7 @@ import { listQuizzes } from '../../features/quizzes/quizRepository';
 import type { QuizSummary } from '../../features/quizzes/types';
 
 export function QuizLibraryPage() {
-  const { role } = useAuth();
+  const { can } = useAuth();
   const [quizzes, setQuizzes] = useState<readonly QuizSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export function QuizLibraryPage() {
           <p className="lead">Připravené, rozpracované a archivované kvízy na jednom místě.</p>
         </div>
         <div className="quiz-library-actions">
-          {role === 'admin' && <Link className="primary-button" to="/admin/quizzes/new">+ Nový kvíz</Link>}
+          {can('quiz.create') && <Link className="primary-button" to="/admin/quizzes/new">+ Nový kvíz</Link>}
           <p className="section-count" aria-label="Souhrn knihovny">
             {quizzes.length} {quizzes.length === 1 ? 'kvíz' : quizzes.length < 5 ? 'kvízy' : 'kvízů'}
           </p>
@@ -62,7 +62,7 @@ export function QuizLibraryPage() {
             <p>Jakmile bude kvíz vytvořený, objeví se v této knihovně.</p>
           </div>
           <div className="quiz-empty-actions">
-            {role === 'admin' && <Link className="primary-button" to="/admin/quizzes/new">+ Nový kvíz</Link>}
+            {can('quiz.create') && <Link className="primary-button" to="/admin/quizzes/new">+ Nový kvíz</Link>}
             <button className="secondary-button" type="button" onClick={() => void loadQuizzes()}>Načíst znovu</button>
           </div>
         </div>

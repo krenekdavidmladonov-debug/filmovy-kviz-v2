@@ -1,4 +1,5 @@
-import { useEffect, useReducer, useRef, type ComponentProps } from 'react';
+import { useContext, useEffect, useReducer, useRef, type ComponentProps } from 'react';
+import { SnapshotMediaContext } from '../media/SnapshotMediaContext';
 import { parseQuizAsset, directMediaKind } from '@filmovy-kviz/quiz-domain';
 import { YouTubePlayer } from './YouTubePlayer';
 import { initialMediaMachineState, reduceMediaMachine } from './mediaStateMachine';
@@ -9,6 +10,7 @@ export function MediaPlayer(props: PlayerProps) {
   return parseQuizAsset(props.source) || directMediaKind(props.source) ? <NativeMediaPlayer {...props} /> : <YouTubePlayer {...props} />;
 }
 function NativeMediaPlayer({ source, command, generation, startSeconds, endSeconds, className, onFinished, onError, onPlaybackState, currentTimeRequest, onCurrentTime, sessionId }: PlayerProps) {
+  const snapshotId = useContext(SnapshotMediaContext);
   const host = useRef<HTMLDivElement>(null), audio = useRef<HTMLMediaElement | null>(null);
   const callbacks = useRef({ onFinished, onError, onPlaybackState, onCurrentTime });
   const [machine, dispatch] = useReducer(reduceMediaMachine, initialMediaMachineState);
@@ -25,7 +27,7 @@ function NativeMediaPlayer({ source, command, generation, startSeconds, endSecon
     const finish = () => { if (!active || finished) return; finished = true; player?.pause(); if (player) player.controls = false; dispatch({ type: 'finished', generation }); callbacks.current.onFinished?.(generation); };
     dispatch({ type: command === 'play' || command === 'replay' ? 'play' : 'reset', generation });
     if (command === 'error') { fail(); return () => { active = false; abort.abort(); }; }
-    const load = parseQuizAsset(source) ? readQuizMediaBlob(source, abort.signal, sessionId) : Promise.resolve(null);
+    const load = parseQuizAsset(source) ? readQuizMediaBlob(source, abort.signal, sessionId, snapshotId) : Promise.resolve(null);
     const timeout = window.setTimeout(() => { fail(); abort.abort(); }, 15000);
     void load.then(blob => {
       if (!active || finished || abort.signal.aborted || !host.current) return;
@@ -51,6 +53,6 @@ function NativeMediaPlayer({ source, command, generation, startSeconds, endSecon
       if (player) { player.pause(); player.removeAttribute('src'); player.load(); player.remove(); if (audio.current === player) audio.current = null; }
       if (objectUrl) URL.revokeObjectURL(objectUrl); if (counted) debug(-1);
     };
-  }, [source, command, generation, startSeconds, endSeconds, sessionId]);
+  }, [source, command, generation, startSeconds, endSeconds, sessionId, snapshotId]);
   return <div className={className ?? 'youtube-player-shell'} data-media-lifecycle={machine.lifecycle} data-owned-audio={Boolean(parseQuizAsset(source))}><div ref={host} />{machine.lifecycle === 'ERROR' && <p role="status">Médium není dostupné nebo časování přesahuje délku souboru. Použijte Pustit znovu.</p>}</div>;
 }

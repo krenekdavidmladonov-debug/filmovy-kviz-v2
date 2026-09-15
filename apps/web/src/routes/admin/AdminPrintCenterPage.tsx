@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
-import { getEvent, listEventRegistrations } from '../../features/events/eventRepository';
+import { getEvent } from '../../features/events/eventRepository';
+import { privateRead, type PrivateDocument } from '../../features/access/api';
 import type { EventRecord, RegistrationRecord } from '../../features/events/types';
 import { generatePrintArtifact } from '../../features/print/printApi';
 import type { PrintArtifactType, PrintOptions, TeamSheetMode } from '../../features/print/types';
@@ -27,10 +28,10 @@ function optionsFor(type: PrintArtifactType, mode: TeamSheetMode, teamId: string
 
 export function AdminPrintCenterPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const { role } = useAuth();
+  const { can } = useAuth();
   const previewFrame = useRef<HTMLIFrameElement>(null);
   const [event, setEvent] = useState<EventRecord | null>(null);
-  const [registrations, setRegistrations] = useState<readonly RegistrationRecord[]>([]);
+  const [registrations, setRegistrations] = useState<readonly Pick<RegistrationRecord, 'id' | 'teamName'>[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [artifactType, setArtifactType] = useState<PrintArtifactType>('team-sheets');
@@ -45,10 +46,11 @@ export function AdminPrintCenterPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [nextEvent, nextRegistrations] = await Promise.all([getEvent(eventId), listEventRegistrations(eventId)]);
+      const [nextEvent, roster] = await Promise.all([getEvent(eventId), privateRead<PrivateDocument[]>('roster', { eventId })]);
+      const nextRegistrations = roster.filter(item => item.data.status === 'accepted').map(item => ({ id: item.id, teamName: typeof item.data.teamName === 'string' ? item.data.teamName : '' }));
       setEvent(nextEvent);
-      setRegistrations(nextRegistrations.filter((item) => item.status === 'accepted'));
-      setTeamId((current) => current || nextRegistrations.find((item) => item.status === 'accepted')?.id || '');
+      setRegistrations(nextRegistrations);
+      setTeamId((current) => current || nextRegistrations[0]?.id || '');
     }
     catch { setLoadError('Tiskové centrum se nepodařilo načíst.'); }
     finally { setLoading(false); }
@@ -101,7 +103,7 @@ export function AdminPrintCenterPage() {
       ) : <>
         <section className="print-artifact-grid" aria-label="Typ dokumentu">
           {ARTIFACTS.map((artifact) => {
-            const restricted = artifact.type === 'answer-key' && role !== 'admin';
+            const restricted = !can('event.export') || (artifact.type === 'answer-key' && (!can('event.answers.read') || !can('event.answers.export')));
             return <button key={artifact.type} type="button" className={`print-artifact-card${artifactType === artifact.type ? ' is-selected' : ''}`} disabled={restricted} aria-pressed={artifactType === artifact.type} onClick={() => { setArtifactType(artifact.type); clearPreview(); }}><strong>{artifact.title}</strong><span>{artifact.description}</span>{restricted && <small>Pouze administrátor</small>}</button>;
           })}
         </section>

@@ -4,6 +4,7 @@ import { FirebaseError } from 'firebase/app';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
+import { SnapshotMediaContext } from '../../features/media/SnapshotMediaContext';
 import {
   endLiveSession,
   nextSlide,
@@ -213,7 +214,7 @@ export function LiveControlPage() {
   }
 
   return (
-    <>
+    <SnapshotMediaContext.Provider value={session.snapshotId}>
     {session.eventId && session.snapshotId && <InterimResultsPanel key={session.sessionId} session={session} />}
     {session.eventId && session.snapshotId && <FinalRevealPanel key={session.sessionId} session={session} ending={pendingAction === 'end'} />}
     <LiveModeratorView
@@ -238,6 +239,6 @@ export function LiveControlPage() {
       onMediaError={(generation) => void reportPlayback(generation, 'error')}
       onMediaPlayback={(generation, playbackState) => void reportPlayback(generation, playbackState)}
     />
-    </>
+    </SnapshotMediaContext.Provider>
   );
 }

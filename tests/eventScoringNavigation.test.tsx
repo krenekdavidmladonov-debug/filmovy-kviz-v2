@@ -5,6 +5,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AdminEventScoringPage } from '../apps/web/src/routes/admin/AdminEventScoringPage';
 
+vi.mock('../apps/web/src/auth/AuthProvider', () => ({ useAuth: () => ({ can: (permission: string) => permission === 'event.score' }) }));
+
 vi.mock('../apps/web/src/features/scoring/api', () => ({
   loadRounds: vi.fn().mockResolvedValue([{ id: 'r1', title: 'První' }, { id: 'r2', title: 'Druhé' }]),
   watchScoringEvent: (_id: string, receive: (snapshot: string, allowed: boolean) => void) => { receive('s', true); return () => undefined; },
