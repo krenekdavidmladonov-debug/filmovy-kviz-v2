@@ -1,6 +1,8 @@
 import { getFirestore, Timestamp, type DocumentSnapshot, type Query, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { mapEditorQuiz, mapEditorSlide, quizAssetReference, type Membership } from '@filmovy-kviz/quiz-domain';
+import { mapEditorQuiz, quizAssetReference, type Membership } from '@filmovy-kviz/quiz-domain';
+import { slideView } from './slide-view.js';
+export { slideView } from './slide-view.js';
 import { authorize, freshIdentity, type AuthIdentity, type Resource } from './authorization.js';
 
 const db = () => getFirestore();
@@ -29,20 +31,6 @@ function eventView(data: Record<string, unknown>) {
   return { ...pick(data, eventFields), venue: pick((data.venue ?? {}) as Record<string, unknown>, ['name', 'publicLocation']),
     scoring: pick((data.scoring ?? {}) as Record<string, unknown>, ['unitScale', 'rankingMode', 'started']),
     quizAssignment: data.quizAssignment ? pick(data.quizAssignment as Record<string, unknown>, ['quizId', 'quizRevision', 'snapshotId', 'quizTitle', 'roundCount', 'questionCount', 'lockedAt']) : null };
-}
-export function slideView(slideId: string, data: Record<string, unknown>, answers: boolean, notes: boolean) {
-  // Shared mapper is an allowlist; no legacy/raw extension can enter the response.
-  const safeData = { ...data };
-  // Legacy objects in nominal text fields must never serialize hidden nested metadata.
-  for (const key of ['title', 'text']) if (typeof safeData[key] !== 'string') safeData[key] = '';
-  // A legacy array is not a playable source and must not stringify nested private metadata.
-  if (Array.isArray(safeData.mediaSource)) safeData.mediaSource = '';
-  if (Array.isArray(safeData.options)) safeData.options = safeData.options.map((value: unknown) => typeof value === 'string' ? value : '');
-  const slide = mapEditorSlide(slideId, safeData);
-  return { ...slide, correctAnswer: answers ? slide.correctAnswer : '', answerImage: answers ? slide.answerImage : '',
-    answerExplanation: answers ? slide.answerExplanation : '', moderatorNote: notes ? slide.moderatorNote : '',
-    media: slide.media.filter(m => (m.role === 'prompt' || m.role === 'background' || (answers && m.role === 'answer'))),
-    presentation: { ...slide.presentation, answerOverlay: answers ? slide.presentation.answerOverlay : null } };
 }
 async function scopedList(tx: Transaction, kind: 'quiz' | 'event', member: Membership) {
   const scope = kind === 'quiz' ? member.quizzes : member.events;

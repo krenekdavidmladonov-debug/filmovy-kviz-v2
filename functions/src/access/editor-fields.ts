@@ -2,6 +2,8 @@ import { mapEditorSlide } from '@filmovy-kviz/quiz-domain';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { EditorSlideInput } from '../editor/types.js';
 import { currentMembership } from './authorization.js';
+import { isQuestionKind } from '../editor/model.js';
+import { slideView } from './slide-view.js';
 
 const answerKeys = ['correctAnswer', 'answerImage', 'answerExplanation', 'answerMode'] as const;
 const mediaKeys = ['backgroundImage', 'questionImage', 'mediaSource'] as const;
@@ -21,7 +23,11 @@ export function protectPrivateMedia(slides: readonly { data: Record<string, unkn
 export function protectSlideFields(current: Record<string, unknown> | undefined, input: EditorSlideInput): EditorSlideInput {
   const member = currentMembership(), allowed = member.permissions;
   const previous = current ? mapEditorSlide('current', current) : undefined;
+  const visible = current ? slideView('current', current, allowed.includes('quiz.answers.read'), allowed.includes('quiz.notes.read')) : undefined;
   if (!allowed.includes('quiz.answers.edit')) {
+    // Options and question kind affect the meaning/validation of a hidden answer.
+    if (previous && (previous.isQuestion || isQuestionKind(previous.kind) || isQuestionKind(input.kind))
+      && (!equal(input.options, visible?.options) || input.kind !== previous.kind)) deny();
     for (const key of answerKeys) {
       // answerMode describes the editable presentation; its value is not an answer secret.
       const visible = key === 'answerMode' || allowed.includes('quiz.answers.read');
@@ -33,7 +39,7 @@ export function protectSlideFields(current: Record<string, unknown> | undefined,
   }
   if (!allowed.includes('quiz.notes.edit') && !equal(input.moderatorNote, allowed.includes('quiz.notes.read') ? previous?.moderatorNote : '')) deny();
   if (!allowed.includes('quiz.media.attach')) {
-    for (const key of mediaKeys) if (!equal(input[key], previous?.[key])) deny();
+    for (const key of mediaKeys) if (!equal(input[key], visible?.[key])) deny();
     const visibleMedia = (previous?.media ?? []).filter(m => m.role === 'prompt' || m.role === 'background' || (allowed.includes('quiz.answers.read') && m.role === 'answer'));
     if (!equal(input.media, visibleMedia)) deny();
     if (allowed.includes('quiz.answers.read') && !equal(input.answerImage, previous?.answerImage)) deny();

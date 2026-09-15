@@ -197,8 +197,9 @@ function ChoiceFields(props: QuestionFormFieldProps) {
     onChange({ ...slide, options, ...(selectedIndex === index ? { correctAnswer: '' } : {}) });
   };
   return (
-    <fieldset className="editor-fieldset choice-editor" data-preflight-field="options" disabled={disabled} onBlur={() => touch('options')}>
+    <fieldset className="editor-fieldset choice-editor" data-preflight-field="options" disabled={disabled || props.answersEditable === false} onBlur={() => touch('options')}>
       <legend>Odpovědi</legend>
+      {props.answersEditable === false && <p>Úprava možností a jejich pořadí vyžaduje oprávnění Upravovat odpovědi.</p>}
       {slide.options.map((option, index) => (
         <div className="choice-row" key={index}>
           {props.answersReadable !== false && <input type="radio" disabled={props.answersEditable === false} data-preflight-field={index === 0 ? 'correctAnswer' : undefined} name={`correct-${slide.id}`} aria-label={`Označit možnost ${String.fromCharCode(65 + index)} jako správnou`} checked={selectedIndex === index} onChange={() => onChange({ ...slide, correctAnswer: option })} />}
@@ -388,7 +389,7 @@ export function QuestionForm({
       {type === 'legacy-pl' && <div className="legacy-notice"><strong>Starší typ Pravda / Lež</strong><p>Typ je uzamčený, ale obsah a odpověď můžete upravit bez ztráty původních dat.</p></div>}
       {type === 'legacy' && <div className="legacy-notice"><strong>Obsah obsahuje starší nastavení.</strong><p>Neznámé části zůstanou při uložení beze změny.</p></div>}
       {!type.startsWith('legacy') && <div className="question-settings">
-        <label className="form-field">Způsob zadání<select disabled={disabled} value={['image','audio','video'].includes(type) ? type : 'text'} onChange={event => {
+        <label className="form-field">Způsob zadání<select disabled={disabled || !answersEditable} value={['image','audio','video'].includes(type) ? type : 'text'} onChange={event => {
           const next = event.target.value as 'text' | 'image' | 'audio' | 'video';
           if (next !== type && (slide.questionImage || slide.mediaSource) && !window.confirm('Změna zadání odpojí nynější médium otázky a časování. Soubor zůstane v knihovně, odpověď, poznámka a pozadí se zachovají. Pokračovat?')) return;
           onChange({ ...slide, kind: next, questionImage: '', mediaSource: '', clipStartSeconds: null, clipEndSeconds: null, answerMode: choices ? 'choice' : 'open' });

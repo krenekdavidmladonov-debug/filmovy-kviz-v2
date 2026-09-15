@@ -72,3 +72,49 @@ test('five isolated identities: UI invitation, verified signup, scoped editor, m
     throw error;
   } finally { await Promise.allSettled(contexts.map(c => c.close())); await f.dispose(); }
 });
+
+test('one SPA clears private live cache and queued commands before signing in another identity', async ({ page }) => {
+  const f = await browserFixture();
+  let releaseRequest = () => {}, queuedRequests = 0;
+  const navigate = path => page.evaluate(path => { window.history.pushState({}, '', path); window.dispatchEvent(new window.PopStateEvent('popstate')); }, path);
+  try {
+    const eventRevision = (await f.db.doc(`events/${f.eventA.eventId}`).get()).get('revision');
+    const { sessionId } = await f.owner.call('createEventLiveSession', { eventId: f.eventA.eventId, expectedRevision: eventRevision });
+    await f.owner.call('nextSlide', { sessionId, expectedRevision: 0 });
+    const privateTitle = 'PRIVATE_SESSION_A_CACHE_SENTINEL';
+    await f.db.doc(`sessions/${sessionId}`).update({ quizTitle: privateTitle });
+    await f.db.doc(`memberships/${f.viewer.uid}`).update({ permissions: ['event.read', 'event.live'], quizzes: { mode: 'none', ids: [] }, events: { mode: 'selected', ids: [f.eventB.eventId] }, version: 2 });
+    await login(page, f.owner); await navigate(`/admin/live/${sessionId}`);
+    await expect(page.getByText(privateTitle, { exact: true }).first()).toBeVisible();
+    let held = false;
+    const gate = new Promise(resolve => { releaseRequest = resolve; });
+    await page.route('**/startIntro', async route => { if (route.request().method() !== 'POST') return route.continue(); held = true; await gate; await route.continue().catch(() => {}); });
+    page.on('request', request => { if (request.url().endsWith('/reportMediaPlayback')) queuedRequests++; });
+    await page.getByRole('button', { name: 'Spustit intro', exact: true }).click();
+    await expect.poll(() => held).toBe(true);
+    const mediaGeneration = (await f.db.doc(`sessions/${sessionId}`).get()).get('mediaGeneration');
+    await page.evaluate(async ({ sessionId, mediaGeneration }) => {
+      const channel = new window.BroadcastChannel(`filmovy-kviz-projector-${sessionId}`);
+      channel.postMessage({ type: 'playback-state', sessionId, mediaGeneration, playbackState: 'error' });
+      await new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+      channel.close();
+    }, { sessionId, mediaGeneration });
+    await expect(page.getByText('Médium se na projektoru nepřehrálo', { exact: true })).toBeVisible();
+    await navigate('/account'); await page.getByRole('button', { name: 'Odhlásit pouze toto zařízení', exact: true }).click();
+    await page.getByLabel('E-mail', { exact: true }).fill(f.viewer.email); await page.getByLabel('Heslo', { exact: true }).fill(f.viewer.password);
+    await page.locator('form').getByRole('button', { name: 'Přihlásit se', exact: true }).click();
+    await expect(page.getByLabel('Zobrazované jméno', { exact: true })).toHaveValue('viewer');
+    await page.evaluate(privateTitle => {
+      window.__privateSessionLeak = false;
+      window.__privateSessionObserver = new window.MutationObserver(() => { if (document.body.innerText.includes(privateTitle)) window.__privateSessionLeak = true; });
+      window.__privateSessionObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+    }, privateTitle);
+    const completed = page.waitForResponse(response => response.url().endsWith('/startIntro') && response.request().method() === 'POST');
+    releaseRequest(); await completed;
+    await navigate(`/admin/live/${sessionId}`);
+    await expect(page.getByRole('heading', { name: 'Moderování nebylo nalezeno' })).toBeVisible();
+    expect(await page.evaluate(() => window.__privateSessionLeak)).toBe(false);
+    expect(queuedRequests).toBe(0);
+    await page.evaluate(() => window.__privateSessionObserver.disconnect());
+  } finally { releaseRequest(); await page.close(); await f.dispose(); }
+});

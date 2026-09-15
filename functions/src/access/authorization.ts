@@ -59,7 +59,7 @@ function resourceId(value: unknown): string {
   return value;
 }
 const quizEdits = ['updateQuizMetadata', 'updateQuizSlide', 'createQuizSlide', 'duplicateQuizSlide', 'moveQuizSlide', 'updateQuizRound', 'reorderQuizQuestion', 'moveQuizQuestionToRound', 'duplicateQuizRound', 'moveQuizRound', 'createQuizRound'];
-const eventManagement = ['updateEvent', 'cancelEvent', 'archiveEvent', 'configureEventRegistration', 'adminCancelEventRegistration', 'adminAddEventTeam', 'adminUpdateEventTeam', 'listRefereeAccess', 'issueRefereeAccess', 'changeRefereeAccess'];
+const eventManagement = ['updateEvent', 'cancelEvent', 'archiveEvent', 'configureEventRegistration', 'adminCancelEventRegistration', 'adminAddEventTeam', 'adminUpdateEventTeam', 'listRefereeAccess'];
 const live = ['createLiveSession', 'endLiveSession', 'finishMedia', 'goToSlide', 'hideAnswer', 'nextSlide', 'playMedia', 'previousSlide', 'reportMediaPlayback', 'replayMedia', 'revealAnswer', 'selectRecapQuestion', 'startIntro', 'stopMedia'];
 const eventLive = ['createEventLiveSession', 'previewInterimResults', 'controlInterimResults', 'previewFinalResults', 'controlFinalReveal'];
 const email = ['previewEventTeamMessage', 'createEventTeamMessage', 'listEventTeamMessages', 'getEventTeamMessage'];
@@ -75,6 +75,8 @@ export async function authorizeOperation(name: string, request: CallableRequest,
   if (name === 'deleteQuizSlide' || name === 'removeQuizRound') return authorize(request.auth, ['quiz.edit', 'quiz.delete'], quiz(), tx);
   if (name === 'repairQuizPreflightIssue') return authorize(request.auth, data?.kind === 'choice-answer' ? ['quiz.edit', 'quiz.answers.edit'] : ['quiz.edit'], quiz(), tx);
   if (name === 'beginQuizMediaUpload' || name === 'finalizeQuizMediaUpload') return authorize(request.auth, ['quiz.media.upload'], quiz(), tx);
+  if (name === 'issueRefereeAccess' || name === 'changeRefereeAccess') return authorize(request.auth,
+    name === 'changeRefereeAccess' && data?.action === 'revoke' ? ['event.manage'] : ['event.manage', 'event.score'], event(), tx);
   if (eventManagement.includes(name)) return authorize(request.auth, name.startsWith('admin') ? ['event.manage', 'event.contacts'] : ['event.manage'], event(), tx);
   if (email.includes(name)) return authorize(request.auth, ['event.manage', 'event.contacts'], event(), tx);
   if (name === 'lockEventQuiz') {

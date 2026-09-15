@@ -29,6 +29,21 @@ Repeat the target/inventory/fingerprint checks immediately before any release; t
 
 The original four public registration callables and health handler have no behavior change. The six absent email Functions remain absent; team emails stay disabled. Source-level authorization for the four team-message APIs is still updated and tested so future activation cannot restore a legacy bypass.
 
+## Findings from the independent review
+
+The independent read-only review of `d8ea61548b300c48ecd0946a12963ed1ecdb7381` failed with two P1 and two P2 findings. Its existing successful CI run did not cover these missing cases.
+
+| Finding | Correction | Added evidence |
+| --- | --- | --- |
+| P1 referee capability bypass and stale issuer authority | Issue/rotate require management and scoring; bearer use rechecks issuer membership, scope and Auth; rotation transfers issuance | Denied issue/rotate, allowed revoke, permission/scope/status/Auth revocation, concurrent suspension, old/new rotated key |
+| P1 choice-validation answer oracle | Option/order and question-kind changes require answer edit permission before validation | Both correct/incorrect option-removal probes, reorder and kind probes deny uniformly with unchanged revision |
+| P2 redacted legacy save destroys data | Restore unchanged raw placeholders before final validation of the saved document | Real read/save with full and structure-only editors, draft and ready/open/choice slides |
+| P2 live cache and queued commands cross identities | Ignore cached private snapshots; clear state on failure and invalidate queue on cleanup | Server-only listener unit and two identities switching within one SPA with an intercepted pending command |
+
+The reviewer re-read the fixes and found these code paths closed. Final closure still requires the exact committed SHA and completed regression evidence in the PR. No online verification is implied by static review or emulator tests.
+
+The reviewer also independently confirmed the CLI's nine resource-local callable invoker IAM writes described in `PERSONAL_ACCESS.md`. This release must wait for their explicit narrow authorization.
+
 ## Evidence handling
 
 Local emulator/browser output and synthetic screenshots are ignored under `.local-data/users-access/`. Passwords and invitation tokens are generated only for isolated `.test` fixtures and are not included in reports, screenshots, traces or commits. Firebase emulator verification links remain in ignored emulator output; redact OOB codes before displaying log excerpts. CI runs the same local-only fixtures, with browser tracing/video/password screenshots disabled.

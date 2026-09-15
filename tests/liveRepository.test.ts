@@ -10,7 +10,7 @@ vi.mock('../apps/web/src/services/firebase/firestore', () => ({
   getFirebaseFirestore: () => ({ kind: 'mock-firestore' }),
 }));
 
-import { subscribePublicLiveState } from '../apps/web/src/features/live/liveRepository';
+import { subscribeLiveControl, subscribePublicLiveState } from '../apps/web/src/features/live/liveRepository';
 
 describe('public projector subscription safety', () => {
   afterEach(() => vi.clearAllMocks());
@@ -46,4 +46,20 @@ describe('public projector subscription safety', () => {
     }));
     expect(returned).toBe(unsubscribe);
   });
+});
+
+test('private live subscription never forwards another identity cache before server authorization', () => {
+  let emit: ((snapshot: unknown) => void) | undefined;
+  firestoreMocks.onSnapshot.mockImplementation((...args: unknown[]) => {
+    emit = args[2] as (snapshot: unknown) => void;
+    return vi.fn();
+  });
+  const onValue = vi.fn(), onError = vi.fn();
+  subscribeLiveControl('private-session-a', onValue, onError);
+  const readCachedData = vi.fn(() => ({ quizTitle: 'PRIVATE_SESSION_A' }));
+  emit?.({ id: 'private-session-a', metadata: { fromCache: true }, exists: () => true, data: readCachedData });
+  expect(readCachedData).not.toHaveBeenCalled();
+  expect(onValue).not.toHaveBeenCalled();
+  emit?.({ id: 'private-session-a', metadata: { fromCache: false }, exists: () => false });
+  expect(onValue).toHaveBeenCalledWith(null);
 });

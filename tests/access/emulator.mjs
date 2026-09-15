@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { randomBytes } from 'node:crypto';
 import { initializeApp as clientApp, deleteApp as deleteClient } from 'firebase/app';
-import { getAuth, connectAuthEmulator, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
 import { requireFullEmulatorEnvironment } from '../../tools/local-emulator-environment.mjs';
 import { permissions, rolePresets } from '../../packages/quiz-domain/lib/access.js';
@@ -105,6 +105,40 @@ try {
     await denied(() => exporter.call('lockEventQuiz', { quizId: quizA, eventId: eventA, expectedRevision: 1, expectedQuizRevision: 2, acknowledgeWarnings: true }));
     assert.deepEqual((await db.doc(`events/${eventA}`).get()).get('quizAssignment'), before);
   });
+  await test('redacted legacy placeholders survive real API saves by full and structure-only editors', async () => {
+    const ref = db.doc(`quizzes/${quizA}/slides/question`), original = (await ref.get()).data();
+    const legacyFields = { title: { opaque: 'RAW_PRIVATE_SENTINEL' }, text: { opaque: 'RAW_PRIVATE_SENTINEL' }, options: ['Visible option', { opaque: 'RAW_PRIVATE_SENTINEL' }], mediaSource: [{ opaque: 'RAW_PRIVATE_SENTINEL' }] };
+    try {
+      for (const state of [{ authoringStatus: 'draft', answerMode: 'open' }, { authoringStatus: 'ready', answerMode: 'open' }, { authoringStatus: 'ready', answerMode: 'choice' }]) {
+        const fields = { ...legacyFields, options: state.answerMode === 'open' ? [] : legacyFields.options };
+        await ref.update({ ...fields, ...state, kind: 'text', correctAnswer: 'Visible option' });
+        for (const [index, editor] of [creator, structure].entries()) {
+          const quiz = await editor.call('readAccessData', { operation: 'editor', quizId: quizA }), slide = quiz.slides.find(s => s.id === 'question');
+          assert.equal(JSON.stringify(slide).includes('RAW_PRIVATE_SENTINEL'), false);
+          await editor.call('updateQuizSlide', { quizId: quizA, slideId: 'question', expectedRevision: quiz.revision, slide: { ...payload(slide), backgroundOverlay: 0.2 + index / 10 } });
+          const saved = (await ref.get()).data();
+          for (const [key, value] of Object.entries(fields)) assert.deepEqual(saved[key], value);
+          assert.equal(saved.backgroundOverlay, 0.2 + index / 10);
+          assert.equal(saved.authoringStatus, state.authoringStatus);
+        }
+      }
+    } finally { await ref.set(original); }
+  });
+  await test('choice removal, reorder and kind probes cannot reveal or reinterpret hidden answers', async () => {
+    const ref = db.doc(`quizzes/${quizA}/slides/question`), original = (await ref.get()).data();
+    try {
+      await ref.update({ kind: 'text', answerMode: 'choice', authoringStatus: 'ready', options: ['Alpha', 'Beta', 'Gamma', 'Delta'], correctAnswer: 'Beta' });
+      const quiz = await structure.call('readAccessData', { operation: 'editor', quizId: quizA }), slide = quiz.slides.find(s => s.id === 'question');
+      for (const change of [{ options: ['Beta', 'Gamma', 'Delta'] }, { options: ['Alpha', 'Gamma', 'Delta'] }, { options: ['Beta', 'Alpha', 'Gamma', 'Delta'] }, { kind: 'pl' }]) {
+        await denied(() => structure.call('updateQuizSlide', { quizId: quizA, slideId: 'question', expectedRevision: quiz.revision, slide: { ...payload(slide), ...change } }));
+        assert.equal((await db.doc(`quizzes/${quizA}`).get()).get('revision'), quiz.revision);
+        assert.equal((await ref.get()).get('correctAnswer'), 'Beta');
+      }
+      const full = await creator.call('readAccessData', { operation: 'editor', quizId: quizA }), fullSlide = full.slides.find(s => s.id === 'question');
+      await creator.call('updateQuizSlide', { quizId: quizA, slideId: 'question', expectedRevision: full.revision, slide: { ...payload(fullSlide), options: ['Alpha', 'Beta', 'Delta'] } });
+      assert.equal((await db.doc(`quizzes/${quizA}`).get()).get('revision'), full.revision + 1);
+    } finally { await ref.set(original); }
+  });
   await test('referee scores only assigned event; viewer cannot score', async () => {
     const score = { eventId: eventA, snapshotId: eventA + '-snapshot', teamId: 'team', roundId: 'round', requestId: prefix, expectedRevision: 0, halfPoints: 4, reason: '' };
     await referee.call('saveEventScore', score);
@@ -115,6 +149,43 @@ try {
     const transport = await account('transport-only', { role: 'moderator', permissions: ['event.read', 'event.live'], quizzes: none(), events: selected([eventA]) });
     const sessionId = prefix + '-restricted-session'; await put(`sessions/${sessionId}`, { eventId: eventA, quizId: quizA });
     for (const name of ['revealAnswer', 'selectRecapQuestion']) await denied(() => transport.call(name, { sessionId, expectedRevision: 0, position: 2 }));
+  });
+  await test('referee bearer grants require current issuer score permission, scope and active identity', async () => {
+    const issuerGrant = { role: 'manager', permissions: ['event.read', 'event.manage', 'event.score'], quizzes: none(), events: selected([eventB]) };
+    const issuer = await account('referee-issuer', { ...issuerGrant, permissions: ['event.read', 'event.manage'] });
+    const holder = await account('anonymous-referee', null); await signOut(holder.identity);
+    const issue = { eventId: eventB, requestId: prefix + '-referee', label: 'Scoped referee', expiresAt: new Date(Date.now() + 86400000).toISOString() };
+    await denied(() => issuer.call('issueRefereeAccess', issue));
+    const initial = await owner.call('issueRefereeAccess', issue);
+    const rotate = { eventId: eventB, accessId: initial.accessId, expectedVersion: 1, action: 'rotate', expiresAt: issue.expiresAt };
+    await denied(() => issuer.call('changeRefereeAccess', rotate));
+    assert.equal((await db.doc(`events/${eventB}/refereeAccess/${initial.accessId}`).get()).get('version'), 1);
+    await issuer.call('changeRefereeAccess', { ...rotate, action: 'revoke' });
+    const memberRef = db.doc(`memberships/${issuer.uid}`); await memberRef.update({ permissions: issuerGrant.permissions, version: 2 });
+    const baseline = (await memberRef.get()).data(), issued = await issuer.call('issueRefereeAccess', { ...issue, requestId: prefix + '-issuer' });
+    const credential = { eventId: eventB, accessId: issued.accessId, key: issued.key };
+    const score = { eventId: eventB, snapshotId: eventB + '-snapshot', teamId: 'team', roundId: 'round', expectedRevision: 0, requestId: prefix + '-bearer-score', halfPoints: 4, reason: '' };
+    await holder.call('readRefereeEvent', credential);
+    const legacyGrantRef = db.doc(`events/${eventB}/refereeAccess/${issued.accessId}`), legacyGrant = (await legacyGrantRef.get()).data();
+    delete legacyGrant.issuedBy; await legacyGrantRef.set(legacyGrant);
+    await holder.call('readRefereeEvent', credential);
+    for (const patch of [{ permissions: ['event.read', 'event.manage'] }, { events: selected([eventA]) }, { status: 'suspended' }]) {
+      await memberRef.set({ ...baseline, ...patch });
+      await denied(() => holder.call('readRefereeEvent', credential));
+      await denied(() => holder.call('readRefereeHistory', { ...credential, teamId: 'team', roundId: 'round' }));
+      await denied(() => holder.call('saveRefereeScore', { credential, score }));
+      await memberRef.set(baseline);
+    }
+    await auth.updateUser(issuer.uid, { disabled: true }); await denied(() => holder.call('readRefereeEvent', credential)); await auth.updateUser(issuer.uid, { disabled: false });
+    await auth.updateUser(issuer.uid, { emailVerified: false }); await denied(() => holder.call('readRefereeEvent', credential)); await auth.updateUser(issuer.uid, { emailVerified: true });
+    const race = await Promise.allSettled([holder.call('saveRefereeScore', { credential, score }), owner.call('updateAccessMembership', { uid: issuer.uid, expectedVersion: 2, status: 'suspended', grant: issuerGrant })]);
+    assert.equal(race[1].status, 'fulfilled');
+    if (race[0].status === 'rejected') assert.equal(race[0].reason.code, 'functions/permission-denied');
+    await denied(() => holder.call('saveRefereeScore', { credential, score }));
+    const transferred = await owner.call('changeRefereeAccess', { ...rotate, accessId: issued.accessId });
+    await denied(() => holder.call('readRefereeEvent', credential));
+    await holder.call('readRefereeEvent', { ...credential, key: transferred.key });
+    assert.equal((await db.doc(`events/${eventB}/refereeAccess/${issued.accessId}`).get()).get('issuedBy'), owner.uid);
   });
   await test('self escalation and delegation outside manager scope are rejected', async () => {
     const own = await manager.call('getMyAccess');

@@ -10,7 +10,8 @@ type ValueHandler<T> = (value: T | null) => void;
 type ErrorHandler = (error: Error) => void;
 
 export function subscribeLiveControl(sessionId: string, onValue: ValueHandler<LiveControlState>, onError: ErrorHandler): Unsubscribe {
-  return onSnapshot(doc(getFirebaseFirestore(), 'sessions', sessionId), (snapshot) => {
+  return onSnapshot(doc(getFirebaseFirestore(), 'sessions', sessionId), { includeMetadataChanges: true }, (snapshot) => {
+    if (snapshot.metadata.fromCache) return;
     onValue(snapshot.exists() ? mapLiveControlState(snapshot.id, snapshot.data()) : null);
   }, onError);
 }

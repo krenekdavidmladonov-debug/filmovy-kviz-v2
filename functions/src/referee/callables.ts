@@ -1,4 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { getAuth } from 'firebase-admin/auth';
+import { scopeAllows, type Membership } from '@filmovy-kviz/quiz-domain';
 import { accessActor, authorize, freshIdentity, securedOnCall, runAccessTransaction } from '../access/authorization.js';
 import { getFirestore, Timestamp, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
@@ -39,7 +41,7 @@ export const issueRefereeAccess = securedOnCall('issueRefereeAccess', options, a
     if (old) { if (old.fingerprint !== fingerprint) throw new HttpsError('already-exists', 'Issuance request changed.'); return { ...metadata(accessId, old), key: null }; }
     const grants = await transaction.get(db().collection(`events/${eventId}/refereeAccess`));
     if (grants.size >= 50) throw new HttpsError('resource-exhausted', 'At most 50 named accesses per event. Reuse an existing access.');
-    const grant = { label: name, expiresAt, version: 1, revoked: false, keyHash: digest(secret), createdBy: uid, createdAt: Timestamp.now(), fingerprint };
+    const grant = { label: name, expiresAt, version: 1, revoked: false, keyHash: digest(secret), createdBy: uid, issuedBy: uid, createdAt: Timestamp.now(), fingerprint };
     transaction.create(ref, grant); return { ...metadata(accessId, grant), key: secret };
   });
 });
@@ -51,7 +53,7 @@ export const changeRefereeAccess = securedOnCall('changeRefereeAccess', options,
     await eventIn(transaction, eventId); const old = (await transaction.get(ref)).data();
     if (!old) throw new HttpsError('not-found', 'Access not found.');
     if (old.version !== expectedVersion) throw new HttpsError('aborted', 'Access changed. Reload the list.');
-    const next = { ...old, version: expectedVersion + 1, revoked: data.action === 'revoke', keyHash: data.action === 'rotate' ? digest(secret) : null, expiresAt: nextExpiry ?? (old.expiresAt as Timestamp), updatedBy: uid, updatedAt: Timestamp.now() };
+    const next = { ...old, version: expectedVersion + 1, revoked: data.action === 'revoke', keyHash: data.action === 'rotate' ? digest(secret) : null, expiresAt: nextExpiry ?? (old.expiresAt as Timestamp), ...(data.action === 'rotate' ? { issuedBy: uid } : {}), updatedBy: uid, updatedAt: Timestamp.now() };
     transaction.set(ref, next); return { ...metadata(accessId, next), key: data.action === 'rotate' ? secret : null };
   });
 });
@@ -73,6 +75,16 @@ async function accessIn(transaction: Transaction, c: RefereeCredential) {
   const supplied = Buffer.from(digest(c.key));
   if (!grant || grant.revoked || !(grant.expiresAt instanceof Timestamp) || grant.expiresAt.toMillis() <= Date.now() || typeof grant.keyHash !== 'string' || grant.keyHash.length !== supplied.length || !timingSafeEqual(Buffer.from(grant.keyHash), supplied)) throw deny();
   const event = await eventIn(transaction, c.eventId, true);
+  // Delegated bearer access cannot outlive the issuer's current ability to grant scoring.
+  // Legacy grants retain their original issuer; rotation explicitly transfers issuance.
+  const issuerUid: unknown = grant.issuedBy ?? grant.createdBy;
+  if (typeof issuerUid !== 'string' || !issuerUid || issuerUid.includes('/')) throw deny();
+  const issuer = (await transaction.get(db().doc(`memberships/${issuerUid}`))).data() as Membership | undefined;
+  if (!issuer || issuer.uid !== issuerUid || issuer.status !== 'active'
+    || !Array.isArray(issuer.permissions) || !issuer.permissions.includes('event.manage') || !issuer.permissions.includes('event.score')
+    || !scopeAllows(issuer.events, c.eventId, issuerUid, event.createdBy)) throw deny();
+  const identity = await getAuth().getUser(issuerUid).catch(() => null);
+  if (!identity || identity.disabled || !identity.emailVerified) throw deny();
   return { grant, event };
 }
 export const readRefereeEvent = onCall(options, async request => {
