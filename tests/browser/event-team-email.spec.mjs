@@ -24,15 +24,18 @@ test('organizer previews, explicitly confirms and follows team message delivery 
     expect((await eventRef.collection('emailCampaigns').get()).size).toBe(0);
     await panel.getByRole('checkbox').check();
     // Drop only the first response after the server committed: the retry must recover its receipt.
-    let lost = false;
+    let lost = false, messageRequest;
     await page.route('**/createEventTeamMessage', async route => {
-      if (!lost) { lost = true; await route.fetch(); await route.abort(); } else await route.continue();
+      if (!lost) { lost = true; messageRequest = route.request().postDataJSON().data; await route.fetch(); await route.abort(); } else await route.continue();
     });
     await panel.getByRole('button', { name: 'Odeslat týmům' }).click();
     await expect(panel.getByRole('button', { name: 'Ověřit stejný požadavek' })).toBeEnabled();
     await fixture.setAdminRole('moderator');
-    await panel.getByRole('button', { name: 'Ověřit stejný požadavek' }).click();
-    await expect(panel.getByRole('button', { name: 'Ověřit stejný požadavek' })).toBeEnabled();
+    // Current membership removes private UI and rejects even a committed receipt retry with the old token.
+    await expect(panel).toBeHidden();
+    expect(messageRequest?.eventId).toBe(eventId);
+    await expect(adminCall('createEventTeamMessage', messageRequest)).rejects.toMatchObject({ code: 'functions/permission-denied' });
+    expect((await eventRef.collection('emailCampaigns').get()).size).toBe(1);
     await fixture.setAdminRole('admin');
     await page.reload();
     await panel.getByRole('button', { name: 'Ověřit stejný požadavek' }).click();
