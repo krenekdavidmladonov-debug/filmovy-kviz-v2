@@ -13,7 +13,11 @@ import { mapEvent, mapPublicEvent, mapRegistration } from './eventMappers';
 import type { EventRecord, PublicEventRecord, RegistrationRecord } from './types';
 
 export async function listEvents(): Promise<readonly EventRecord[]> {
-  const result = await privateRead<PrivateDocument[]>('events');
+  const result: PrivateDocument[] = []; let afterId: string | null = null;
+  do {
+    const page: { items: PrivateDocument[]; nextCursor: string | null } = await privateRead('eventPage', afterId ? { afterId } : {});
+    result.push(...page.items); afterId = page.nextCursor;
+  } while (afterId);
   return result.map(item => mapEvent(item.id, item.data)).sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime());
 }
 

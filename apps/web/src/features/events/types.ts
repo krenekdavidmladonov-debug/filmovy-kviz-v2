@@ -17,6 +17,10 @@ export interface EventQuizAssignment {
 }
 
 export interface EventRecord {
+  readonly disposition?: 'active' | 'archived' | 'trash' | 'deleting';
+  readonly description?: string;
+  readonly liveSessionId?: string;
+  readonly cancellation?: { reason?: string; publicMessage?: string };
   readonly id: string;
   readonly title: string;
   readonly startsAt: Date;
@@ -39,6 +43,8 @@ export interface EventRecord {
 }
 
 export interface PublicEventRecord {
+  readonly cancelled?: boolean;
+  readonly cancellationMessage?: string;
   readonly id: string;
   readonly title: string;
   readonly startsAt: Date;
@@ -84,6 +90,8 @@ export interface RegistrationMutationResponse {
 }
 
 export interface EventFormValues {
+  readonly description?: string;
+  readonly utcOffset?: string;
   readonly title: string;
   readonly startsAt: string;
   readonly timeZone: string;

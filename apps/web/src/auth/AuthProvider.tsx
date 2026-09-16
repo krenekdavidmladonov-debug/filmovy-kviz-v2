@@ -1,3 +1,4 @@
+import { hasPermission } from '@filmovy-kviz/quiz-domain';
 import {
   createContext,
   Fragment,
@@ -122,7 +123,7 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     currentUser,
     role,
     membership: member,
-    can: permission => member?.status === 'active' && member.permissions.includes(permission) || false,
+    can: permission => member?.status === 'active' && hasPermission(member, permission) || false,
     loading,
     initializationError,
     async signIn(email: string, password: string) {

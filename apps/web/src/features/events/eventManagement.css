@@ -1,0 +1,12 @@
+.event-actions { position: relative; min-width: 10rem; }
+.event-actions summary { cursor: pointer; padding: .65rem .85rem; border: 1px solid var(--border); border-radius: .6rem; }
+.event-action-menu { padding: .65rem; display: grid; gap: .65rem; min-width: 16rem; }
+.event-action-menu button, .event-action-menu a { text-align: left; display: block; width: 100%; padding: .5rem; }
+.event-action-menu small { display: block; max-width: 24rem; padding-inline: .5rem; }
+.event-filters { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1.25rem 0; }
+.event-filters button[aria-pressed=true] { outline: 2px solid currentColor; outline-offset: 2px; }
+.event-management-dialog { width: min(40rem, 94vw); max-height: 88vh; overflow-y: auto; }
+.event-management-dialog textarea { min-height: 5rem; }
+.event-card-main { display: flex; flex: 1; gap: 1rem; justify-content: space-between; color: inherit; text-decoration: none; }
+.event-card:has(.event-actions) { align-items: flex-start; }
+@media(max-width: 760px) { .event-card-main, .event-card:has(.event-actions) { flex-direction: column; } }
