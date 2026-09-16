@@ -1,6 +1,6 @@
 # JustKvíz — etapa 1A: úklid úvodního rozhraní
 
-Stav etapy 1A k 16. 9. 2026: **LOKÁLNĚ IMPLEMENTOVÁNO A OVĚŘENO. NENASAZENO.** Následné review etapy 1B a omezení CI jsou zaznamenány na konci tohoto reportu.
+Stav etapy 1A k 16. 9. 2026: **LOKÁLNĚ IMPLEMENTOVÁNO A OVĚŘENO. NENASAZENO.** Následné review etapy 1B a cílená oprava CI v etapě 1C jsou zaznamenány na konci tohoto reportu.
 
 ## Výchozí stav
 
@@ -129,3 +129,21 @@ Přečteny workflow na pracovní, cílové i výchozí větvi, relevantní packa
 **CI: NEOVĚŘENO — pro tento PR se automaticky nespouští.** Hlavní workflow reaguje na push jen do main a na PR do vyjmenovaných větví, mezi kterými `codex/justkviz-event-management` chybí. Operátorské workflow nesplňuje path filtr tohoto diffu. Žádné z nich nemá workflow_dispatch. Starší zelené běhy nejsou výsledkem tohoto HEAD. Konečné SHA, odkaz na Draft PR a přesný stav vzdálených kontrol patří do popisu PR a závěrečného předání.
 
 Závěr: **připraveno pouze k dalšímu review**. Před samostatným rozhodnutím o staging nasazení chybí dostupné CI pro správnou base a přesný commit. Workflow ani cílová větev nebyly upraveny za účelem obejití této mezery. Etapa 1B povoluje pouze standardní push pracovní větve a Draft PR; merge, deploy, Firebase operace a kontakt s V1 nejsou součástí tohoto kroku.
+
+## Etapa 1C — cílené spuštění stávajícího CI
+
+Výchozí stav znovu ověřen: lokální i vzdálený HEAD `05b8d2a0901cabad06ce8494041ddaa47aee1854`, čistý worktree, Draft PR [#33](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/pull/33) s base `codex/justkviz-event-management` na `456f3eb62d5c52841afc3f055159711f279d11d3`. Ancestry souhlasí; base ani předchozí commity se nemění.
+
+Na výslovné zadání etapy 1C se do existujícího `.github/workflows/ci.yml`, `on.pull_request.branches`, přidává jediná přesná větev `codex/justkviz-event-management`. Všechny původní větve zůstávají. Žádné rozšíření wildcardem, nový trigger, změna oprávnění, verzí, příkazů, test discovery nebo checkout strategie. Výchozí `pull_request` události již zahrnují `synchronize`, proto běžný push do head větve stačí; nejsou přítomné path/types filtry ani podmínky vynechávající Draft PR. Viz [GitHub dokumentace pull_request](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request).
+
+YAML obou workflow byl úspěšně parsován. Po odebrání právě jedné přidané položky je načtená struktura hlavního workflow přesně shodná s původní: job `quality-gate` / „Quality gate“, všech 25 kroků, `contents: read`, push pouze do `main`, runtime verze i bezpečnostní guardy. Druhé workflow `owner-takeover.yml` zůstává beze změny; jeho paths zahrnují pouze konkrétní vlastní workflow a operátorské soubory, nikoli `ci.yml` ani ostatní soubory PR. Žádný navazující `workflow_run`, reusable workflow, deploy krok, cloudové credentials či aktivní Git/repository hook nebyl nalezen.
+
+Stávající Firebase testy používají pouze lokální emulátory a `demo-*` projekty. Syntetické regresní testy v adresáři `migration-v1` pracují s lokálními fixtures a emulátorem přes localhost/demo guard; nečtou V1 a nespouštějí cloudovou migraci. Stažení závislostí a emulátorových binárek je součástí povoleného CI.
+
+Cílené nezávislé read-only review samostatným agentem: **bez nálezů**. Reviewer ověřil YAML, přesný strukturální diff, ostatní triggery, lokální guardy i nezměněný aplikační a testovací kód; aktuální GitHub base ověřil hlavní agent. Review není náhradou výsledku skutečného CI ani finálním schválením PR.
+
+Proti výchozímu HEAD etapy 1C se mění pouze jeden řádek workflow a tento report. Aplikační kód, CSS, testy, závislosti, lockfile i ostatní konfigurace zůstávají shodné. Dosavadní PR diff se rozšiřuje ze šesti na sedm souborů. Lokální UI/build/unit výsledky etapy 1B se nevydávají za nové vzdálené CI.
+
+**Výsledek běhu se při tomto commitu nepředjímá.** Konečné HEAD, run URL/ID, událost, výsledky jednotlivých kroků a skutečný checkout SHA budou doplněny do popisu Draft PR a závěrečného předání, bez následného dokumentačního commitu. Případný dočasný merge checkout musí mít jako rodiče ověřenou base a přesný aktuální HEAD. Předchozí neověřené oblasti zůstávají platné, dokud konkrétní dokončený test nedoloží opak; cloudová aplikace a skutečná cloudová data jsou nadále mimo rozsah.
+
+Tato změna opravuje spouštění kontrol; nepovoluje merge ani nasazení. PR zůstává Draft, bez auto-merge, bez změny base, bez přístupu k Firebase cloudu a bez kontaktu s V1.
