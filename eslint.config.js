@@ -79,6 +79,12 @@ export default tseslint.config(
     },
   },
   {
+    // Firebase CLI guard must load synchronously through Node --require.
+    files: ['tools/event-management/deploy-guard.cjs'],
+    languageOptions: { sourceType: 'commonjs', globals: globals.node },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+  {
     files: ['tests/**/*.mjs'],
     languageOptions: {
       globals: globals.node,
