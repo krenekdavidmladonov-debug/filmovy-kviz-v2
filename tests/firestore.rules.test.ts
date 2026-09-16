@@ -234,8 +234,8 @@ describe('moderator', () => {
     await assertSucceeds(getDocs(collection(db, `${privateEventPath}/registrations`)));
     await assertFails(getDoc(doc(db, privateRegistrationNamePath)));
     await assertFails(setDoc(doc(db, privateRegistrationPath), { teamName: 'Bypass' }));
-    await assertSucceeds(getDoc(doc(db, privateSnapshotPath)));
-    await assertSucceeds(getDoc(doc(db, privateSnapshotSlidePath)));
+    await assertFails(getDoc(doc(db, privateSnapshotPath)));
+    await assertFails(getDoc(doc(db, privateSnapshotSlidePath)));
     await assertFails(setDoc(doc(db, privateEventPath), { title: 'Denied' }));
     await assertFails(setDoc(doc(db, privateSnapshotPath), { quizId: 'forged' }));
     await assertFails(getDoc(doc(db, privateEventChildPath)));
@@ -273,8 +273,8 @@ describe('admin', () => {
     await assertSucceeds(getDoc(doc(db, privateRegistrationPath)));
     await assertSucceeds(getDocs(collection(db, `${privateEventPath}/registrations`)));
     await assertFails(getDoc(doc(db, privateRegistrationNamePath)));
-    await assertSucceeds(getDoc(doc(db, privateSnapshotPath)));
-    await assertSucceeds(getDoc(doc(db, privateSnapshotSlidePath)));
+    await assertFails(getDoc(doc(db, privateSnapshotPath)));
+    await assertFails(getDoc(doc(db, privateSnapshotSlidePath)));
     await assertFails(setDoc(doc(db, privateEventPath), { title: 'Bypass' }));
     await assertFails(setDoc(doc(db, privateEventChildPath), { secret: false }));
     await assertFails(setDoc(doc(db, privateRegistrationPath), { contactEmail: 'forged@example.test' }));

@@ -1,3 +1,4 @@
+import { assertEventReadable } from '../events/guards.js';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -103,7 +104,7 @@ export const generatePrintArtifact = onRequest(
       const token = await getAuth().verifyIdToken(bearerToken(request.header('authorization')), true);
       const auth = { uid: token.uid, token };
       await freshIdentity(auth);
-      const assertAccess = () => authorize(auth, requestedOptions.artifactType === 'answer-key' ? ['event.export', 'event.answers.read', 'event.answers.export'] : ['event.export'], { kind: 'event', id: eventId });
+      const assertAccess = async () => { const member = await authorize(auth, requestedOptions.artifactType === 'answer-key' ? ['event.export', 'event.answers.read', 'event.answers.export'] : ['event.export'], { kind: 'event', id: eventId }); assertEventReadable((await getFirestore().doc(`events/${eventId}`).get()).data(), member); };
       await assertAccess();
       const options = await resolvePrintOptions(eventId, requestedOptions);
 

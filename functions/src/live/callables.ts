@@ -245,8 +245,9 @@ async function mutateSession(request: CallableRequest<unknown>, kind: MutationKi
     const publicRef = db.collection('publicSessions').doc(sessionId);
     return await runAccessTransaction(db, async (transaction) => {
       const session = parseSession(await transaction.get(sessionRef));
+      const boundEvent = session.eventId ? (await transaction.get(db.doc('events/' + session.eventId))).data() : undefined;
       if (session.eventId) {
-        const event = (await transaction.get(db.doc('events/' + session.eventId))).data();
+        const event = boundEvent;
         if (!event || event.liveSessionId !== sessionId || !isObject(event.quizAssignment) || event.quizAssignment.snapshotId !== session.snapshotId || !['ready', 'live', 'finalizing'].includes(event.lifecycleStatus as string)) throw new HttpsError('failed-precondition', 'Akce není dostupná.');
       }
       if (finishGeneration !== undefined && finishGeneration !== session.mediaGeneration) {
@@ -282,6 +283,12 @@ async function mutateSession(request: CallableRequest<unknown>, kind: MutationKi
       }
       const { interimResults, ...presentationSession } = session; void interimResults;
       const updated = applyLiveSessionAction(presentationSession, action, revision, actor.uid, Timestamp.now(), slide);
+      if (kind === 'end-session' && session.eventId && boundEvent && session.startedAt !== null) {
+        const related = await transaction.get(db.collection('sessions').where('eventId', '==', session.eventId));
+        if (related.docs.some(d => d.id !== sessionId && d.data().status !== 'ended')) throw new HttpsError('failed-precondition', 'Nejprve ukončete ostatní relace této akce.');
+        transaction.update(db.doc('events/' + session.eventId), { lifecycleStatus: 'completed', registrationPublished: false, registrationStatus: 'closed', revision: Number(boundEvent.revision) + 1, updatedAt: Timestamp.now(), updatedBy: actor.uid });
+        transaction.delete(db.doc('publicEvents/' + session.eventId));
+      }
       transaction.set(sessionRef, updated);
       transaction.set(publicRef, buildPublicSessionState(updated, slide));
       return response(updated);

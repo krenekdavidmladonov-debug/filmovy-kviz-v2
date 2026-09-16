@@ -1,4 +1,7 @@
-import { getFirestore, Timestamp, type DocumentSnapshot, type Query, type Transaction } from 'firebase-admin/firestore';
+import { eventDisposition, hasPermission } from '@filmovy-kviz/quiz-domain';
+import { assertEventReadable } from '../events/guards.js';
+import { deletionInventory } from '../events/deletion.js';
+import { FieldPath, getFirestore, Timestamp, type DocumentSnapshot, type Query, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { mapEditorQuiz, quizAssetReference, type Membership } from '@filmovy-kviz/quiz-domain';
 import { slideView } from './slide-view.js';
@@ -26,9 +29,9 @@ function stored(doc: DocumentSnapshot) {
 }
 const quizFields = ['title', 'description', 'status', 'revision', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'roundCount', 'questionCount', 'slideCount'];
 const roundFields = ['title', 'type', 'position', 'questionCount', 'slideCount'];
-const eventFields = ['title', 'startsAt', 'timeZone', 'teamCapacity', 'peopleCapacity', 'teamSizeMin', 'teamSizeMax', 'acceptedTeams', 'acceptedPeople', 'registrationPublished', 'registrationOpensAt', 'registrationClosesAt', 'registrationStatus', 'lifecycleStatus', 'revision', 'liveSessionId', 'createdBy'];
-function eventView(data: Record<string, unknown>) {
-  return { ...pick(data, eventFields), venue: pick((data.venue ?? {}) as Record<string, unknown>, ['name', 'publicLocation']),
+const eventFields = ['description', 'disposition', 'previousDisposition', 'trashedAt', 'archivedAt', 'title', 'startsAt', 'timeZone', 'teamCapacity', 'peopleCapacity', 'teamSizeMin', 'teamSizeMax', 'acceptedTeams', 'acceptedPeople', 'registrationPublished', 'registrationOpensAt', 'registrationClosesAt', 'registrationStatus', 'lifecycleStatus', 'revision', 'liveSessionId', 'createdBy'];
+function eventView(data: Record<string, unknown>, member: Membership) {
+  return { ...pick(data, eventFields), cancellation: data.cancellation ? pick(data.cancellation as Record<string, unknown>, ['at', 'by', 'publicMessage', ...(hasPermission(member, 'event.manage') || hasPermission(member, 'event.notes.read') ? ['reason'] : [])]) : null, venue: pick((data.venue ?? {}) as Record<string, unknown>, ['name', 'publicLocation']),
     scoring: pick((data.scoring ?? {}) as Record<string, unknown>, ['unitScale', 'rankingMode', 'started']),
     quizAssignment: data.quizAssignment ? pick(data.quizAssignment as Record<string, unknown>, ['quizId', 'quizRevision', 'snapshotId', 'quizTitle', 'roundCount', 'questionCount', 'lockedAt']) : null };
 }
@@ -50,7 +53,8 @@ export async function snapshotResource(auth: AuthIdentity, snapshotId: string, t
   const matches = await tx.get(db().collection('events').where('quizAssignment.snapshotId', '==', snapshotId).limit(2));
   if (matches.size !== 1) throw new HttpsError('permission-denied', 'Připravený kvíz není dostupný.');
   const resource: Resource = { kind: 'event', id: matches.docs[0]!.id };
-  await authorize(auth, ['event.read'], resource, tx);
+  const member = await authorize(auth, ['event.read'], resource, tx);
+  assertEventReadable(matches.docs[0]!.data(), member);
   return resource;
 }
 export const readAccessData = onCall({ region: 'europe-west1', cors: true, maxInstances: 20 }, async request => {
@@ -58,11 +62,29 @@ export const readAccessData = onCall({ region: 'europe-west1', cors: true, maxIn
   const data = request.data as Record<string, unknown>;
   if (!data || typeof data.operation !== 'string') throw new HttpsError('invalid-argument', 'Chybí typ načtení.');
   return db().runTransaction(async tx => {
+    if (data.operation === 'eventPage') {
+      const member = await authorize(request.auth, ['event.read'], undefined, tx), scope = member.events;
+      const cursor = data.afterId === undefined ? undefined : id(data.afterId);
+      if (scope.mode === 'none' || (scope.mode === 'selected' && scope.ids.length === 0)) return { items: [], nextCursor: null };
+      let docs: DocumentSnapshot[];
+      if (scope.mode === 'selected') {
+        const ids = [...scope.ids].sort().filter(value => cursor === undefined || value > cursor).slice(0, 101);
+        docs = ids.length ? await tx.getAll(...ids.map(value => db().doc('events/' + value))) : [];
+      } else {
+        let query: Query = db().collection('events');
+        if (scope.mode === 'own') query = query.where('createdBy', '==', member.uid);
+        query = query.orderBy(FieldPath.documentId());
+        if (cursor) query = query.startAfter(cursor);
+        docs = (await tx.get(query.limit(101))).docs;
+      }
+      const page = docs.slice(0, 100);
+      return wire({ items: page.filter(d => d.exists && (!['trash', 'deleting'].includes(eventDisposition(d.data()!)) || hasPermission(member, 'event.manage') || hasPermission(member, 'event.delete'))).map(d => ({ id: d.id, data: eventView(stored(d), member) })), nextCursor: docs.length > 100 ? page.at(-1)!.id : null });
+    }
     if (data.operation === 'quizzes' || data.operation === 'events') {
       const kind = data.operation === 'quizzes' ? 'quiz' : 'event';
       const member = await authorize(request.auth, [kind === 'quiz' ? 'quiz.read' : 'event.read'], undefined, tx);
       const docs = await scopedList(tx, kind, member);
-      return wire(docs.map(d => ({ id: d.id, data: kind === 'quiz' ? pick(stored(d), quizFields) : eventView(stored(d)) })));
+      return wire(docs.filter(d => kind !== 'event' || !['trash', 'deleting'].includes(eventDisposition(d.data()!)) || hasPermission(member, 'event.manage') || hasPermission(member, 'event.delete')).map(d => ({ id: d.id, data: kind === 'quiz' ? pick(stored(d), quizFields) : eventView(stored(d), member) })));
     }
     if (['editor', 'quiz', 'quizSlides', 'mediaAssets'].includes(String(data.operation))) {
       const quizId = id(data.quizId), resource: Resource = { kind: 'quiz', id: quizId };
@@ -94,11 +116,17 @@ export const readAccessData = onCall({ region: 'europe-west1', cors: true, maxIn
       const rows = await tx.get(db().collection(`quizSnapshots/${snapshotId}/${data.operation === 'snapshotRounds' ? 'rounds' : 'slides'}`).orderBy('position').limit(401));
       return wire(rows.docs.map(d => data.operation === 'snapshotRounds' ? { id: d.id, data: pick(d.data(), roundFields) } : slideView(d.id, d.data(), member.permissions.includes('event.answers.read'), member.permissions.includes('event.notes.read'))));
     }
-    if (['event', 'registrations', 'roster'].includes(String(data.operation))) {
+    if (['event', 'registrations', 'roster', 'eventManagement'].includes(String(data.operation))) {
       const eventId = id(data.eventId), resource: Resource = { kind: 'event', id: eventId };
-      await authorize(request.auth, data.operation === 'registrations' ? ['event.read', 'event.contacts'] : ['event.read'], resource, tx);
+      const member = await authorize(request.auth, data.operation === 'registrations' ? ['event.read', 'event.contacts'] : ['event.read'], resource, tx);
       const ref = db().doc(`events/${eventId}`);
-      if (data.operation === 'event') return wire({ id: eventId, data: eventView(stored(await tx.get(ref))) });
+      const root = stored(await tx.get(ref));
+      assertEventReadable(root, member, data.operation === 'event' || data.operation === 'eventManagement');
+      if (data.operation === 'eventManagement') {
+        if (!hasPermission(member, 'event.manage') && !hasPermission(member, 'event.delete')) throw new HttpsError('permission-denied', 'Chybí právo správy akce.');
+        return wire(await deletionInventory(eventId));
+      }
+      if (data.operation === 'event') return wire({ id: eventId, data: eventView(stored(await tx.get(ref)), member) });
       const rows = await tx.get(ref.collection('registrations').limit(1001));
       if (rows.size > 1000) throw new HttpsError('resource-exhausted', 'Příliš mnoho týmů.');
       return wire(rows.docs.map(d => ({ id: d.id, data: {

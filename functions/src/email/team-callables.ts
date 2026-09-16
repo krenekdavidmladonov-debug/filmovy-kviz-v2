@@ -20,7 +20,7 @@ async function previewIn(transaction: Transaction, eventId: string, uid: string,
     .select('eventId', 'status', 'contactEmail').limit(MAX_ACCEPTED_ROSTER + 1));
   const recipients = recipientSnapshot(eventId, rows.docs.map(doc => ({ id: doc.id, data: doc.data() })));
   const content = { ...copy, eventTitle };
-  return { content, recipients, previewFingerprint: teamMessageHash([eventId, uid, content, recipients]) };
+  return { content, recipients, capabilityVersion: Number(event.capabilityVersion ?? 0), previewFingerprint: teamMessageHash([eventId, uid, content, recipients]) };
 }
 function metadata(id: string, data: Record<string, unknown>) {
   const content = data.content as TeamMessageContent;
@@ -56,7 +56,7 @@ export const createEventTeamMessage = securedOnCall('createEventTeamMessage', op
     transaction.create(campaignRef, campaign);
     for (const recipient of preview.recipients) {
       const intentId = teamMessageHash([campaignId, recipient.registrationId]);
-      const intent: EventTeamEmailIntent = { eventId: id, registrationId: recipient.registrationId, recipient: recipient.recipient,
+      const intent: EventTeamEmailIntent = { capabilityVersion: preview.capabilityVersion, eventId: id, registrationId: recipient.registrationId, recipient: recipient.recipient,
         type: 'event-team-message', campaignId, status: 'pending', attempts: 0, createdAt: now, updatedAt: now, sentAt: null,
         lastError: null, leaseId: null, leaseUntil: null, nextAttemptAt: null };
       transaction.create(ref.collection('emailIntents').doc(intentId), intent);
@@ -67,9 +67,10 @@ export const createEventTeamMessage = securedOnCall('createEventTeamMessage', op
 export const listEventTeamMessages = securedOnCall('listEventTeamMessages', options, async request => {
   await admin(request);
   const data = messageInput(request.data, ['eventId']), id = messageId(data.eventId), ref = eventRef(id);
-  if (!(await ref.get()).exists) throw new HttpsError('not-found', 'Akce neexistuje.');
-  const campaigns = await ref.collection('emailCampaigns').orderBy('createdAt', 'desc').limit(20).get();
-  return campaigns.docs.map(doc => metadata(doc.id, doc.data()));
+  return runAccessTransaction(getFirestore(), async tx => {
+    const campaigns = await tx.get(ref.collection('emailCampaigns').orderBy('createdAt', 'desc').limit(20));
+    return campaigns.docs.map(doc => metadata(doc.id, doc.data()));
+  });
 });
 export const getEventTeamMessage = securedOnCall('getEventTeamMessage', options, async request => {
   const data = messageInput(request.data, ['eventId', 'campaignId']), id = messageId(data.eventId), campaignId = messageId(data.campaignId);

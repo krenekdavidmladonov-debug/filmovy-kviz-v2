@@ -1,5 +1,7 @@
+import { eventSessions } from '../live/event-lifecycle.js';
 import { assertQuizAssets } from '../media/model.js';
-import { closeEventPresentation } from '../live/event-lifecycle.js';
+import { assertEventOperational } from './guards.js';
+export { cancelEvent, archiveEvent } from './management.js';
 import {
   mapEditorQuiz,
   mapEditorSlide,
@@ -19,8 +21,6 @@ import { accessActor, securedOnCall, runAccessTransaction, grantCreatedResource 
 
 import {
   buildPublicEventProjection,
-  canArchiveEvent,
-  canCancelEvent,
   canLockQuiz,
   canMutateEvent,
   defaultScoringConfiguration,
@@ -56,6 +56,7 @@ const maximumSnapshotWrites = 475;
 interface AdminActor { readonly uid: string; readonly role: 'admin' }
 interface StoredEvent {
   readonly title: string;
+  readonly description: string;
   readonly startsAt: unknown;
   readonly timeZone: string;
   readonly venue: EventVenueInput;
@@ -101,6 +102,7 @@ function storedText(data: Record<string, unknown>, field: string, location: stri
 function storedEvent(snapshot: DocumentSnapshot): StoredEvent {
   if (!snapshot.exists) throw new HttpsError('not-found', 'Event was not found.');
   const data = snapshotData(snapshot, 'Event');
+  assertEventOperational(data);
   const venue = data.venue;
   const scoring = data.scoring;
   if (!isObject(venue) || !isObject(scoring)
@@ -115,6 +117,7 @@ function storedEvent(snapshot: DocumentSnapshot): StoredEvent {
   }
   return {
     title: storedText(data, 'title', 'Event'),
+    description: typeof data.description === 'string' ? data.description : '',
     startsAt: data.startsAt,
     timeZone: storedText(data, 'timeZone', 'Event'),
     venue: {
@@ -159,6 +162,7 @@ function publicProjection(
 
 function configurationFields(configuration: EventConfigurationInput): Record<string, unknown> {
   return {
+    description: configuration.description ?? '',
     title: configuration.title,
     startsAt: Timestamp.fromDate(configuration.startsAt),
     timeZone: configuration.timeZone,
@@ -248,13 +252,16 @@ export const updateEvent = securedOnCall('updateEvent', callableOptions, async (
   return runAccessTransaction(db, async (transaction) => {
     const current = storedEvent(await transaction.get(eventRef));
     assertExpectedRevision(current, requestedRevision);
-    if (!canMutateEvent(current.lifecycleStatus)) {
+    if (!canMutateEvent(current.lifecycleStatus) && current.lifecycleStatus !== 'live') {
       throw new HttpsError('failed-precondition', 'This event can no longer be edited.');
     }
     if (configuration.teamCapacity < current.acceptedTeams
       || configuration.peopleCapacity < current.acceptedPeople) {
-      throw new HttpsError('failed-precondition', 'Capacity cannot be lower than accepted registrations.');
+      throw new HttpsError('failed-precondition', `Kapacitu nelze snížit pod ${current.acceptedTeams} přijatých týmů a ${current.acceptedPeople} účastníků.`);
     }
+    const sessions = await eventSessions(transaction, eventId);
+    const live = sessions.some(s => s.session.status !== 'ended');
+    if (live && (configuration.teamCapacity !== current.teamCapacity || configuration.peopleCapacity !== current.peopleCapacity || configuration.teamSizeMin !== current.teamSizeMin || configuration.teamSizeMax !== current.teamSizeMax)) throw new HttpsError('failed-precondition', 'Během živého běhu lze měnit jen název, termín, místo a popis.');
     const now = Timestamp.now();
     const revision = current.revision + 1;
     const fields = configurationFields(configuration);
@@ -272,54 +279,6 @@ export const updateEvent = securedOnCall('updateEvent', callableOptions, async (
       venue: configuration.venue,
     }, revision, now));
     return response(eventId, revision, current.lifecycleStatus, registrationStatus);
-  });
-});
-
-export const cancelEvent = securedOnCall('cancelEvent', callableOptions, async (request): Promise<EventMutationResponse> => {
-  const actor = authorizeEventAdmin(request.auth);
-  const eventId = requiredId(request.data, 'eventId');
-  const requestedRevision = expectedRevision(request.data);
-  const eventRef = db.collection('events').doc(eventId);
-  const publicRef = db.collection('publicEvents').doc(eventId);
-  return runAccessTransaction(db, async (transaction) => {
-    const current = storedEvent(await transaction.get(eventRef));
-    assertExpectedRevision(current, requestedRevision);
-    await closeEventPresentation(transaction, eventId, actor.uid);
-    if (!canCancelEvent(current.lifecycleStatus)) {
-      throw new HttpsError('failed-precondition', 'This event cannot be cancelled.');
-    }
-    const revision = current.revision + 1;
-    const now = Timestamp.now();
-    transaction.update(eventRef, {
-      lifecycleStatus: 'cancelled', registrationStatus: 'closed',
-      revision, updatedAt: now, updatedBy: actor.uid,
-    });
-    transaction.delete(publicRef);
-    return response(eventId, revision, 'cancelled', 'closed');
-  });
-});
-
-export const archiveEvent = securedOnCall('archiveEvent', callableOptions, async (request): Promise<EventMutationResponse> => {
-  const actor = authorizeEventAdmin(request.auth);
-  const eventId = requiredId(request.data, 'eventId');
-  const requestedRevision = expectedRevision(request.data);
-  const eventRef = db.collection('events').doc(eventId);
-  const publicRef = db.collection('publicEvents').doc(eventId);
-  return runAccessTransaction(db, async (transaction) => {
-    const current = storedEvent(await transaction.get(eventRef));
-    assertExpectedRevision(current, requestedRevision);
-    await closeEventPresentation(transaction, eventId, actor.uid);
-    if (!canArchiveEvent(current.lifecycleStatus)) {
-      throw new HttpsError('failed-precondition', 'Only a cancelled or completed event can be archived.');
-    }
-    const revision = current.revision + 1;
-    const now = Timestamp.now();
-    transaction.update(eventRef, {
-      lifecycleStatus: 'archived', registrationStatus: 'closed',
-      revision, updatedAt: now, updatedBy: actor.uid,
-    });
-    transaction.delete(publicRef);
-    return response(eventId, revision, 'archived', 'closed');
   });
 });
 
@@ -409,7 +368,7 @@ export const lockEventQuiz = securedOnCall('lockEventQuiz', callableOptions, asy
       blockerCount: 0,
       warningCount: preflight.warningCount,
     } as const;
-    transaction.create(snapshotRef, buildQuizSnapshotMetadata(quiz, preflight, actor.uid, now));
+    transaction.create(snapshotRef, { ...buildQuizSnapshotMetadata(quiz, preflight, actor.uid, now), eventId });
     for (const slide of slideSnapshot.docs) {
       transaction.create(snapshotRef.collection('slides').doc(slide.id), slide.data());
     }

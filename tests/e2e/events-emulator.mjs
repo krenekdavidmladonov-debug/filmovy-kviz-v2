@@ -174,9 +174,10 @@ async function run() {
   await signInWithEmailAndPassword(auth, 'admin@example.test', 'LocalQuiz123!');
   const cancelled = await invoke('cancelEvent', { eventId: created.eventId, expectedRevision: 5 });
   assert.equal(cancelled.lifecycleStatus, 'cancelled');
-  assert.equal((await getDoc(publicRef)).exists(), false);
+  assert.equal((await getDoc(publicRef)).data().cancelled, true);
   const archived = await invoke('archiveEvent', { eventId: created.eventId, expectedRevision: 6 });
-  assert.equal(archived.lifecycleStatus, 'archived');
+  assert.equal(archived.lifecycleStatus, 'cancelled');
+  assert.equal(archived.disposition, 'archived');
 
   globalThis.console.log(JSON.stringify({
     status: 'PASS', adminCrud: true, moderatorReadOnly: true, publicProjectionSanitized: true,

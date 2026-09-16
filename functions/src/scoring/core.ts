@@ -1,3 +1,4 @@
+import { assertEventOperational } from '../events/guards.js';
 import { createHash } from 'node:crypto';
 import { runAccessTransaction } from '../access/authorization.js';
 import { getFirestore, Timestamp, FieldValue, type Transaction } from 'firebase-admin/firestore';
@@ -26,6 +27,7 @@ export async function commitScore(input: ScoreInput, authorize: (transaction: Tr
       if (operation.fingerprint !== fingerprint) throw new HttpsError('already-exists', 'Request ID was used with different content.');
       return operation.response as { scoreId: string; revision: number; halfPoints: number | null };
     }
+    assertEventOperational(event);
     if (!['ready', 'live', 'finalizing'].includes(event.lifecycleStatus as string)) throw new HttpsError('failed-precondition', 'This event cannot be scored.');
     if (!isObject(event.quizAssignment) || event.quizAssignment.snapshotId !== input.snapshotId || !isObject(event.scoring) || event.scoring.unitScale !== 2 || typeof event.scoring.started !== 'boolean') throw new HttpsError('failed-precondition', 'The event snapshot or scoring configuration changed.');
     const snapshotRef = db.collection('quizSnapshots').doc(input.snapshotId);

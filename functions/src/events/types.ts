@@ -12,6 +12,7 @@ export interface EventVenueInput {
 }
 
 export interface EventConfigurationInput {
+  readonly description?: string;
   readonly title: string;
   readonly startsAt: Date;
   readonly timeZone: string;

@@ -77,7 +77,10 @@
     "previewEventTeamMessage": "Not deployed in verified staging inventory; team emails remain disabled. Source secured for future use, no activation in this release.",
     "createEventTeamMessage": "Not deployed in verified staging inventory; team emails remain disabled. Source secured for future use, no activation in this release.",
     "listEventTeamMessages": "Not deployed in verified staging inventory; team emails remain disabled. Source secured for future use, no activation in this release.",
-    "getEventTeamMessage": "Not deployed in verified staging inventory; team emails remain disabled. Source secured for future use, no activation in this release."
+    "getEventTeamMessage": "Not deployed in verified staging inventory; team emails remain disabled. Source secured for future use, no activation in this release.",
+    "deleteEvent": "Introduced by event management; see tools/event-management/deployment-manifest.json",
+    "restoreEvent": "Introduced by event management; see tools/event-management/deployment-manifest.json",
+    "trashEvent": "Introduced by event management; see tools/event-management/deployment-manifest.json"
   },
   "firestoreRules": "firestore.rules",
   "storageRules": "storage.rules",

@@ -42,14 +42,17 @@ try {
   assert.equal(campaignIntents.length, 2);
   await eventRef.collection('registrations').doc(team.registrationId).update({ contactEmail: 'later@example.test', status: 'cancelled' });
   await eventRef.update({ lifecycleStatus: 'completed' });
-  assert.equal((await adminCall('createEventTeamMessage', request)).campaignId, first.campaignId);
+  await deny(adminCall('createEventTeamMessage', request), 'failed-precondition');
   await deny(adminCall('previewEventTeamMessage', copy), 'failed-precondition');
   const status = () => adminCall('getEventTeamMessage', { eventId, campaignId: first.campaignId });
   assert.equal((await status()).pending, 2);
-  console.log('PASS: concurrent confirmation has one receipt, changed payload denied, snapshot/replay survives roster and lifecycle changes');
+  console.log('PASS: concurrent confirmation has one receipt, changed payload denied, history survives lifecycle changes; terminal replay is denied');
   phase = 'shared worker';
   const unavailable = () => { throw new Error('No vault or public origin for organizational messages'); };
   const deliver = doc => processEmailTask({ eventId, intentId: doc.id }, { db: fixture.db, transport: capture, vault: unavailable, origin: unavailable, clock: fixture.clock });
+  await deliver(campaignIntents[0]);
+  assert.equal(capture.messages.size, 0, 'Closed event cannot run a delayed task');
+  await eventRef.update({ lifecycleStatus: 'draft' }); // Local fixture: exercise retry transport separately.
   await deliver(campaignIntents[0]);
   capture.nextFailure = 'rate-limit'; await assert.rejects(deliver(campaignIntents[1]));
   assert.equal((await status()).pending, 1); fixture.advance(); await deliver(campaignIntents[1]);

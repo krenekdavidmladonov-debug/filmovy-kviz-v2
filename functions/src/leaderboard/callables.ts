@@ -51,7 +51,7 @@ export const createEventLiveSession = securedOnCall('createEventLiveSession', op
             const existing = parseSession(await tx.get(db().doc('sessions/' + event.liveSessionId)));
             if (existing.eventId !== eventId || existing.snapshotId !== object(event.quizAssignment).snapshotId)
                 throw new HttpsError('failed-precondition', 'Vazba moderování se změnila.');
-            return { sessionId: existing.sessionId };
+            if (existing.status !== 'ended') return { sessionId: existing.sessionId };
         }
         if (event.revision !== revision(data))
             throw new HttpsError('aborted', 'Akce se změnila.');
