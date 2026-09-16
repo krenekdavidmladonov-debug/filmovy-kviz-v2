@@ -123,3 +123,7 @@ Complete editor extends the same private ordered stream with explicit draft/read
 ## Current personal access boundary
 
 [PERSONAL_ACCESS.md](PERSONAL_ACCESS.md) supersedes the historical admin/moderator descriptions above. Private repositories use scoped server views; raw data is available only with all sensitive permissions. Every existing staff callable and gateway enforces current membership independently. Preset labels do not authorize access. AuthProvider watches its own server membership and remounts private views on identity/version changes. See the release document for the explicit deployment inventory and invitation activation gate.
+
+## Event management extension
+
+See [EVENT_MANAGEMENT.md](EVENT_MANAGEMENT.md) for the independent disposition overlay, scoped permission mapping, shared transactional guards, capability revocation and exact server-side deletion ownership/allowlist. No content backfill or Storage cleanup is introduced. Cloud team email remains disabled.

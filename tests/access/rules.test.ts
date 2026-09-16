@@ -89,13 +89,18 @@ test('invitations, access audit and owner fields have no browser write path', as
   await assertFails(getDocs(collection(db, 'accessInvites')));
   await assertFails(getDocs(collection(db, 'accessAudit')));
 });
-test('complete authorized legacy reads survive; an event-only moderator cannot use them', async () => {
+test('legacy snapshots require mediated reads; owned snapshots respect trash and full permissions', async () => {
   const ownerDb = client('owner').firestore();
-  for (const path of ['events/event-a', 'events/event-a/registrations/team', 'quizSnapshots/snapshot/slides/question']) await assertSucceeds(getDoc(doc(ownerDb, path)));
+  for (const path of ['events/event-a', 'events/event-a/registrations/team']) await assertSucceeds(getDoc(doc(ownerDb, path)));
+  await assertFails(getDoc(doc(ownerDb, 'quizSnapshots/snapshot/slides/question')));
+  await env.withSecurityRulesDisabled(context => updateDoc(doc(context.firestore(), 'quizSnapshots/snapshot'), { eventId: 'event-a' }));
+  await assertSucceeds(getDoc(doc(ownerDb, 'quizSnapshots/snapshot/slides/question')));
   await env.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'memberships/moderator'), member('moderator', { role: 'moderator', permissions: [...rolePresets.moderator], quizzes: { mode: 'none', ids: [] } })));
   const moderatorDb = client('moderator').firestore();
   await assertSucceeds(getDoc(doc(moderatorDb, 'sessions/session-a')));
   for (const path of ['quizzes/a', 'quizSnapshots/snapshot/slides/question', 'events/event-a/registrations/team']) await assertFails(getDoc(doc(moderatorDb, path)));
+  await env.withSecurityRulesDisabled(context => updateDoc(doc(context.firestore(), 'events/event-a'), { disposition: 'trash' }));
+  for (const path of ['events/event-a','events/event-a/registrations/team','events/event-a/scores/pair','sessions/session-a','quizSnapshots/snapshot/slides/question']) await assertFails(getDoc(doc(ownerDb, path)));
 });
 test('anonymous projector and public events remain available with private writes denied', async () => {
   const db = env.unauthenticatedContext().firestore();

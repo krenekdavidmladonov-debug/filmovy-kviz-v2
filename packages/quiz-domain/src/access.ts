@@ -5,7 +5,7 @@ export const permissionLabels = {
   'quiz.notes.read': 'Číst poznámky moderátora', 'quiz.notes.edit': 'Upravovat poznámky',
   'quiz.delete': 'Mazat obsah kvízu', 'quiz.media.upload': 'Nahrávat média', 'quiz.media.attach': 'Připojovat média',
   'quiz.export': 'Exportovat kvízy', 'event.read': 'Číst akce', 'event.create': 'Vytvářet akce',
-  'event.manage': 'Spravovat akce a týmy', 'event.live': 'Ovládat živé promítání',
+  'event.manage': 'Spravovat akce a týmy', 'event.delete': 'Trvale mazat akce z koše', 'event.live': 'Ovládat živé promítání',
   'event.score': 'Zapisovat skóre', 'event.contacts': 'Číst kontakty týmů',
   'event.answers.read': 'Číst odpovědi uzamčené akce', 'event.notes.read': 'Číst poznámky uzamčené akce',
   'event.export': 'Exportovat podklady akce', 'event.answers.export': 'Exportovat klíč odpovědí akce', 'users.manage': 'Spravovat uživatele a pozvánky',
@@ -22,7 +22,7 @@ export interface Membership extends AccessGrant {
 }
 export const rolePresets: Record<AccessRole, readonly Permission[]> = {
   owner: permissions,
-  manager: permissions,
+  manager: permissions.filter(p => p !== 'event.delete'),
   creator: permissions.filter(p => p.startsWith('quiz.') && p !== 'quiz.delete'),
   moderator: ['event.read', 'event.live', 'event.answers.read', 'event.notes.read', 'event.export'],
   referee: ['event.read', 'event.score'],
@@ -33,7 +33,7 @@ export const permissionDependencies: Partial<Record<Permission, readonly Permiss
   'quiz.answers.edit': ['quiz.answers.read', 'quiz.edit'], 'quiz.notes.read': ['quiz.read'],
   'quiz.notes.edit': ['quiz.notes.read', 'quiz.edit'], 'quiz.delete': ['quiz.edit'],
   'quiz.media.upload': ['quiz.read'], 'quiz.media.attach': ['quiz.edit'], 'quiz.export': ['quiz.read'],
-  'event.create': ['event.read'], 'event.manage': ['event.read'], 'event.live': ['event.read'],
+  'event.create': ['event.read'], 'event.manage': ['event.read'], 'event.delete': ['event.read'], 'event.live': ['event.read'],
   'event.score': ['event.read'], 'event.contacts': ['event.read'], 'event.answers.read': ['event.read'],
   'event.notes.read': ['event.read'], 'event.export': ['event.read'], 'event.answers.export': ['event.export', 'event.answers.read'],
 };
@@ -56,6 +56,11 @@ export function scopeContains(parent: AccessScope, child: AccessScope): boolean 
 export function canDelegate(actor: Membership, grant: AccessGrant): boolean {
   return actor.status === 'active' && actor.permissions.includes('users.manage') && grant.role !== 'owner'
     && (actor.role === 'owner' || (grant.role !== 'manager' && !grant.permissions.includes('users.manage')))
-    && grant.permissions.every(p => actor.permissions.includes(p))
+    && grant.permissions.every(p => hasPermission(actor, p))
     && scopeContains(actor.quizzes, grant.quizzes) && scopeContains(actor.events, grant.events);
+}
+
+/** Existing owners gain only the new owner-default deletion right; no claim grants it. */
+export function hasPermission(member: AccessGrant, permission: Permission): boolean {
+  return member.permissions.includes(permission) || (member.role === 'owner' && permission === 'event.delete');
 }

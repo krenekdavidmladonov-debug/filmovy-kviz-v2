@@ -1,4 +1,8 @@
 import { strict as assert } from 'node:assert';
+import { createRequire } from 'node:module';
+const require = createRequire(new URL('../../functions/package.json', import.meta.url));
+const { initializeApp: initializeAdminApp, deleteApp: deleteAdminApp } = require('firebase-admin/app');
+const { getFirestore: getAdminFirestore } = require('firebase-admin/firestore');
 
 import { deleteApp, initializeApp } from 'firebase/app';
 import {
@@ -30,6 +34,9 @@ const { projectId, authEndpoint, firestoreEndpoint, functionsEndpoint } = requir
   'Editor E2E',
 );
 
+// Only the validated local emulator fixture inspector may fingerprint an unbound legacy snapshot.
+const adminApp = initializeAdminApp({ projectId }, 'editor-sentinel-e2e');
+const adminDb = getAdminFirestore(adminApp);
 const app = initializeApp({
   apiKey: 'demo-api-key', authDomain: `${projectId}.firebaseapp.com`, projectId,
   appId: '1:123:web:quiz-editor-e2e',
@@ -149,9 +156,11 @@ async function run() {
   await assert.rejects(updateDoc(quizRef, { title: 'Direct write must fail' }), /permission-denied/u);
   const publicBefore = await getDoc(doc(db, 'publicSessions', 'quiz-editor-e2e'));
   assert.equal(publicBefore.exists(), false);
+  await assert.rejects(getDoc(snapshotRef), /permission-denied/u);
+  await assert.rejects(getDoc(snapshotSlideRef), /permission-denied/u);
   const snapshotBefore = JSON.stringify({
-    root: (await getDoc(snapshotRef)).data(),
-    slide: (await getDoc(snapshotSlideRef)).data(),
+    root: (await adminDb.doc(snapshotRef.path).get()).data(),
+    slide: (await adminDb.doc(snapshotSlideRef.path).get()).data(),
   });
 
   const importedBefore = (await getDoc(importedSlideRef)).data();
@@ -509,8 +518,8 @@ async function run() {
   assert.equal((await getDoc(doc(db, 'publicSessions', 'quiz-editor-e2e'))).exists(), false);
   assert.equal((await getDoc(importedQuizRef)).data().revision, 2);
   assert.equal(JSON.stringify({
-    root: (await getDoc(snapshotRef)).data(),
-    slide: (await getDoc(snapshotSlideRef)).data(),
+    root: (await adminDb.doc(snapshotRef.path).get()).data(),
+    slide: (await adminDb.doc(snapshotSlideRef.path).get()).data(),
   }), snapshotBefore);
 
   globalThis.console.log(JSON.stringify({
@@ -531,4 +540,5 @@ try {
   await run();
 } finally {
   await deleteApp(app);
+  await deleteAdminApp(adminApp);
 }

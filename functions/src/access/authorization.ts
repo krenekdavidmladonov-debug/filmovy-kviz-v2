@@ -2,7 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, type Firestore, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableOptions, type CallableRequest } from 'firebase-functions/v2/https';
-import { scopeAllows, type Membership, type Permission } from '@filmovy-kviz/quiz-domain';
+import { hasPermission, scopeAllows, type Membership, type Permission } from '@filmovy-kviz/quiz-domain';
+import { assertEventOperational, assertEventReadable } from '../events/guards.js';
 
 export type AuthIdentity = Pick<NonNullable<CallableRequest['auth']>, 'uid' | 'token'> | undefined;
 export type Resource = { kind: 'quiz' | 'event'; id: string };
@@ -42,13 +43,17 @@ export async function membership(auth: AuthIdentity, tx?: Transaction): Promise<
 }
 export async function authorize(auth: AuthIdentity, required: readonly Permission[], resource?: Resource, tx?: Transaction) {
   const member = await membership(auth, tx);
-  if (!required.every(p => member.permissions.includes(p))) throw new HttpsError('permission-denied', 'K této činnosti nemáte oprávnění.');
+  if (!required.every(p => hasPermission(member, p))) throw new HttpsError('permission-denied', 'K této činnosti nemáte oprávnění.');
   if (resource) {
     const scope = resource.kind === 'quiz' ? member.quizzes : member.events;
     let createdBy: unknown;
     if (scope.mode === 'own') {
       const ref = getFirestore().doc(`${resource.kind === 'quiz' ? 'quizzes' : 'events'}/${resource.id}`);
       createdBy = (tx ? await tx.get(ref) : await ref.get()).data()?.createdBy;
+      if (createdBy === undefined && resource.kind === 'event') {
+        const tombstone = getFirestore().doc(`eventTombstones/${resource.id}`);
+        createdBy = (tx ? await tx.get(tombstone) : await tombstone.get()).data()?.createdBy;
+      }
     }
     if (!scopeAllows(scope, resource.id, member.uid, createdBy)) throw new HttpsError('permission-denied', 'K tomuto obsahu nemáte přístup.');
   }
@@ -68,6 +73,16 @@ export async function authorizeOperation(name: string, request: CallableRequest,
   const data = request.data as Record<string, unknown> | undefined;
   const quiz = (): Resource => ({ kind: 'quiz', id: resourceId(data?.quizId) });
   const event = (): Resource => ({ kind: 'event', id: resourceId(data?.eventId) });
+  if (name === 'deleteEvent') return authorize(request.auth, ['event.read', 'event.delete'], event(), tx);
+  if (['cancelEvent', 'archiveEvent', 'trashEvent', 'restoreEvent'].includes(name)) {
+    return authorize(request.auth, name === 'cancelEvent' && data?.endLive === true ? ['event.manage', 'event.live'] : ['event.manage'], event(), tx);
+  }
+  if (tx && data?.eventId && [...eventManagement, ...eventLive, ...email.filter(operation => !['listEventTeamMessages', 'getEventTeamMessage'].includes(operation)), 'lockEventQuiz', 'saveEventScore', 'issueRefereeAccess', 'changeRefereeAccess'].includes(name)) {
+    const resource = event();
+    await authorize(request.auth, ['event.read'], resource, tx);
+    const ref = getFirestore().doc(`events/${resource.id}`);
+    assertEventOperational((tx ? await tx.get(ref) : await ref.get()).data());
+  }
   if (name === 'createQuiz') return authorize(request.auth, ['quiz.create'], undefined, tx);
   if (name === 'createEvent') return authorize(request.auth, ['event.create'], undefined, tx);
   if (quizEdits.includes(name)) return authorize(request.auth, ['quiz.edit'], quiz(), tx);
@@ -78,7 +93,13 @@ export async function authorizeOperation(name: string, request: CallableRequest,
   if (name === 'issueRefereeAccess' || name === 'changeRefereeAccess') return authorize(request.auth,
     name === 'changeRefereeAccess' && data?.action === 'revoke' ? ['event.manage'] : ['event.manage', 'event.score'], event(), tx);
   if (eventManagement.includes(name)) return authorize(request.auth, name.startsWith('admin') ? ['event.manage', 'event.contacts'] : ['event.manage'], event(), tx);
-  if (email.includes(name)) return authorize(request.auth, ['event.manage', 'event.contacts'], event(), tx);
+  if (email.includes(name)) {
+    const member = await authorize(request.auth, ['event.manage', 'event.contacts'], event(), tx);
+    if (tx && ['listEventTeamMessages', 'getEventTeamMessage'].includes(name)) {
+      assertEventReadable((await tx.get(getFirestore().doc(`events/${event().id}`))).data(), member);
+    }
+    return member;
+  }
   if (name === 'lockEventQuiz') {
     await authorize(request.auth, ['quiz.read', 'quiz.export', 'quiz.answers.read', 'quiz.notes.read'], quiz(), tx);
     return authorize(request.auth, ['event.manage'], event(), tx);
@@ -91,6 +112,10 @@ export async function authorizeOperation(name: string, request: CallableRequest,
     const session = (tx ? await tx.get(ref) : await ref.get()).data();
     if (!session) throw new HttpsError('permission-denied', 'Moderování není dostupné.');
     const eventBound = typeof session.eventId === 'string';
+    if (eventBound && tx) {
+      const eventRef = getFirestore().doc(`events/${resourceId(session.eventId)}`);
+      assertEventOperational((tx ? await tx.get(eventRef) : await eventRef.get()).data());
+    }
     const required: Permission[] = ['event.live'];
     if (name === 'revealAnswer' || name === 'selectRecapQuestion') required.push(eventBound ? 'event.answers.read' : 'quiz.answers.read');
     return authorize(request.auth, required, eventBound ? { kind: 'event', id: resourceId(session.eventId) } : { kind: 'quiz', id: resourceId(session.quizId) }, tx);

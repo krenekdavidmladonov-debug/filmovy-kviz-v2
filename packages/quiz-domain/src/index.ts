@@ -8,3 +8,4 @@ export type { FinalRevealPage, FinalRevealState } from './final-reveal.js';
 export * from './media-assets.js';
 export { brand } from './brand.js';
 export * from './access.js';
+export * from './event-management.js';

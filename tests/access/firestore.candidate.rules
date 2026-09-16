@@ -18,19 +18,23 @@ service cloud.firestore {
       return scope.mode == 'all' || (scope.mode == 'selected' && eventId in scope.ids)
         || (scope.mode == 'own' && get(/databases/$(database)/documents/events/$(eventId)).data.createdBy == request.auth.uid);
     }
+    function eventVisible(eventId) {
+      let event = get(/databases/$(database)/documents/events/$(eventId)).data;
+      return exists(/databases/$(database)/documents/events/$(eventId)) && (!('disposition' in event) || !(event.disposition in ['trash', 'deleting']));
+    }
     function sessionRead(session) {
-      return ('eventId' in session && permitted('event.read') && eventScope(session.eventId))
+      return ('eventId' in session && permitted('event.read') && eventScope(session.eventId) && eventVisible(session.eventId))
         || (!('eventId' in session) && permitted('quiz.read') && quizScope(session.quizId));
     }
     function fullQuizRead(quizId) {
       return permitted('quiz.read') && permitted('quiz.answers.read') && permitted('quiz.notes.read') && quizScope(quizId);
     }
     function fullEventRead(eventId) {
-      return permitted('event.read') && permitted('event.contacts') && permitted('event.answers.read') && permitted('event.notes.read') && eventScope(eventId);
+      return permitted('event.read') && permitted('event.contacts') && permitted('event.answers.read') && permitted('event.notes.read') && eventScope(eventId) && eventVisible(eventId);
     }
     function fullSnapshotRead(snapshotId) {
-      return permitted('quiz.read') && permitted('quiz.answers.read') && permitted('quiz.notes.read')
-        && (member().quizzes.mode == 'all' || quizScope(get(/databases/$(database)/documents/quizSnapshots/$(snapshotId)).data.quizId));
+      let snapshot = get(/databases/$(database)/documents/quizSnapshots/$(snapshotId)).data;
+      return 'eventId' in snapshot && fullEventRead(snapshot.eventId);
     }
     match /memberships/{uid} { allow get: if request.auth != null && request.auth.uid == uid; allow list, write: if false; }
     match /quizzes/{quizId}/{document=**} {
@@ -59,10 +63,10 @@ service cloud.firestore {
       }
     }
     match /events/{eventId}/scores/{scoreId} {
-      allow read: if permitted('event.read') && eventScope(eventId);
+      allow read: if permitted('event.read') && eventScope(eventId) && eventVisible(eventId);
       allow write: if false;
       match /history/{entryId} {
-        allow read: if permitted('event.read') && eventScope(eventId);
+        allow read: if permitted('event.read') && eventScope(eventId) && eventVisible(eventId);
         allow write: if false;
       }
     }

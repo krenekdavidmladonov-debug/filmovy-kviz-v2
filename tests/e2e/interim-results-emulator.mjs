@@ -18,7 +18,7 @@ try {
     pass();
     await deny(f.preview('r3'), 'failed-precondition');
     await deny(f.preview('foreign'), 'invalid-argument');
-    await deny(f.call('previewInterimResults', { eventId: 'foreign', sessionId: f.sessionId, throughRoundId: 'r2' }), 'failed-precondition');
+    await deny(f.call('previewInterimResults', { eventId: 'foreign', sessionId: f.sessionId, throughRoundId: 'r2' }), 'not-found');
     await deny(f.anonymous.call('previewInterimResults', { eventId: f.eventId, sessionId: f.sessionId, throughRoundId: 'r2', key: 'referee', token: 'management' }), 'unauthenticated');
     await assert.rejects(getDoc(doc(f.anonymous.store, 'sessions', f.sessionId)), e => e.code === 'permission-denied');
     await assert.rejects(getDocs(collection(f.anonymous.store, 'publicSessions')), e => e.code === 'permission-denied');
@@ -129,7 +129,7 @@ try {
         await deny(second.call('controlInterimResults', { eventId: f.eventId, sessionId: second.sessionId, action: 'publish', requestId: randomUUID(), expectedRevision: q.sessionRevision, throughRoundId: 'r2', sourceFingerprint: q.sourceFingerprint }), 'failed-precondition');
         await second.call('controlInterimResults', { eventId: second.eventId, sessionId: second.sessionId, action: 'publish', requestId: randomUUID(), expectedRevision: q.sessionRevision, throughRoundId: 'r2', sourceFingerprint: q.sourceFingerprint });
         const e = (await second.db.doc('events/' + second.eventId).get()).data();
-        await second.admin.call('cancelEvent', { eventId: second.eventId, expectedRevision: e.revision });
+        await second.admin.call('cancelEvent', { eventId: second.eventId, expectedRevision: e.revision, endLive: true });
         assert.equal((await second.publicState()).status, 'ended');
         assert(!(await second.publicState()).interimResults);
         await deny(second.preview(), 'failed-precondition');

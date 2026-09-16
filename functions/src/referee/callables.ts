@@ -1,6 +1,7 @@
+import { assertCapability, assertEventOperational } from '../events/guards.js';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getAuth } from 'firebase-admin/auth';
-import { scopeAllows, type Membership } from '@filmovy-kviz/quiz-domain';
+import { eventOperational, scopeAllows, type Membership } from '@filmovy-kviz/quiz-domain';
 import { accessActor, authorize, freshIdentity, securedOnCall, runAccessTransaction } from '../access/authorization.js';
 import { getFirestore, Timestamp, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
@@ -22,6 +23,8 @@ function organizer(request: CallableRequest) {
 }
 async function eventIn(transaction: Transaction, eventId: string, referee = false) {
   const event = (await transaction.get(db().doc('events/' + eventId))).data();
+  if (referee && (!event || !eventOperational(event))) throw deny();
+  assertEventOperational(event);
   if (!event || (referee ? !['ready', 'live', 'finalizing'].includes(event.lifecycleStatus as string) : ['archived', 'cancelled', 'completed'].includes(event.lifecycleStatus as string))) throw referee ? deny() : new HttpsError('failed-precondition', 'Event is unavailable.');
   return event;
 }
@@ -37,11 +40,11 @@ export const issueRefereeAccess = securedOnCall('issueRefereeAccess', options, a
   const name = label(data), expiresAt = expiry(data), accessId = scoreHash([uid, eventId, requestId]), secret = randomBytes(32).toString('base64url');
   const ref = db().doc(`events/${eventId}/refereeAccess/${accessId}`), fingerprint = scoreHash([name, data.expiresAt]);
   return runAccessTransaction(db(), async transaction => {
-    await eventIn(transaction, eventId); const old = (await transaction.get(ref)).data();
+    const event = await eventIn(transaction, eventId); const old = (await transaction.get(ref)).data();
     if (old) { if (old.fingerprint !== fingerprint) throw new HttpsError('already-exists', 'Issuance request changed.'); return { ...metadata(accessId, old), key: null }; }
     const grants = await transaction.get(db().collection(`events/${eventId}/refereeAccess`));
     if (grants.size >= 50) throw new HttpsError('resource-exhausted', 'At most 50 named accesses per event. Reuse an existing access.');
-    const grant = { label: name, expiresAt, version: 1, revoked: false, keyHash: digest(secret), createdBy: uid, issuedBy: uid, createdAt: Timestamp.now(), fingerprint };
+    const grant = { capabilityVersion: event.capabilityVersion ?? 0, label: name, expiresAt, version: 1, revoked: false, keyHash: digest(secret), createdBy: uid, issuedBy: uid, createdAt: Timestamp.now(), fingerprint };
     transaction.create(ref, grant); return { ...metadata(accessId, grant), key: secret };
   });
 });
@@ -50,10 +53,10 @@ export const changeRefereeAccess = securedOnCall('changeRefereeAccess', options,
   if (!['revoke', 'rotate'].includes(data.action as string)) throw new HttpsError('invalid-argument', 'Invalid access action.');
   const nextExpiry = data.action === 'rotate' ? expiry(data) : null, secret = randomBytes(32).toString('base64url'), ref = db().doc(`events/${eventId}/refereeAccess/${accessId}`);
   return runAccessTransaction(db(), async transaction => {
-    await eventIn(transaction, eventId); const old = (await transaction.get(ref)).data();
+    const event = await eventIn(transaction, eventId); const old = (await transaction.get(ref)).data();
     if (!old) throw new HttpsError('not-found', 'Access not found.');
     if (old.version !== expectedVersion) throw new HttpsError('aborted', 'Access changed. Reload the list.');
-    const next = { ...old, version: expectedVersion + 1, revoked: data.action === 'revoke', keyHash: data.action === 'rotate' ? digest(secret) : null, expiresAt: nextExpiry ?? (old.expiresAt as Timestamp), ...(data.action === 'rotate' ? { issuedBy: uid } : {}), updatedBy: uid, updatedAt: Timestamp.now() };
+    const next = { ...old, capabilityVersion: event.capabilityVersion ?? 0, version: expectedVersion + 1, revoked: data.action === 'revoke', keyHash: data.action === 'rotate' ? digest(secret) : null, expiresAt: nextExpiry ?? (old.expiresAt as Timestamp), ...(data.action === 'rotate' ? { issuedBy: uid } : {}), updatedBy: uid, updatedAt: Timestamp.now() };
     transaction.set(ref, next); return { ...metadata(accessId, next), key: data.action === 'rotate' ? secret : null };
   });
 });
@@ -75,6 +78,7 @@ async function accessIn(transaction: Transaction, c: RefereeCredential) {
   const supplied = Buffer.from(digest(c.key));
   if (!grant || grant.revoked || !(grant.expiresAt instanceof Timestamp) || grant.expiresAt.toMillis() <= Date.now() || typeof grant.keyHash !== 'string' || grant.keyHash.length !== supplied.length || !timingSafeEqual(Buffer.from(grant.keyHash), supplied)) throw deny();
   const event = await eventIn(transaction, c.eventId, true);
+  assertCapability(event, grant);
   // Delegated bearer access cannot outlive the issuer's current ability to grant scoring.
   // Legacy grants retain their original issuer; rotation explicitly transfers issuance.
   const issuerUid: unknown = grant.issuedBy ?? grant.createdBy;

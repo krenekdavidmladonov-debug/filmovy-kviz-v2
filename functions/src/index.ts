@@ -83,3 +83,6 @@ export { readQuizMedia } from './media/endpoint.js';
 export { createQuizRound } from './editor/callables.js';
 export { getMyAccess, listAccessUsers, createAccessInvitation, changeAccessInvitation, acceptAccessInvitation, updateAccessMembership, listAccessAudit, revokeMySessions } from './access/callables.js';
 export { readAccessData } from './access/reads.js';
+
+export { trashEvent, restoreEvent } from './events/management.js';
+export { deleteEvent } from './events/deletion.js';
