@@ -46,13 +46,17 @@ export function AdminShell() {
   }
 
   const accountLabel = membership ? roleLabels[membership.role] : 'Uživatel';
+  const isStaging = import.meta.env.VITE_APP_ENV === 'staging';
 
   return (
     <div className="admin-shell">
       <aside className="admin-sidebar">
-        <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
-          <span><strong><Brand /></strong><small>Administrace</small></span>
-        </NavLink>
+        <div className="admin-brand-group">
+          <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
+            <span><strong><Brand /></strong><small>Administrace</small></span>
+          </NavLink>
+          {isStaging && <span className="admin-environment-label">Testovací verze</span>}
+        </div>
         <AdminNavigation />
         <div className="admin-account">
           <span>{accountLabel}</span>
@@ -64,9 +68,12 @@ export function AdminShell() {
       </aside>
 
       <header className="admin-mobile-header">
-        <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
-          <strong><Brand /></strong>
-        </NavLink>
+        <div className="admin-brand-group">
+          <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
+            <strong><Brand /></strong>
+          </NavLink>
+          {isStaging && <span className="admin-environment-label">Testovací verze</span>}
+        </div>
         <details className="admin-nav-disclosure">
           <summary aria-label="Otevřít navigaci administrace">Menu</summary>
           <div className="admin-mobile-menu">
@@ -83,8 +90,10 @@ export function AdminShell() {
       </header>
 
       <main className="admin-main" id="main-content">
-        {import.meta.env.VITE_APP_ENV === 'staging' && <div role="note" className="admin-content"><strong>STAGING — pouze syntetická testovací data</strong></div>}
-        <div className="admin-content"><Outlet /></div>
+        <div className="admin-content">
+          {isStaging && <p role="note" className="admin-environment-note">Pro zkoušení používejte pouze smyšlená data.</p>}
+          <Outlet />
+        </div>
       </main>
     </div>
   );
