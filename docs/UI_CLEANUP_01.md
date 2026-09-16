@@ -1,6 +1,6 @@
 # JustKvíz — etapa 1A: úklid úvodního rozhraní
 
-Stav k 16. 9. 2026: **LOKÁLNĚ IMPLEMENTOVÁNO A OVĚŘENO. NENASAZENO.**
+Stav etapy 1A k 16. 9. 2026: **LOKÁLNĚ IMPLEMENTOVÁNO A OVĚŘENO. NENASAZENO.** Následné review etapy 1B a omezení CI jsou zaznamenány na konci tohoto reportu.
 
 ## Výchozí stav
 
@@ -60,7 +60,7 @@ Před spuštěním byly přečteny package scripts, Vite/Vitest konfigurace a Gi
 | Skutečné přihlášení, serverové vytváření a Security Rules v emulátoru | **NEOVĚŘENO** v tomto kroku: browser používá náhradu Auth a datového rozhraní s lokálními fixtures. Nebyla spuštěna emulator E2E ani `pnpm test:rules`; autorizační implementace se nemění. |
 | Nasazená aplikace a cloudová data | **NEOVĚŘENO**, záměrně bez cloudového přístupu. |
 
-Browser ověření spouští skutečnou aplikaci a původní router, nahrazuje jen AuthProvider a hranici privateRead. Data pocházejí z deklarovaných fixtures v `functions/src/dev/seed-quizzes.ts`; seed skript se nespouští. Zápisy jsou v náhledu zakázané. [Browser výsledky](../.local-data/ui-cleanup/browser-results.json), [srovnání čtení před úpravou](../.local-data/ui-cleanup/before-results.json).
+Browser ověření etapy 1A spouští skutečnou aplikaci a původní router, nahrazuje AuthProvider a modul access/api. Data pocházejí z deklarovaných fixtures v `functions/src/dev/seed-quizzes.ts`; seed skript se nespouští. Náhled blokoval accessCall a externí hosty; přímé create callable tehdy samostatně blokovány nebyly. Formuláře se pouze otevíraly, neodesílaly. Původní širší tvrzení o zákazu všech zápisů bylo při review opraveno; žádný skutečný zápis nebyl zjištěn. [Browser výsledky](../.local-data/ui-cleanup/browser-results.json), [srovnání čtení před úpravou](../.local-data/ui-cleanup/before-results.json).
 
 Při přípravě QA byly opraveny lokální ESM cesta na Windows a tvar fixture odpovědi stránkovaného seznamu akcí. Následný kompletní browser běh je PASS. Při vizuální kontrole nalezené natažení mobilní hlavičky je opraveno a znovu ověřeno. Build hlásí stávající upozornění na velikost JS balíčku a lokální Node 24 oproti deklarovanému Functions Node 22; backendový runtime zde nebyl spouštěn.
 
@@ -83,4 +83,49 @@ Předchozí release report popisuje samostatný problém uploadu médií v rozsa
 
 Doporučený nejbližší malý krok: zkontrolovat tyto screenshoty a lokální diff jako celek; případné nasazení řešit samostatně s novým ověřením tehdejšího výchozího stavu a výslovným souhlasem.
 
-**Push: ne. PR vytvořen nebo přepsán: ne. Merge: ne. Deploy: ne. Cloudové operace / Firebase přístup: ne. V1 nebyla kontaktována ani pro čtení.**
+**V etapě 1A:** Push: ne. PR vytvořen nebo přepsán: ne. Merge: ne. Deploy: ne. Cloudové operace / Firebase přístup: ne. V1 nebyla kontaktována ani pro čtení.
+
+## Etapa 1B — nezávislé review a příprava Draft PR
+
+Ověřený commit úklidu: `0d340d2f8e0a47dd4a3d6db701bfdce54354d99d`, potomek výše uvedeného základu. Worktree byl na začátku čistý a skutečný diff obsahoval právě šest uvedených souborů. Etapa 1B nepřidává změnu produkčního kódu; nový commit pouze zpřesňuje tento report. Původní commit se nepřepisuje.
+
+Samostatný read-only review agent zkontroloval přesný diff, router, oprávnění, CSS selektory, konfiguraci testů a místní screenshoty. **Bez blokujícího nálezu a bez zjištěné regrese produkčního UI.** Review není finální schválení PR.
+
+| Nález | Stav |
+| --- | --- |
+| P3: historické tvrzení o zákazu všech zápisů v náhledu nebylo plně doloženo | **Opraveno** — historický popis výše zpřesněn. Nový lokální náhled odmítá inicializaci Firebase services, eviduje případné pokusy a browser povoluje pouze přesný origin `http://127.0.0.1:5208`, nikoli ostatní localhost porty. |
+| CI nemá správnou PR base v seznamu spouštěcích větví | **Blokující pro označení CI jako PASS**, nikoli pro vznik Draft PR. Workflow nebylo měněno a jiná base se nepoužívá k vynucení zelené kontroly. |
+| Dříve dokumentovaný upload médií ve scope „vlastní kvízy“ | **Neblokující pro tento UI diff, odloženo** — nebyl znovu ověřován ani opravován. |
+
+### Rozsah sdílených stylů a běhové ověření
+
+Dashboard selektory používá pouze AdminPage. Brand, upozornění a mobilní `grid-template-rows: auto 1fr` záměrně platí pro celý AdminShell. Editor a live control mají vlastní router větve mimo tento shell; mimo něj jsou také projektor, veřejné registrace a rozhodčí. Nové selektory na tyto obrazovky nedopadají.
+
+Nový lokální browser běh: **PASS**. Přehled ověřen na 1440, 1280, 1100, 1024, 768, 390 a 320 px; šest dalších sdílených povrchů na 1440/1280/390/320 px: knihovna kvízů, nový kvíz, seznam akcí, nová akce, editovatelný detail akce a uživatelé/přístupy. Bez vodorovného přetečení stránky, chyb browseru a pokusů o spojení mimo náhled. Tab/Enter, viditelný focus, textový kontrast nejméně 6,40 : 1, načítání, chyba s retry a oba prázdné stavy prošly. Snímky byly vizuálně zkontrolovány.
+
+Oba create formuláře byly otevřeny z přehledu, vyplněny bez odeslání, opuštěny pomocí Zpět v prohlížeči a původního zpětného odkazu. Při opětovném otevření jsou pole prázdná; nebyl zaznamenán žádný pokus o backendové volání. Existující idempotency ID kvízu v sessionStorage není databázový záznam. Původní formuláře, PermissionGate, can a feature flags se nemění. UI test není důkazem serverové autorizace.
+
+Kvízové fixtures vycházejí z původního lokálního seedu, data detailu akce z existujícího `events-form-ux.mocks.ts`. Read-only seznamy přístupů mají prázdné lokální odpovědi. Všechny tyto náhrady zůstávají pouze v ignorovaném náhledovém skriptu. Běžný build ani aplikace je neimportují.
+
+### Test discovery a kontroly
+
+`vitest.config.ts` má explicitní seznam testů, proto bylo nutné přidat nový soubor. Porovnání přes `vitest list --json` s původní konfigurací z výchozího commitu: **40 souborů / 363 případů před**, **41 souborů / 377 případů po**, **0 odebraných**, **14 přidaných**. Žádné nové skip/only, potlačení chyb nebo oslabení původních kontrol.
+
+- **PASS:** opakované `pnpm check` (typecheck, lint, build).
+- **PASS:** opakované `pnpm test:unit`, 41 souborů / 377 testů.
+- **PASS:** výše popsaný rozšířený lokální browser běh a porovnání počtu čtení; přehled má stále dvě volání v development StrictMode, bez quiz.read nulu.
+- **NEOVĚŘENO:** skutečné přihlášení, serverové mutace a Rules v emulátoru. V tomto kroku nebyly spuštěny, serverová implementace je beze změny.
+- **NEOVĚŘENO běhově v etapě 1B:** plný editor a náhled slidů, živý projektor, veřejné registrace a obrazovka rozhodčího. Jsou mimo dotčený AdminShell a nový fixture náhled neposkytuje jejich živé datové kontrakty. Izolace CSS byla ověřena staticky; úspěšný build není vydáván za jejich vizuální test.
+- **NEOVĚŘENO:** cloudová aplikace a data — bez přístupu.
+
+Místní důkazy jsou pod `.local-data/ui-cleanup/review-1b/`: `check.log`, `unit.log`, `tests-before.json`, `tests-after.json`, `browser-results.json`, `after-desktop.png`, `after-width-1280.png`, `after-width-390.png`, `after-width-320.png` a snímky sdílených stránek. Tyto soubory nejsou veřejně hostované ani součástí PR.
+
+### PR base, workflow a CI
+
+Remote ověřen jako zadaný soukromý GitHub repozitář. Vzdálená `codex/justkviz-event-management` je stále přesně `456f3eb62d5c52841afc3f055159711f279d11d3`; navržený PR diff je proto totožný s diffem úklidu proti předanému základu. `main` by navíc přibalil 26 nesouvisejících commitů a není vhodnou base. Před publikací nebylo pro pracovní větev žádné existující PR.
+
+Přečteny workflow na pracovní, cílové i výchozí větvi, relevantní package skripty, lokální emulator guard a Git hooky; vzdálené workflow na cílové větvi mají stejná Git blob SHA jako lokální soubory. Bez reusable workflow, workflow_run/pull_request_target, deploy kroku, cloudových credentials, secrets nebo id-token oprávnění; deklarované Firebase testy používají pouze localhost emulátory a demo projekty. Žádný aktivní lokální Git hook ani repository webhook nebyl nalezen.
+
+**CI: NEOVĚŘENO — pro tento PR se automaticky nespouští.** Hlavní workflow reaguje na push jen do main a na PR do vyjmenovaných větví, mezi kterými `codex/justkviz-event-management` chybí. Operátorské workflow nesplňuje path filtr tohoto diffu. Žádné z nich nemá workflow_dispatch. Starší zelené běhy nejsou výsledkem tohoto HEAD. Konečné SHA, odkaz na Draft PR a přesný stav vzdálených kontrol patří do popisu PR a závěrečného předání.
+
+Závěr: **připraveno pouze k dalšímu review**. Před samostatným rozhodnutím o staging nasazení chybí dostupné CI pro správnou base a přesný commit. Workflow ani cílová větev nebyly upraveny za účelem obejití této mezery. Etapa 1B povoluje pouze standardní push pracovní větve a Draft PR; merge, deploy, Firebase operace a kontakt s V1 nejsou součástí tohoto kroku.
