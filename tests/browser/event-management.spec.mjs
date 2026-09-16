@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { editorIdentity } from '../e2e/editor-identity.mjs';
 import { syntheticImage, syntheticAudio } from '../e2e/media-fixture.mjs';
 const origin = process.env.EVENT_QA_ORIGIN ?? (process.env.EVENT_QA_STAGING ? 'https://filmovy-kviz-v2-staging.web.app' : 'http://127.0.0.1:5198');
@@ -32,7 +32,7 @@ test('normal UI: create, edit, two-window conflict, team, cancellation, archive,
     const oldLink=await publicPage.getByRole('link',{name:'Spravovat registraci'}).getAttribute('href');await publicPage.goto(origin+'/events/'+eventId);await publicPage.getByLabel('Název týmu *',{exact:true}).fill('QA opožděný tým');await publicPage.getByLabel(/^Počet členů/).fill('2');await publicPage.getByLabel('E-mail *',{exact:true}).fill('qa-stale@example.test');
     await page.goto('/admin/events/'+eventId); await menu('Zrušit akci'); await page.getByRole('dialog').getByLabel('Soukromý důvod zrušení').fill('Soukromá QA poznámka'); await page.getByRole('dialog').getByLabel('Zpráva pro veřejnost (volitelné)').fill('QA akce se nekoná.'); await expect(page.getByRole('dialog').getByRole('button', { name: 'Zrušit akci', exact: true })).toBeEnabled(); await page.screenshot({ path: screenshots + '/cancel-dialog.png' });
     if(person.rawCall) {
-      const [registration] = await Promise.all([person.rawCall('createEventRegistration',{eventId,teamName:'QA souběh',memberCount:2,contactEmail:'qa-race@example.test',requestKey:randomUUID()+randomUUID()},null),confirm('Zrušit akci')]);
+      const [registration] = await Promise.all([person.rawCall('createEventRegistration',{eventId,teamName:'QA souběh',memberCount:2,contactEmail:'qa-race@example.test',requestKey:randomBytes(32).toString('base64url')},null),confirm('Zrušit akci')]);
       if(!registration.data.error) expectedTeams++;
       else expect(['FAILED_PRECONDITION','ABORTED']).toContain(registration.data.error.status);
       const afterCancel=person.digest(await person.readRaw('events/'+eventId));
@@ -58,7 +58,7 @@ test('normal UI: create, edit, two-window conflict, team, cancellation, archive,
     }
     await confirm('Trvale smazat'); await expect(page).toHaveURL(/\/admin\/events$/);
     expect((await person.db.doc('events/' + eventId).get()).exists).toBe(false); expect((await person.db.doc('events/' + eventId).listCollections()).length).toBe(0); expect((await person.db.doc('eventTombstones/' + eventId).get()).exists).toBe(true);
-    if(person.rawCall) { expect(deletionRequest).toBeTruthy(); const replies=await Promise.all([person.call('deleteEvent',deletionRequest),person.call('deleteEvent',deletionRequest)]);expect(replies[0]).toEqual(replies[1]);person.evidence('deletion-noop',{eventId,repeated:true,children:0}); }
+    if(person.rawCall) { expect(deletionRequest).toBeTruthy(); await person.reauthenticate(); const replies=await Promise.all([person.call('deleteEvent',deletionRequest),person.call('deleteEvent',deletionRequest)]);expect(replies[0]).toEqual(replies[1]);person.evidence('deletion-noop',{eventId,repeated:true,children:0}); }
   } finally {
     if (eventId) { await person.db.recursiveDelete(person.db.doc('events/' + eventId)); await person.db.doc('publicEvents/' + eventId).delete(); }
     await context.close(); await person.dispose();

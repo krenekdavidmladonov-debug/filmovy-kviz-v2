@@ -69,7 +69,8 @@ export async function cloudQaIdentity() {
     ok(await request(base+'/memberships/'+uid+'?currentDocument.exists=false',{fields:fields({...grant,uid,email,displayName:'QA Event management',status:'active',version:1,sessionValidAfter:0})},'PATCH'),'Create isolated QA grant');
     const r=await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key='+encodeURIComponent(config.apiKey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password,returnSecureToken:true})}); const login=await r.json();assert(r.ok&&login.localId===uid);token=login.idToken;
   } catch(e) { report.errors.push('setup failed'); if (accountCreated) { await request(base+'/memberships/'+uid,undefined,'DELETE'); await request(auth+'/accounts:delete',{localId:uid}); } save();throw e; }
-  return { uid,email,password,origin:`https://${project}.web.app`,call,rawCall,prove,patchMembership,digest,readRaw,
+  async function reauthenticate() { const r=await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key='+encodeURIComponent(config.apiKey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password,returnSecureToken:true})});const login=await r.json();assert(r.ok&&login.localId===uid);token=login.idToken; }
+  return { uid,email,password,reauthenticate,origin:`https://${project}.web.app`,call,rawCall,prove,patchMembership,digest,readRaw,
     evidence(label, data) { assert(/^[a-z-]+$/.test(label)); report[label]=data;save(); },
     async deletionFault(eventId, clear = false) {
       assert(eventIds.has(eventId)); const p='events/'+eventId+'/scores/qa-fault/unknown/qa';validPath(p);
