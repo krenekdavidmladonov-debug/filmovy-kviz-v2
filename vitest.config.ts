@@ -17,6 +17,7 @@ export default defineConfig({
       'tests/quizRepair.test.ts',
       'tests/events.test.ts', 'tests/eventManagement.test.ts',
       'tests/eventsFormFixture.test.ts',
+      'tests/historicalResults.test.ts', 'tests/historicalResultsUi.test.tsx',
       'tests/printCenter.test.ts',
       'tests/printCenterSecurity.test.ts',
       'tests/registrations.test.ts',

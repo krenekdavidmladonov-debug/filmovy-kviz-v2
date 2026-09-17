@@ -53,6 +53,11 @@ const AdminEventScoringPage = lazy(async () => {
   return { default: module.AdminEventScoringPage };
 });
 
+const AdminEventResultsPage = lazy(async () => {
+  const module = await import('../routes/admin/AdminEventResultsPage');
+  return { default: module.AdminEventResultsPage };
+});
+
 const AdminEventsPage = lazy(async () => {
   const module = await import('../routes/admin/AdminEventsPage');
   return { default: module.AdminEventsPage };
@@ -119,6 +124,7 @@ export const router = createBrowserRouter([
           { path: 'events', element: <LazyAdminRoute><PermissionGate requires={['event.read']}><AdminEventsPage /></PermissionGate></LazyAdminRoute> },
           { path: 'events/new', element: <LazyAdminRoute><PermissionGate requires={['event.create']}><AdminEventCreatePage /></PermissionGate></LazyAdminRoute> },
           { path: 'events/:eventId/scoring', element: <LazyAdminRoute><PermissionGate requires={['event.read']}><AdminEventScoringPage /></PermissionGate></LazyAdminRoute> },
+          { path: 'events/:eventId/results', element: <LazyAdminRoute><PermissionGate requires={['event.read']}><AdminEventResultsPage /></PermissionGate></LazyAdminRoute> },
           { path: 'events/:eventId', element: <LazyAdminRoute><PermissionGate requires={['event.read']}><AdminEventDetailPage /></PermissionGate></LazyAdminRoute> },
           { path: 'events/:eventId/print', element: <LazyAdminRoute><PermissionGate requires={['event.export']}><AdminPrintCenterPage /></PermissionGate></LazyAdminRoute> },
           { path: 'events/:eventId/registrations', element: <LazyAdminRoute><PermissionGate requires={['event.contacts']}><AdminEventRegistrationsPage /></PermissionGate></LazyAdminRoute> },
