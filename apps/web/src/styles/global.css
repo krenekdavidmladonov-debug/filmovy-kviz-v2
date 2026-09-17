@@ -493,6 +493,9 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
 .admin-brand > span:last-child { min-width: 0; display: grid; gap: 2px; }
 .admin-brand strong { overflow: hidden; color: var(--color-text); font-size: .8rem; letter-spacing: .08em; text-overflow: ellipsis; white-space: nowrap; }
 .admin-brand small { color: var(--color-text-subtle); font-size: .72rem; }
+.admin-brand-group { min-width: 0; display: grid; justify-items: start; gap: var(--space-2); }
+.admin-environment-label { padding: 3px 8px; border: 1px solid var(--color-border-strong); border-radius: var(--radius-pill); color: var(--color-text-muted); font-size: .75rem; line-height: 1.4; }
+.admin-environment-note { margin: 0 0 var(--space-6); color: var(--color-text-muted); font-size: .875rem; line-height: 1.5; }
 .admin-navigation { display: grid; gap: var(--space-1); }
 .admin-nav-link {
   padding: 10px 12px;
@@ -556,6 +559,23 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
 .recent-quiz-list small,
 .recent-quiz-list time { color: var(--color-text-subtle); font-size: .75rem; }
 .dashboard-empty { max-width: 680px; display: grid; gap: var(--space-3); }
+
+/* Compact overview only; the editor and other section headings keep their layout. */
+.admin-content:has(.admin-dashboard) { padding-top: var(--space-8); }
+.admin-dashboard { gap: var(--space-6); }
+.dashboard-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.dashboard-heading h1 { font-size: clamp(1.8rem, 3vw, 2.25rem); line-height: 1.15; }
+.dashboard-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.admin-dashboard :is(.primary-link, .secondary-link) { min-height: 44px; padding: 10px 16px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-md); font-size: .9rem; line-height: 1.4; text-align: center; }
+.admin-dashboard .surface-card { min-width: 0; padding: var(--space-6); }
+.admin-dashboard .surface-card h2 { font-size: 1.4rem; line-height: 1.3; overflow-wrap: anywhere; }
+.admin-dashboard .surface-card p { margin: 0; }
+.admin-dashboard .continue-card .eyebrow { margin-bottom: var(--space-1); }
+.admin-dashboard .continue-card .primary-link { margin-top: var(--space-2); }
+.admin-dashboard .recent-card { align-content: start; }
+.admin-dashboard .recent-card .card-meta { margin-top: var(--space-1); }
+.admin-dashboard .recent-quiz-list strong { white-space: normal; overflow-wrap: anywhere; }
+.admin-dashboard .recent-quiz-list time { flex-shrink: 0; }
 
 .human-error {
   padding: var(--space-4);
@@ -970,7 +990,7 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
 .live-preview-message p { margin: 0; color: var(--color-text-muted); }
 
 @media (max-width: 1080px) {
-  .admin-shell { grid-template-columns: 1fr; }
+  .admin-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .admin-sidebar { display: none; }
   .admin-mobile-header {
     min-height: 64px;
@@ -1024,6 +1044,10 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
   .section-count { width: fit-content; }
   .surface-card { padding: var(--space-4); }
   .recent-quiz-list a { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .admin-content:has(.admin-dashboard) { padding-top: var(--space-5); }
+  .dashboard-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-actions :is(.primary-link, .secondary-link) { width: 100%; }
+  .admin-dashboard .surface-card { padding: var(--space-4); }
   .focused-live-shell { width: calc(100% - 16px); }
   .focused-live-header { padding: var(--space-2); gap: var(--space-2); }
   .live-title-context h1 { max-width: 220px; font-size: 1rem; }
