@@ -147,3 +147,30 @@ Proti výchozímu HEAD etapy 1C se mění pouze jeden řádek workflow a tento r
 **Výsledek běhu se při tomto commitu nepředjímá.** Konečné HEAD, run URL/ID, událost, výsledky jednotlivých kroků a skutečný checkout SHA budou doplněny do popisu Draft PR a závěrečného předání, bez následného dokumentačního commitu. Případný dočasný merge checkout musí mít jako rodiče ověřenou base a přesný aktuální HEAD. Předchozí neověřené oblasti zůstávají platné, dokud konkrétní dokončený test nedoloží opak; cloudová aplikace a skutečná cloudová data jsou nadále mimo rozsah.
 
 Tato změna opravuje spouštění kontrol; nepovoluje merge ani nasazení. PR zůstává Draft, bez auto-merge, bez změny base, bez přístupu k Firebase cloudu a bez kontaktu s V1.
+
+## Etapa 1D — aktualizace zastaralých E2E očekávání
+
+Před změnou znovu ověřen čistý worktree, lokální i vzdálený HEAD `4db0d9f74bcfaaedb4ae272123dfd20dda17c255` a nezměněná base `456f3eb62d5c52841afc3f055159711f279d11d3` na `codex/justkviz-event-management`. PR #33 zůstává Draft. Historický [CI běh 35148215586](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/actions/runs/35148215586) skutečně selhal na dvou odkazech „Otevřít knihovnu“ v complete-editor; testoval dočasný merge checkout `819114078e8f2190b5a7cf63aafd90de4b52b465`, nikoli jinou pracovní větev.
+
+| Soubor a scénář | Oprava a zachovaný účel |
+| --- | --- |
+| `tests/browser/complete-editor.spec.mjs`: entire quiz from empty library… | Globální link „Otevřít knihovnu“ nahrazen přesným linkem „Kvízy“ uvnitř přesně pojmenované navigace „Akce přehledu“. Test stále začíná přihlášením a přehledem, kliká v hlavním přehledu a pokračuje knihovnou. |
+| Tentýž soubor: minimal quiz authored through UI… | Stejná oprava; následné vytvoření, persistence, rehearsal a porovnání s live streamem zůstávají nedotčené. |
+| `tests/browser/events-form-ux.spec.ts`: both forms visual contract, 1280/1024/390 px | Původní text „STAGING — pouze syntetická testovací data“ nahrazen přesným viditelným „Testovací verze“ a přesným viditelným upozorněním „Pro zkoušení používejte pouze smyšlená data.“ v `main` / `note`. Stále se ověřuje označení prostředí i omezení dat; rozměry a screenshotová očekávání zůstávají stejné. |
+
+Oba navigační testy navíc ověřují právě jeden nalezený odkaz, `href=/admin/quizzes` a URL po skutečném kliknutí. Sidebar má jinou sémantickou navigaci „Administrace“, a proto nemůže být zvolen omylem. Nevznikly žádné nové first/last/nth, force click, náhradní goto, mocky ani pomocná vrstva. Všechny původní funkční assertions a kroky jsou zachovány. Cílený scan browser testů a souvisejících helperů již nenašel další očekávání odstraněných UI textů; konfigurace stagingových QA nástrojů nejsou zastaralé popisky a nebyly dotčeny.
+
+Cílené nezávislé read-only review obou testových diffů: **bez nálezů**. Původně nalezené další textové očekávání ve formulářových testech bylo opraveno v povoleném rozsahu. Samostatná předexistující nekompatibilita jeho fixture harnessu zůstává níže výslovně oddělena.
+
+### Lokální výsledky před commitem
+
+- **PASS:** oba původní complete-editor scénáře v plném rozsahu, 2/2 za přibližně 1,5 minuty, Node 22.23.2, Java 21, původní produkční Vite build a původní Playwright konfigurace. Spuštění přes `firebase emulators:exec --only auth,firestore,functions,storage --project demo-filmovy-kviz-v2`, bez importu dat, s izolovanou CLI konfigurací; reálné Auth/API emulátory, nikoli nový fixture náhled. Emulátory se po testu ukončily.
+- **PASS:** první scénář skutečně vytvořil 17 otázek, skončil se třemi koly a 27 uloženými slidy, prošel 26 přechody zkoušky i detail akce; druhý potvrdil čtyři uložené slidy proti zkoušce a live streamu. Oba bez page errors. Důkazy jsou v `.local-data/complete-editor/evidence.json` a `minimal-practice.json`.
+- **PASS:** `pnpm check` (typecheck/lint/build), `pnpm test:unit` — 41 souborů / 377 testů, `node --check` a `git diff --check`. Discovery, timeouty, retries, výkonové limity, vizuální baseline, závislosti a runtime konfigurace se nemění.
+- **FAIL, předexistující samostatný harness:** cílený `events-form-ux` scénář 1280×720 skončil na původním čekání na „Název akce“, ještě před změněnými assertions upozornění. Přímá browser diagnostika stejného lokálního harnessu doložila `can is not a function` a prázdné tělo stránky. Původní `events-form-ux.mocks.ts` již v base nevrací `can`, zatímco AdminShell jej používá. Nové textové assertions jsou proto běhově **NEOVĚŘENO**; zbývajících pět scénářů této sady se neopakovalo. Harness ani Auth mock se neopravují, protože nejde o přejmenování UI a sada není v hlavním CI. Nejmenší samostatný další zásah je obnovit kompatibilitu tohoto existujícího harnessu s Auth rozhraním a znovu ověřit jeho scénáře.
+
+Logy a diagnostický snímek jsou pouze místní pod `.local-data/ui-cleanup/review-1d/`: `editor.log`, `check.log`, `unit.log`, `forms.log`, `forms-diagnostic.json` a `forms-diagnostic.png`; původní Playwright error context zůstává v `.local-data/events-form-ux/results/`. Nejsou publikovány ani commitovány.
+
+Etapa 1D mění pouze dva uvedené testové soubory a tento report. Aplikace, CSS, workflow, Rules, data model, guardy, konfigurace i závislosti jsou proti výchozímu HEAD beze změny. Testovací cesty neodpovídají path filtru operátorského workflow; existující hlavní CI nadále testuje celý PR na lokálních demo emulátorech.
+
+Konečné HEAD, nový CI run a jeho skutečný checkout budou po dokončení zaznamenány do popisu PR a závěrečného předání bez dodatečného dokumentačního commitu. Do té doby nejsou navazující boundaries, performance, dark-theme ani event-management kontroly vydávány za PASS. Nasazená aplikace a cloudový upload médií zůstávají mimo rozsah a neověřené.

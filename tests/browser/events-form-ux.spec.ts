@@ -50,7 +50,10 @@ for (const [width, height] of [[1280, 720], [1024, 768], [390, 844]]) {
       await page.goto('/admin/events/' + route);
       const field = page.getByLabel('Název akce');
       await expect(field).toBeVisible();
-      await expect(page.getByText('STAGING — pouze syntetická testovací data')).toBeVisible();
+      await expect(page.getByText('Testovací verze', { exact: true }).filter({ visible: true })).toBeVisible();
+      const environmentNote = page.getByRole('main').getByRole('note');
+      await expect(environmentNote).toHaveText('Pro zkoušení používejte pouze smyšlená data.');
+      await expect(environmentNote).toBeVisible();
       const size = await field.boundingBox();
       expect(size!.height).toBe(46);
       expect(size!.width).toBeGreaterThan(width === 390 ? 250 : 600);

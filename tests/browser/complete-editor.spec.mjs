@@ -24,7 +24,12 @@ test('entire quiz from empty library through normal UI, private drafts, structur
   try {
     expect((await identity.db.collection('quizzes').get()).size).toBe(0);
     await page.goto('/admin/login');await page.getByLabel('E-mail').fill(identity.email);await page.getByLabel('Heslo').fill(identity.password);await page.getByRole('button',{name:'Přihlásit se'}).click();await expect(page).toHaveURL(/\/admin$/);
-    await page.getByRole('link',{name:'Otevřít knihovnu',exact:true}).click();await expect(page.getByRole('heading',{name:'Zatím tu nejsou žádné kvízy'})).toBeVisible();await page.screenshot({path:dir+'/01-empty-library.png'});
+    const libraryLink = page.getByRole('navigation', { name: 'Akce přehledu', exact: true }).getByRole('link', { name: 'Kvízy', exact: true });
+    await expect(libraryLink).toHaveCount(1);
+    await expect(libraryLink).toHaveAttribute('href', '/admin/quizzes');
+    await libraryLink.click();
+    await expect(page).toHaveURL(/\/admin\/quizzes$/);
+    await expect(page.getByRole('heading',{name:'Zatím tu nejsou žádné kvízy'})).toBeVisible();await page.screenshot({path:dir+'/01-empty-library.png'});
     await page.getByRole('link',{name:'+ Nový kvíz',exact:true}).first().click();await page.getByLabel('Název kvízu').fill('Celý syntetický kvíz');await page.getByRole('button',{name:'Vytvořit',exact:true}).click();await expect(page).toHaveURL(/\/edit$/);quizId=page.url().split('/').at(-2);
     await expand(page,'Výchozí vzhled');await link(page,'Výchozí pozadí','http://127.0.0.1:5198/qa.png');await page.getByLabel('Výchozí rozložení obrázku').selectOption('stacked');await save(page);expect((await identity.db.doc('quizzes/'+quizId).get()).get('defaultAppearance')).toMatchObject({imageLayout:'stacked',backgroundImage:'http://127.0.0.1:5198/qa.png'});
     await page.getByRole('button',{name:'Úvodní obrazovka',exact:false}).click();await page.getByLabel('Název na úvodní obrazovce').fill('Syntetický filmový večer');await page.getByLabel('Podtitulek').fill('Tři kola vytvořená běžným UI');await save(page);
@@ -102,7 +107,11 @@ test('minimal quiz authored through UI rehearses exactly the persisted live stre
     await page.getByLabel('Heslo').fill(identity.password);
     await page.getByRole('button', { name: 'Přihlásit se' }).click();
     await expect(page).toHaveURL(/\/admin$/);
-    await page.getByRole('link', { name: 'Otevřít knihovnu', exact: true }).click();
+    const libraryLink = page.getByRole('navigation', { name: 'Akce přehledu', exact: true }).getByRole('link', { name: 'Kvízy', exact: true });
+    await expect(libraryLink).toHaveCount(1);
+    await expect(libraryLink).toHaveAttribute('href', '/admin/quizzes');
+    await libraryLink.click();
+    await expect(page).toHaveURL(/\/admin\/quizzes$/);
     await page.getByRole('link', { name: '+ Nový kvíz', exact: true }).first().click();
     await page.getByLabel('Název kvízu').fill('Minimální syntetický kvíz');
     await page.getByRole('button', { name: 'Vytvořit', exact: true }).click();
