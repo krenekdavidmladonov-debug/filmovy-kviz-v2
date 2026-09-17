@@ -222,3 +222,53 @@ Nejmenší další zásah: samostatně sladit existující event datový fixture
 Formulářová sada **není součástí hlavního CI**. Workflow se nerozšiřuje. Nový hlavní CI běh pro konečný commit, jeho checkout a vztah k HEAD/base budou zaznamenány v PR a závěrečném předání bez následného dokumentačního commitu. Změněné testové cesty neodpovídají filtru druhého operátorského workflow; oba workflow a jejich bezpečný demo/emulator režim jsou nezměněné.
 
 Stav formulářového cíle zůstává **nedokončený kvůli samostatnému event fixture**. Není doložena připravenost k rozhodnutí o nasazení; cloudový upload a nasazená aplikace zůstávají neověřené. Bez merge, auto-merge, změny base, force push, deploye, Firebase cloudového přístupu a kontaktu s V1.
+
+## Etapa 1F — úplné datové fixtures a revizní cyklus
+
+Výchozí HEAD `6c599c44373b5aa4abd081b76acdbe66f7529194`, base `456f3eb62d5c52841afc3f055159711f279d11d3`, čistý worktree a Draft PR #33 byly ověřeny. Po prvním lokálním ověření se práce zastavila na předexistujícím chybném očekávání revize. Uživatel následně výslovně schválil přesnou opravu 3 → 1 a doplnění kontrol celého revizního cyklu; dosavadní datový diff byl zachován. Níže jsou výsledky opakovaného ověření konečného testového kódu.
+
+Chybějící scoring skutečně porušoval platný kontrakt. `EventRecord` jej vyžaduje a skutečný `mapEvent` neúplné scoring odmítá; fallback v aplikaci by závadu pouze skryl. Další opravená data zahrnují počty účastníků, stav a publikování registrací, úplné odpovědi mutací, pražský čas a nepřiřazený kvíz jako vynechanou volitelnou vlastnost.
+
+| Změněný soubor | Vazba na etapu 1F |
+| --- | --- |
+| `tests/browser/events-form-ux.data.ts` | Malá typovaná factory celého `EventRecord` a stav pro jedinou syntetickou akci. Používá skutečnou výchozí scoring konfiguraci, čistý validátor a `pragueInstant`. |
+| `tests/browser/events-form-ux.mocks.ts` | Napojení načtení a zápisů na tento stav, typy skutečných API, úplné mutation envelopes, věrný záznam volání/odpovědí/načtených dat, chybové odpovědi bez zápisu a prázdný seznam přístupů rozhodčích. Auth profil zůstává nezměněný. |
+| `tests/browser/events-form-ux.spec.ts` | Jediná schválená oprava původního očekávání vstupní revize 3 → 1 a cílené kontroly vytvoření 1, aktualizace 2 a opětovného načtení 2 v prvním scénáři. Ostatní scénáře beze změny. |
+| `apps/web/events-form-ux.vite.mjs` | Pouze izolovaný testovací resolver: přesný import API z `RefereeAccessPanel` směřuje do fixture. Skutečná komponenta zůstává zachována; produkční build tuto konfiguraci nepoužívá. |
+| `tests/eventsFormFixture.test.ts` | Devět cílených datových regresních kontrol ve vlastním souboru. |
+| `vitest.config.ts` | Jediný nový řádek explicitního seznamu pro uvedený soubor; ostatní discovery a nastavení beze změn. |
+| `docs/UI_CLEANUP_01.md` | Toto předání skutečných výsledků a blokujícího rozporu. |
+
+Detail používá samostatný seed revize 2 se stavem `draft`. Vytvoření začíná bez uložené akce, vrací `EventMutationResponse` se stavy `scheduled` a revizí 1; následný `getEvent` vrací úplný mapovaný `EventRecord`. Aktualizace přijímá aktuální revizi, zachovává neformulářová data a vrací novou revizi. Formulářové transportní klíče se neukládají. Čtení klonuje vnořená data a stav se nesdílí mezi stránkami/scénáři. Syntetické selhání zápisu zachovává původní data i chybovou cestu formuláře. Seznam rozhodčích je legitimně prázdné `Access[]` pro akci bez vydaných přístupů; jiné operace explicitně selžou. Quiz seznam/detail mají původní prázdné odpovědi příslušných typů; oprávnění admina jejich načtení v těchto scénářích nevyžadují.
+
+### A. Celá původní formulářová sada
+
+| Původní scénář | Viewport | Výsledek | Retry |
+| --- | --- | --- | --- |
+| create and edit preserve the form contract and revision | 1280×720 | PASS: úplný revizní cyklus 1 → 2 a opětovné načtení. | 0 |
+| save errors retain values and native constraints prevent invalid submissions | 1280×720 | PASS | 0 |
+| moderator stays read-only | 1280×720 | PASS | 0 |
+| both forms visual contract 1280x720 | 1280×720 | PASS | 0 |
+| both forms visual contract 1024x768 | 1024×768 | PASS | 0 |
+| both forms visual contract 390x844 | 390×844 | PASS | 0 |
+
+Celkem **6 PASS / 0 FAIL / 0 SKIP**, bez retries, runtime chyb nebo požadavků mimo přesný lokální preview origin. Trace pro všech šest scénářů dokládá **89/89 provedených assertions PASS** včetně diagnostických hooků. Každý vizuální scénář provedl všech devět původních kontrol na vytvoření i detailu, včetně textu „Testovací verze“, přesného upozornění na smyšlená data, rozměrů, overflow a klávesnicového focusu. Původní funkční kontroly vytvoření, pending stavu, navigace, editace, negativních vstupů a read-only moderátora zůstávají zachovány.
+
+**Zdůvodnění schválené opravy:** skutečné `functions/src/events/callables.ts` vytváří a vrací revizi 1. `AdminEventCreatePage` přejde na detail, který pouze načítá data; `AdminEventDetailPage` při editaci předává `event.revision` do `eventApi.updateEvent` jako `expectedRevision`. První aktualizace tedy musí poslat 1 a dostane 2; potvrzuje to i stávající `tests/e2e/events-emulator.mjs`. Historické očekávání 3 v prvním scénáři vzniklo tím, že starý mock při vytváření chybně upravoval seed revize 2. Opraveno je pouze toto konkrétní očekávání vstupního požadavku, nikoli jiné revize v testech.
+
+První browser scénář nyní ověřuje načtenou novou akci s revizí 1, přesný update požadavek s revizí 1, skutečné odpovědi create/update s revizemi 1/2 a automatické načtení uloženého názvu s revizí 2. Následný návrat historií na `/admin/events/new` a vpřed na detail znovu připojí skutečnou komponentu a provede další repository čtení: formulář zachová upravený název a načtená akce revizi 2. Nejde o úplný reload browser dokumentu; stav izolovaného fixture žije po dobu stránky. Kontrola nezměněných vstupních volání dokládá, že při tomto opětovném načtení neproběhla další create/update mutace. Diagnostické logy kopírují skutečně vrácené hodnoty a stav neřídí.
+
+### B. Regresní testy a lokální kontrola
+
+- Nová datová sada: **9/9 PASS**. Ověřuje skutečný mapper/validátor včetně tří neplatných scoring vstupů, úplné create/update odpovědi a opětovné načtení, revize, zachování ostatních polí, pražský letní/zimní čas, selhání bez zápisu, nezávislé objekty a ID přístupů rozhodčích.
+- Cílený běh datové a stávající access sady: **19/19 PASS**; dosavadní Auth testy zachovány.
+- `pnpm check`: **PASS**, typová kontrola, lint a produkční build. Testovací fixture řetězce nejsou ve výstupu aplikace.
+- `pnpm test:unit`: **42 souborů / 392 testů PASS**, proti 383 je to právě 9 nových případů v jednom souboru.
+- Nezávislé read-only review datového diffu a následné cílené review schválené opravy/nových kontrol revize: **bez nálezů**. Reviewer potvrdil skutečný backend/aplikační kontrakt, absenci mezimutace a odstranění původního blockeru. Neměnil soubory a nespouštěl testy.
+- Důkazy konečného běhu zůstávají lokální a ignorované pod `.local-data/ui-cleanup/review-1f/final/`: `contract.log`, `check.log`, `unit.log`, `forms.log`, `forms.json`, `forms-summary.json` a `forms-results` s trace/screenshoty. Původní neúspěšný běh zůstává odděleně v nadřazeném adresáři. Důkazy se neuploadují do PR.
+
+### C. Hlavní Quality gate a předání
+
+Lokální formulářový blocker je odstraněn. Konečný commit zahrne celý dosavadní datový diff i schválenou opravu a kontroly revize. Nový hlavní CI běh se nepředjímá: jeho úplný výsledek, konečné HEAD, base, run URL, skutečný checkout SHA a vztah případného merge ref k HEAD/base budou zapsány do PR a závěrečného předání bez následného dokumentačního commitu. Předchozí [CI 35197252108](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/actions/runs/35197252108) není ověřením nového kódu. Samostatná formulářová sada nadále není součástí hlavního CI.
+
+Obě workflow jsou beze změny; nové cesty neodpovídají path filtrům operátorského workflow. PR zůstává Draft se stejnou base. Žádný merge, auto-merge, force push, deploy, Firebase cloudový přístup ani kontakt s V1. Nasazená aplikace a cloudový upload médií zůstávají mimo rozsah a neověřené.
