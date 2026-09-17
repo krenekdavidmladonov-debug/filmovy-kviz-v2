@@ -6,6 +6,7 @@ on:
       - main
   pull_request:
     branches:
+      - codex/historical-final-results
       - codex/owner-takeover
       - codex/justkviz-event-management
       - codex/justkviz-ui-cleanup-01
