@@ -1,4 +1,27 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+const diagnostics = new WeakMap<Page, { pageErrors: string[]; blockedRequests: string[] }>();
+test.beforeEach(async ({ context, page }) => {
+  const evidence = { pageErrors: [] as string[], blockedRequests: [] as string[] };
+  diagnostics.set(page, evidence);
+  page.on('pageerror', error => evidence.pageErrors.push(error.stack ?? error.message));
+  // Only the existing local preview may serve this fixture; no Auth/API traffic escapes.
+  await context.route('**/*', async route => {
+    if (new URL(route.request().url()).origin === 'http://127.0.0.1:5188') await route.continue();
+    else { evidence.blockedRequests.push(route.request().url()); await route.abort('blockedbyclient'); }
+  });
+  await context.routeWebSocket('**/*', socket => {
+    if (new URL(socket.url()).origin === 'ws://127.0.0.1:5188') socket.connectToServer();
+    else { evidence.blockedRequests.push(socket.url()); void socket.close(); }
+  });
+});
+test.afterEach(async ({ page }, testInfo) => {
+  const evidence = diagnostics.get(page)!;
+  await testInfo.attach('runtime-and-network', { body: JSON.stringify({ ...evidence, viewport: page.viewportSize(), retry: testInfo.retry }, null, 2), contentType: 'application/json' });
+  if (testInfo.status !== testInfo.expectedStatus) await testInfo.attach('failure-screen', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
+  expect.soft(evidence.pageErrors, 'Unhandled browser errors').toEqual([]);
+  expect.soft(evidence.blockedRequests, 'Unexpected traffic outside the isolated preview').toEqual([]);
+});
 
 test('create and edit preserve the form contract and revision', async ({ page }) => {
   await page.goto('/admin/events/new');

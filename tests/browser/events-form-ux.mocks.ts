@@ -1,9 +1,11 @@
 import type { EventFormValues } from '../../apps/web/src/features/events/types';
+import { createEventFormAuth } from './events-form-ux.auth';
 
 declare global { interface Window { uxCalls: unknown[]; } }
 window.uxCalls = [];
 const params = new URLSearchParams(window.location.search);
-export const useAuth = () => ({ role: params.get('role') ?? 'admin', currentUser: { email: 'staff@example.test' }, signOut: () => Promise.resolve() });
+const auth = createEventFormAuth(params.get('role'));
+export const useAuth = () => auth;
 let record = { id: 'synthetic-event', title: 'Syntetická testovací akce', startsAt: new Date('2030-10-20T17:00:00Z'),
   venue: { name: 'Testovací sál', publicLocation: 'Testovací lokalita' }, timeZone: 'Europe/Prague',
   teamCapacity: 20, peopleCapacity: 120, teamSizeMin: 2, teamSizeMax: 6, acceptedTeams: 0,

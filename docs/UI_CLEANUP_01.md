@@ -174,3 +174,51 @@ Logy a diagnostický snímek jsou pouze místní pod `.local-data/ui-cleanup/rev
 Etapa 1D mění pouze dva uvedené testové soubory a tento report. Aplikace, CSS, workflow, Rules, data model, guardy, konfigurace i závislosti jsou proti výchozímu HEAD beze změny. Testovací cesty neodpovídají path filtru operátorského workflow; existující hlavní CI nadále testuje celý PR na lokálních demo emulátorech.
 
 Konečné HEAD, nový CI run a jeho skutečný checkout budou po dokončení zaznamenány do popisu PR a závěrečného předání bez dodatečného dokumentačního commitu. Do té doby nejsou navazující boundaries, performance, dark-theme ani event-management kontroly vydávány za PASS. Nasazená aplikace a cloudový upload médií zůstávají mimo rozsah a neověřené.
+
+## Etapa 1E — oprava Auth fixture a oddělené výsledky formulářů
+
+Výchozí lokální/vzdálené HEAD `9e5aa2e8e0723f7065d2daaa0f4f06302bf9c053`, base `456f3eb62d5c52841afc3f055159711f279d11d3`, čistý worktree a Draft PR #33 byly znovu ověřeny. Předchozí hlavní [CI 35192104663](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/actions/runs/35192104663) skutečně prošlo všech 25 definovaných kroků; tento historický PASS není výsledkem nového commitu.
+
+Příčinu `can is not a function` potvrzuje původní runtime diagnostika a chybějící vlastnosti v `tests/browser/events-form-ux.mocks.ts`. Vite resolver v `apps/web/events-form-ux.vite.mjs` používá tuto náhradu pouze v samostatném formulářovém náhledu. Produkční sestavení ji neimportuje.
+
+| Změněný soubor | Vazba na opravu |
+| --- | --- |
+| `tests/browser/events-form-ux.auth.ts` | Čistý testovací Auth profil typovaný přes `ReturnType` skutečného `useAuth` (pouze type import); kompletní uživatel, členství, loading/error stav a metody bez skutečného přihlášení. |
+| `tests/browser/events-form-ux.mocks.ts` | Původní neúplný Auth objekt nahrazen tímto profilem; event data a API náhrady se nemění. |
+| `tests/accessPermissions.test.ts` | Šest nových cílených případů v existující objevené unit sadě, bez změny discovery. |
+| `tests/browser/events-form-ux.spec.ts` | Pouze kontrolní before/after hooky: HTTP/WS allowlist přesného lokálního originu, runtime a síťové důkazy, assertions na nulové chyby/provoz mimo náhled. Těla šesti původních scénářů zachována. |
+| `docs/UI_CLEANUP_01.md` | Toto předání výsledků a samostatné překážky. |
+
+`can` používá původní čisté `hasPermission` a podmínku aktivního členství. Výchozí admin má membership `manager` a pouze `event.read/create/manage`; moderátor pouze `event.read`. Neudělují se práva vlastníka, mazání, uživatelů, kontaktů ani kvízů. Event scope je omezen na `synthetic-event`, quiz scope je prázdný. Neznámý profil, neznámé/chybějící oprávnění i neaktivní členství se odmítají. Skutečné credential operace explicitně selžou lokálně; fixture nevrací použitelné tokeny. Unit testy ověřují povolené i zakázané akce, scope, konzistenci identity/stavu a odmítnutí Auth operací. Žádné `any`, potlačení typů, změna PermissionGate nebo nový autorizační systém.
+
+### A. Původní formulářová sada — samostatný lokální výsledek
+
+Nejprve spuštěn původně padající scénář 1280×720, poté všech šest scénářů přes původní Playwright/Vite konfiguraci a skutečné komponenty. Po opravě importu helperu do kořenové testovací složky je výsledný kód ověřen následujícím úplným během. Nastavení runneru, timeouty, retries, runtime verze a původní assertions zůstávají stejné; příkaz pouze ukládá JSON a trace pro diagnostiku.
+
+| Původní scénář | Viewport | Výsledek a místo selhání | Retry |
+| --- | --- | --- | --- |
+| create and edit preserve the form contract and revision | 1280×720 | FAIL: vytvoření a přechod na detail proběhnou, ale pole na detailu není dostupné pro původní `toHaveValue`. | 0 |
+| save errors retain values and native constraints prevent invalid submissions | 1280×720 | FAIL: detail se nevykreslí, čekání na vyplnění názvu dosáhne původního 30s timeoutu. | 0 |
+| moderator stays read-only | 1280×720 | FAIL: detail se nevykreslí, chybí původně očekávaný nadpis. | 0 |
+| both forms visual contract 1280x720 | 1280×720 | FAIL: všechny kontroly vytvoření projdou, poté chybí pole názvu na detailu. | 0 |
+| both forms visual contract 1024x768 | 1024×768 | FAIL: všechny kontroly vytvoření projdou, poté chybí pole názvu na detailu. | 0 |
+| both forms visual contract 390x844 | 390×844 | FAIL: všechny kontroly vytvoření projdou, poté chybí pole názvu na detailu. | 0 |
+
+Celkem **0 PASS / 6 FAIL / 0 SKIP**, každý scénář spuštěn jednou v úplném běhu bez retry. Cílený běh 1280×720 má stejnou závadu. Ve všech šesti runtime důkazech je již jiná konkrétní chyba: `TypeError: Cannot read properties of undefined (reading 'started')`. Původní `can` chyba se neopakuje. Potvrzená příčina: datový `record` v původním fixture neobsahuje povinné `scoring`, zatímco `AdminEventDetailPage` čte `event.scoring.started`. Tato nekompatibilita event dat není Auth kontrakt, proto se podle rozsahu zadání neopravuje. Testy ani aplikace se jí nepřizpůsobují.
+
+Nová očekávání „Testovací verze“ a upozornění na smyšlená data byla skutečně provedena a prošla na formuláři vytvoření ve všech třech viewports, spolu s jeho původními rozměrovými a klávesnicovými kontrolami. Na detailu zůstávají neověřena kvůli uvedenému pádu. Runtime chyby nejsou potlačeny: nové kontrolní hooky je navíc vykazují jako chybu. Síťové důkazy všech šesti případů mají nulový provoz mimo přesný lokální preview origin. Přihlašování ani Firebase cloud nebyly použity.
+
+Nejmenší další zásah: samostatně sladit existující event datový fixture s aktuálním `EventRecord`, počínaje chybějícím `scoring`, zachovat assertions a znovu spustit všech šest scénářů. Staticky identifikovaný RefereeAccessPanel může po odstranění pádu zkusit vlastní API mimo původní aliasy; případný další běh jej musí nadále blokovat a vyhodnotit, nikoli maskovat úspěšnou odpovědí.
+
+### B. Ostatní kontroly a předání
+
+- Nezávislé cílené read-only review Auth kontraktu, oprávnění, zachování původních scénářů a rozsahu diffu: **bez nálezů**. Reviewer strojově potvrdil nezměněná těla scénářů a odstranění type-only Auth importu při transpilaci.
+- `pnpm check`: **PASS**, včetně typové kontroly helperu, lintu a produkčního buildu; fixture v produkčním výstupu nenalezena.
+- Cílená access unit sada: **10/10 PASS**, z toho **6 nových případů** Auth fixture.
+- `pnpm test:unit`: **41 souborů / 383 testů PASS**.
+- `pnpm test:rules`: **44/44 PASS**, čerstvý lokální Firestore emulátor `demo-filmovy-kviz-v2`, následně ukončen.
+- Logy, JSON výsledky, runtime/network přílohy, screenshoty a trace pro všech šest případů zůstávají pod ignorovaným `.local-data/ui-cleanup/review-1e/`; nejsou commitovány ani uploadovány do PR.
+
+Formulářová sada **není součástí hlavního CI**. Workflow se nerozšiřuje. Nový hlavní CI běh pro konečný commit, jeho checkout a vztah k HEAD/base budou zaznamenány v PR a závěrečném předání bez následného dokumentačního commitu. Změněné testové cesty neodpovídají filtru druhého operátorského workflow; oba workflow a jejich bezpečný demo/emulator režim jsou nezměněné.
+
+Stav formulářového cíle zůstává **nedokončený kvůli samostatnému event fixture**. Není doložena připravenost k rozhodnutí o nasazení; cloudový upload a nasazená aplikace zůstávají neověřené. Bez merge, auto-merge, změny base, force push, deploye, Firebase cloudového přístupu a kontaktu s V1.
