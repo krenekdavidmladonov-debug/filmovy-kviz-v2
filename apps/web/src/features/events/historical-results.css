@@ -1,0 +1,11 @@
+.historical-results table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.historical-results caption { text-align: left; font-weight: 700; margin: 1rem 0; }
+.historical-results th, .historical-results td { text-align: left; padding: .85rem .5rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+.historical-results th:first-child, .historical-results td:first-child { width: 4.5rem; }
+.historical-results th:last-child, .historical-results td:last-child { width: 4rem; text-align: right; font-variant-numeric: tabular-nums; }
+.historical-results tbody th { overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .historical-results th, .historical-results td { padding: .75rem .25rem; }
+  .historical-results th:first-child, .historical-results td:first-child { width: 3.5rem; }
+  .historical-results th:last-child, .historical-results td:last-child { width: 3rem; }
+}

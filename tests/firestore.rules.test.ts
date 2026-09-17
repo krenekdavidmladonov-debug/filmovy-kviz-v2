@@ -350,6 +350,48 @@ describe('interim result versions and publication authority', () => {
   }
 });
 
+describe('completed event history with event.read only', () => {
+  const eventId = 'history-event', sessionPath = 'sessions/history-session', versionPath = `${sessionPath}/finalVersions/confirmed`;
+  async function historyFixture() {
+    await testEnvironment.withSecurityRulesDisabled(async context => {
+      const db = context.firestore();
+      await setDoc(doc(db, `events/${eventId}`), { lifecycleStatus: 'completed', createdBy: 'other' });
+      await setDoc(doc(db, sessionPath), { eventId, status: 'ended', finalReveal: { versionId: 'confirmed' } });
+      await setDoc(doc(db, versionPath), { rows: [{ rank: 1, teamName: 'Historical team', halfPoints: 19 }] });
+      await setDoc(doc(db, 'memberships/history-reader'), { uid: 'history-reader', status: 'active', version: 1, sessionValidAfter: 0,
+        permissions: ['event.read'], events: { mode: 'selected', ids: [eventId] }, quizzes: { mode: 'none', ids: [] } });
+    });
+    return testEnvironment.authenticatedContext('history-reader', { email_verified: true, auth_time: 2000000000 }).firestore();
+  }
+  test('scoped event reader can read completed history but cannot mutate or publish it', async () => {
+    const db = await historyFixture();
+    await assertSucceeds(getDoc(doc(db, sessionPath)));
+    await assertSucceeds(getDoc(doc(db, versionPath)));
+    for (const path of [sessionPath, versionPath, `${sessionPath}/finalOperations/forged`, `publicSessions/history-session`, `events/${eventId}/scores/forged`]) {
+      await assertFails(setDoc(doc(db, path), { forged: true }));
+      await assertFails(deleteDoc(doc(db, path)));
+    }
+    await assertFails(getDoc(doc(db, `${sessionPath}/finalOperations/receipt`)));
+    await assertFails(getDoc(doc(db, privateQuizPath)));
+  });
+  test.each(['other-scope', 'missing-permission', 'revoked', 'trash'])('history is denied for %s', async scenario => {
+    const db = await historyFixture();
+    await testEnvironment.withSecurityRulesDisabled(async context => {
+      const store = context.firestore();
+      if (scenario === 'other-scope') await updateDoc(doc(store, 'memberships/history-reader'), { events: { mode: 'selected', ids: ['other'] } });
+      if (scenario === 'missing-permission') await updateDoc(doc(store, 'memberships/history-reader'), { permissions: [] });
+      if (scenario === 'revoked') await updateDoc(doc(store, 'memberships/history-reader'), { status: 'revoked' });
+      if (scenario === 'trash') await updateDoc(doc(store, `events/${eventId}`), { disposition: 'trash' });
+    });
+    await assertFails(getDoc(doc(db, versionPath)));
+  });
+  test('anonymous and unprivileged identities cannot read a known historical version', async () => {
+    await historyFixture();
+    await assertFails(getDoc(doc(testEnvironment.unauthenticatedContext().firestore(), versionPath)));
+    await assertFails(getDoc(doc(testEnvironment.authenticatedContext('unknown', { email_verified: true, auth_time: 2000000000 }).firestore(), versionPath)));
+  });
+});
+
 describe('owned quiz asset metadata', () => {
   for (const role of [null, 'user', 'moderator', 'admin']) {
     test('server-only immutable metadata and staff-only reads: ' + String(role), async () => {

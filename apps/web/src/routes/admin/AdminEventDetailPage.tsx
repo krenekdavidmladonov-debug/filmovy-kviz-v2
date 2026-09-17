@@ -140,6 +140,12 @@ export function AdminEventDetailPage() {
         setValues(merged); setEvent(latest); setConflict(false); setNotice(conflicting.length ? 'Před uložením potvrďte svůj návrh u shodně změněných polí: ' + conflicting.join('; ') : 'Vaše změny byly přeneseny do aktuální verze. Ostatní novější údaje zůstaly zachované. Zkontrolujte formulář a uložte.'); setError(null);  } }); }}>Načíst aktuální stav a ponechat formulář</button></section>}
       {notice && <p className="event-notice" role="status">{notice}</p>}
 
+      {!hidden && can('event.read') && event.lifecycleStatus === 'completed' && <section className="event-section">
+        <div className="event-section-heading"><div><p className="eyebrow">Dokončená akce</p><h2>Konečné výsledky</h2></div></div>
+        <p className="event-muted">Potvrzené konečné pořadí této akce, pouze pro čtení.</p>
+        <Link className="secondary-link" to={`/admin/events/${event.id}/results`}>Otevřít konečné výsledky</Link>
+      </section>}
+
       {!hidden && can('event.contacts') && <section className="event-section">
         <div className="event-section-heading"><div><p className="eyebrow">Registrace</p><h2>Týmy a kapacita</h2></div><span>{event.acceptedTeams} / {event.teamCapacity} týmů</span></div>
         <p className="event-muted">Registrační okno, souhrn osob a privátní kontakty týmů.</p>
