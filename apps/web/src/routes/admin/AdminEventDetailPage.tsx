@@ -4,7 +4,7 @@ import { teamEmailEnabled } from '../../features/events/teamEmailCapability';
 import { EventLiveButton } from '../../features/leaderboard/EventLiveButton';
 import { RefereeAccessPanel } from '../../features/referee/RefereeAccessPanel';
 import { runQuizPreflight, type EditorQuiz, type PreflightResult } from '@filmovy-kviz/quiz-domain';
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
@@ -54,6 +54,8 @@ export function AdminEventDetailPage() {
   const [event, setEvent] = useState<EventRecord | null>(null);
   const [values, setValues] = useState<EventFormValues | null>(null);
   const [quizzes, setQuizzes] = useState<readonly QuizSummary[]>([]);
+  const [quizzesLoading, setQuizzesLoading] = useState(false);
+  const [quizzesError, setQuizzesError] = useState(false);
   const [selectedQuizId, setSelectedQuizId] = useState('');
   const [selectedQuiz, setSelectedQuiz] = useState<EditorQuiz | null>(null);
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
@@ -65,40 +67,61 @@ export function AdminEventDetailPage() {
   const [conflict, setConflict] = useState(false);
   const [addingTeam, setAddingTeam] = useState(false);
   const [addedTeam, setAddedTeam] = useState<{ id: string; name: string } | null>(null);
+  const loadVersion = useRef(0);
+  const quizEditable = !loading && event?.id === eventId && event !== null && canChooseQuiz
+    && eventOperational(event) && !event.liveSessionId && !event.scoring.started;
 
   const load = useCallback(async () => {
     if (!eventId) return;
+    const version = ++loadVersion.current;
     setLoading(true);
     setError(null);
     try {
-      const [loadedEvent, loadedQuizzes] = await Promise.all([getEvent(eventId), canChooseQuiz ? listQuizzes() : Promise.resolve([])]);
+      const loadedEvent = await getEvent(eventId);
+      if (version !== loadVersion.current) return;
       setEvent(loadedEvent);
       setValues(loadedEvent ? formValues(loadedEvent) : null);
-      setQuizzes(loadedQuizzes);
       if (loadedEvent?.quizAssignment) {
         setSelectedQuizId((current) => current === '' ? loadedEvent.quizAssignment?.quizId ?? '' : current);
       }
     } catch {
-      setError('Detail akce se nepodařilo načíst.');
+      if (version === loadVersion.current) setError('Detail akce se nepodařilo načíst.');
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
-  }, [eventId, canChooseQuiz]);
+  }, [eventId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    setEvent(null);
+    setSelectedQuizId('');
+    void load();
+    return () => { loadVersion.current++; };
+  }, [load]);
+  useEffect(() => {
+    let current = true;
+    setQuizzes([]);
+    setQuizzesError(false);
+    setQuizzesLoading(quizEditable);
+    if (quizEditable) {
+      void listQuizzes().then(items => { if (current) setQuizzes(items); })
+        .catch(() => { if (current) setQuizzesError(true); })
+        .finally(() => { if (current) setQuizzesLoading(false); });
+    }
+    return () => { current = false; };
+  }, [quizEditable, eventId]);
   useEffect(() => {
     let current = true;
     setAcknowledgeWarnings(false);
     setPreflight(null);
     setSelectedQuiz(null);
-    if (!canChooseQuiz || selectedQuizId === '' || !quizzes.some(quiz => quiz.id === selectedQuizId)) return () => { current = false; };
+    if (!quizEditable || selectedQuizId === '' || !quizzes.some(quiz => quiz.id === selectedQuizId)) return () => { current = false; };
     void getEditorQuiz(selectedQuizId).then((quiz) => {
       if (!current || quiz === null) return;
       setSelectedQuiz(quiz);
       setPreflight(runQuizPreflight(quiz));
     }).catch(() => { if (current) setError('Vybraný kvíz se nepodařilo načíst.'); });
     return () => { current = false; };
-  }, [selectedQuizId, canChooseQuiz, quizzes]);
+  }, [selectedQuizId, quizEditable, quizzes]);
 
   const runAction = async (action: () => Promise<unknown>, success: string) => {
     setPending(true);
@@ -116,7 +139,7 @@ export function AdminEventDetailPage() {
     }
   };
 
-  if (loading) return <QuizLoading label="Načítám detail akce…" />;
+  if (loading || (event !== null && event.id !== eventId)) return <QuizLoading label="Načítám detail akce…" />;
   if (error && event === null) return <QuizErrorState message={error} onRetry={() => void load()} />;
   if (!event || !values) return <section className="quiz-state-card"><div><h2>Akce neexistuje</h2><p>Požadovaný záznam nebyl nalezen.</p></div><Link className="secondary-link" to="/admin/events">Zpět na akce</Link></section>;
 
@@ -171,9 +194,11 @@ export function AdminEventDetailPage() {
       <section className="event-section" data-testid="event-quiz-assignment">
         <div className="event-section-heading"><div><p className="eyebrow">Kvíz</p><h2>{locked ? 'Kvíz připraven' : 'Vybrat kvíz'}</h2></div>{locked && <span>Zdrojová revize {locked.quizRevision}</span>}</div>
         {locked && <div className="event-locked-quiz"><strong>{locked.quizTitle}</strong><span>{locked.roundCount} kol · {locked.questionCount} otázek</span><small>Snapshot je privátní a nemění se při dalších úpravách zdrojového kvízu.</small></div>}
-        {canChooseQuiz && eventOperational(event) && !event.liveSessionId && !event.scoring.started ? (
+        {quizEditable ? (
           <div className="event-quiz-lock">
-            <label className="editor-field"><span>{locked ? 'Aktualizovat kvíz pro akci' : 'Kvíz'}</span><select value={selectedQuizId} onChange={(change) => setSelectedQuizId(change.target.value)}><option value="">Vyberte kvíz</option>{quizzes.map((quiz) => <option value={quiz.id} key={quiz.id}>{quiz.title}</option>)}</select></label>
+            {quizzesLoading && <p role="status">Načítám nabídku kvízů…</p>}
+            {quizzesError && <p role="alert">Nabídku kvízů se nepodařilo načíst. <button type="button" className="secondary-button" onClick={() => void load()}>Zkusit znovu</button></p>}
+            <label className="editor-field"><span>{locked ? 'Aktualizovat kvíz pro akci' : 'Kvíz'}</span><select disabled={quizzesLoading || quizzesError} value={selectedQuizId} onChange={(change) => setSelectedQuizId(change.target.value)}><option value="">Vyberte kvíz</option>{quizzes.map((quiz) => <option value={quiz.id} key={quiz.id}>{quiz.title}</option>)}</select></label>
             {selectedQuiz && preflight && <div className={`event-readiness status-${preflight.status.toLowerCase()}`} data-preflight-status={preflight.status}><strong>{selectedQuiz.title}</strong><span>{preflight.roundCount} kol · {preflight.questionCount} otázek</span><p>{preflight.blockerCount > 0 ? `${preflight.blockerCount} blockerů brání přípravě.` : preflight.warningCount > 0 ? `${preflight.warningCount} upozornění vyžaduje potvrzení.` : 'Kvíz je připraven bez blockerů.'}</p>{preflight.blockerCount > 0 && <Link className="secondary-link" to={`/admin/quizzes/${selectedQuiz.id}/readiness`}>Otevřít kontrolu kvízu</Link>}{preflight.warningCount > 0 && preflight.blockerCount === 0 && <label className="warning-confirmation"><input type="checkbox" checked={acknowledgeWarnings} onChange={(change) => setAcknowledgeWarnings(change.target.checked)} /> Potvrzuji upozornění pro tuto revizi kvízu.</label>}</div>}
             <button className="primary-button" type="button" disabled={lockDisabled} onClick={() => {
               if (!selectedQuiz) return;
