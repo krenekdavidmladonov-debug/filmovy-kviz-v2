@@ -6,6 +6,12 @@ Evidence: repository review plus isolated local emulator/browser audit; no produ
 
 Date: 2026-09-02
 
+## Confirmed owner workflow — 2026-09-18
+
+This administration is primarily for its owner, with at most three users initially. Prioritize direct, intuitive daily work and few steps. Do not add screens, modes or settings to support speculative organizational complexity. This preference does not relax authorization or data protections.
+
+Question ordering belongs directly in the existing editor's left outline; a separate storyboard was explicitly rejected. Section colors supplement labels: gold for the quiz library, teal for events, violet for the editor. Keep native scrolling and keyboard focus usable. Event actions should be compact and consistently styled, with destructive actions and unavailable reasons readable.
+
 ## Classification
 
 - **CONFIRMED PRODUCT REQUIREMENT** — explicit product constraint or confirmed behavior.
