@@ -66,7 +66,7 @@ test('real editor controls, modal focus, media and light content remain separate
     expect(changedContentPixels).toBe(0);
     await override.evaluate(el=>el.remove());
     expect(await slide.locator('.slide-background img').evaluate(el=>getComputedStyle(el).filter)).toBe('none');
-    await page.getByLabel('Otázka *',{exact:true}).fill('QA neuložená změna');await page.getByRole('button',{name:'Nastavení kola',exact:true}).click();
+    await page.getByLabel('Otázka *',{exact:true}).fill('QA neuložená změna');await page.getByRole('button',{name:'Zahodit změny…',exact:true}).click();
     const dialog=page.getByRole('dialog',{name:'Máte neuložené změny.'});await expect(dialog).toBeVisible();await expect(dialog.getByRole('button',{name:'Zrušit',exact:true})).toBeFocused();await audit(page,'unsaved-dialog');
     expect(await dialog.evaluate(el=>el.matches(':modal'))).toBe(true);
     const tabOrder=[];
@@ -78,7 +78,7 @@ test('real editor controls, modal focus, media and light content remain separate
       expect(focus.inside||focus.browserChrome).toBe(true);if(focus.inside)tabOrder.push(focus.text);
     }
     expect(tabOrder.slice(0,3)).toEqual(['Uložit a pokračovat','Pokračovat bez uložení','Zrušit']);
-    await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(page.getByLabel('Otázka *',{exact:true})).toHaveValue('QA neuložená změna');await expect(page.getByRole('button',{name:'Nastavení kola',exact:true})).toBeFocused();
+    await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(page.getByLabel('Otázka *',{exact:true})).toHaveValue('QA neuložená změna');await expect(page.getByRole('button',{name:'Zahodit změny…',exact:true})).toBeFocused();
     await writeFile(dir+'/measurements.json',JSON.stringify({status:'PASS',measurements,contentPixelsIdentical:true,nativeModalBackgroundInert:true,tabOrder,escapePreservesDraft:true,focusReturned:true},null,2));
   } finally {if(quizId)await identity.db.recursiveDelete(identity.db.doc('quizzes/'+quizId));await identity.dispose();}
 });
