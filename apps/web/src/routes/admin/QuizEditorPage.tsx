@@ -15,6 +15,7 @@ import {
   SystemSectionForm,
 } from '../../features/editor/EditorForms';
 import { EditorOutline } from '../../features/editor/EditorOutline';
+import { moveOutlineQuestion } from '../../features/editor/outlineMoves';
 import {
   createQuizSlide,
   createQuizRound,
@@ -177,7 +178,7 @@ export function QuizEditorPage() {
   const handledDeepLink = useRef<string | undefined>(undefined);
   const loadGeneration = useRef(0);
   const dirty = dirtySlide || dirtyQuiz || dirtyRound || Object.keys(parked).length > 0;
-  const blocker = useBlocker(dirty || uploading);
+  const blocker = useBlocker(dirty || uploading || saving);
   const semantic = useMemo(() => quiz === null ? null : buildSemanticQuizModel(quiz), [quiz]);
   const selectedRoundForDraft = semantic === null ? undefined : roundForSelection(selectedKey, semantic)
     ?? (selectedKey === 'draft' ? semantic.rounds.find((round) => round.id === draft?.roundId) : undefined);
@@ -327,7 +328,7 @@ export function QuizEditorPage() {
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if (!dirty && !uploadPending.current) return;
+      if (!dirty && !uploadPending.current && !savePending.current) return;
       event.preventDefault();
     };
     window.addEventListener('beforeunload', warn);
@@ -448,7 +449,8 @@ export function QuizEditorPage() {
   }
 
   async function mutate(action: (current: EditorQuiz) => Promise<{ readonly selectedSlideId?: string }>, preferredKey?: string): Promise<boolean> {
-    if (quiz === null || readOnly || dirty || uploadPending.current) return false;
+    if (quiz === null || readOnly || dirty || uploadPending.current || savePending.current) return false;
+    savePending.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -459,8 +461,23 @@ export function QuizEditorPage() {
       requestAnimationFrame(() => errorRef.current?.focus());
       return false;
     } finally {
+      savePending.current = false;
       setSaving(false);
     }
+  }
+
+  async function moveInOutline(id: string, roundId: string | undefined, beforeId?: string): Promise<boolean> {
+    if (quiz === null || readOnly || dirty || uploadPending.current || savePending.current) return false;
+    savePending.current = true; setSaving(true); setError(null);
+    try {
+      await moveOutlineQuestion(quiz, id, roundId, beforeId);
+      return await reload(`slide:${id}`) !== null;
+    } catch (moveError) {
+      // Several revision-protected steps may have succeeded; read the actual order.
+      await reload(`slide:${id}`);
+      setError('Přesun nebyl dokončen. Některé kroky už mohou být uložené. ' + safeErrorMessage(moveError));
+      return false;
+    } finally { savePending.current = false; setSaving(false); }
   }
 
   if (loading && quiz === null) return <QuizLoading label="Načítám editor kvízu…" />;
@@ -565,6 +582,7 @@ export function QuizEditorPage() {
           selectedKey={selectedKey}
           activeDraft={draft}
           disabled={structuralDisabled}
+          onMove={moveInOutline}
           pickerRoundId={pickerRoundId}
           onSelect={select}
           onOpenPicker={setPickerRoundId}

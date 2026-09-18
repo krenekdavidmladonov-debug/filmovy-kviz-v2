@@ -58,3 +58,19 @@
  .editor-panel-tabs { top:0; }
  .round-editor-save .secondary-button.draft-save-button { display:block; }
 }
+
+.outline-move-status { display:block; padding:0 16px; font-size:.75rem; }
+.outline-move-status:empty { display:none; }
+.outline-round li[data-question-id] { position:relative; }
+.outline-round li[draggable="true"] .outline-question { cursor:grab; }
+.outline-round li.drag-source { opacity:.35; }
+.outline-round li.drop-before::before, .outline-round li.drop-after::after { content:""; position:absolute; left:4px; right:4px; height:3px; background:var(--color-focus); z-index:4; pointer-events:none; border-radius:3px; }
+.outline-round li.drop-before::before { top:0; }
+.outline-round li.drop-after::after { bottom:0; }
+.outline-drop-end { margin:4px 8px; padding:8px; border:1px dashed var(--color-border-strong); border-radius:6px; font-size:.75rem; color:var(--color-text-muted); }
+.outline-drop-end.drop-active { border-color:var(--color-focus); background:var(--color-surface-elevated); }
+.editor-outline.is-dragging { overscroll-behavior:contain; }
+/* Reserve the drop slot so starting a drag never moves the target rows. */
+.outline-drop-end { height:22px; box-sizing:border-box; margin:0 8px; padding:2px 4px; border-color:transparent; }
+.editor-outline.is-dragging .outline-drop-end { border-color:var(--color-border-strong); }
+.editor-outline.is-dragging .outline-drop-end.drop-active { border-color:var(--color-focus); }

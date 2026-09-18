@@ -25,8 +25,7 @@ async function waitForCallable(page: Page, callableName: string, action: () => P
   const response = page.waitForResponse((candidate) => (
     candidate.request().method() === 'POST' && candidate.url().endsWith(`/europe-west1/${callableName}`)
   ));
-  await action();
-  await response;
+  await Promise.all([response, action()]);
 }
 
 async function selectOnlyQuestion(page: Page): Promise<ReturnType<Page['getByLabel']>> {
