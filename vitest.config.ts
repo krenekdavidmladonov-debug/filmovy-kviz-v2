@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: [
-      'tests/editorWorkingCopy.test.ts', 'tests/storyboardMoves.test.ts',
+      'tests/editorWorkingCopy.test.ts', 'tests/outlineMoves.test.ts',
       'tests/adminNavigation.test.tsx', 'tests/eventDetailLoading.test.tsx',
       'tests/accessDeploymentManifest.test.ts', 'tests/accessPermissions.test.ts', 'tests/darkTheme.test.ts', 'tests/branding.test.tsx', 'tests/adminDashboard.test.tsx',
       'tests/quizModel.test.ts', 'tests/mediaAuthoring.test.ts', 'tests/mediaStorage.test.ts', 'tests/ownedMediaComponents.test.tsx',

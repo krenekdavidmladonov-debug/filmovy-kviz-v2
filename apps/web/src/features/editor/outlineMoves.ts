@@ -2,7 +2,7 @@ import { moveQuizQuestionToRound, reorderQuizQuestion } from './editorApi';
 import type { EditorQuiz } from './types';
 
 /** Existing revision-checked operations; abort on the first unacknowledged write. */
-export async function moveStoryboardQuestion(quiz: EditorQuiz, id: string, targetRoundId: string | undefined, beforeId?: string) {
+export async function moveOutlineQuestion(quiz: EditorQuiz, id: string, targetRoundId: string | undefined, beforeId?: string) {
   const source = quiz.slides.find(slide => slide.id === id && slide.isQuestion);
   if (!source || beforeId === id) return;
   const target = quiz.slides.filter(slide => slide.isQuestion && slide.roundId === targetRoundId && slide.id !== id).sort((a, b) => a.position - b.position);

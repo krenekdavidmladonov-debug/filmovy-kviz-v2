@@ -15,8 +15,7 @@ import {
   SystemSectionForm,
 } from '../../features/editor/EditorForms';
 import { EditorOutline } from '../../features/editor/EditorOutline';
-import { EditorStoryboard } from '../../features/editor/EditorStoryboard';
-import { moveStoryboardQuestion } from '../../features/editor/storyboardMoves';
+import { moveOutlineQuestion } from '../../features/editor/outlineMoves';
 import {
   createQuizSlide,
   createQuizRound,
@@ -157,7 +156,6 @@ export function QuizEditorPage() {
   const parkedRef = useRef<EditorEntries>({});
   const setParked = useCallback((entries: EditorEntries) => { parkedRef.current = entries; setParkedState(entries); }, []);
   const savePending = useRef(false);
-  const [storyboardOpen, setStoryboardOpen] = useState(false);
   const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null);
   const [pendingSelection, setPendingSelection] = useState<string | null>(null);
   const [removeRound, setRemoveRound] = useState<SemanticRound | null>(null);
@@ -468,11 +466,11 @@ export function QuizEditorPage() {
     }
   }
 
-  async function moveInStoryboard(id: string, roundId: string | undefined, beforeId?: string): Promise<boolean> {
+  async function moveInOutline(id: string, roundId: string | undefined, beforeId?: string): Promise<boolean> {
     if (quiz === null || readOnly || dirty || uploadPending.current || savePending.current) return false;
     savePending.current = true; setSaving(true); setError(null);
     try {
-      await moveStoryboardQuestion(quiz, id, roundId, beforeId);
+      await moveOutlineQuestion(quiz, id, roundId, beforeId);
       return await reload(`slide:${id}`) !== null;
     } catch (moveError) {
       // Several revision-protected steps may have succeeded; read the actual order.
@@ -572,19 +570,7 @@ export function QuizEditorPage() {
         </div>
       )}
 
-      <nav className="editor-view-switch" aria-label="Zobrazení editoru">
-        <button type="button" aria-pressed={!storyboardOpen} onClick={() => setStoryboardOpen(false)}>Úpravy</button>
-        <button type="button" aria-pressed={storyboardOpen} onClick={() => setStoryboardOpen(true)}>Storyboard</button>
-      </nav>
-      {storyboardOpen && <EditorStoryboard quiz={preflightQuiz ?? quiz} selectedId={draft?.id}
-        changedIds={new Set([...Object.values(parked).filter(entry => entry.dirtySlide || entry.dirtyRound).flatMap(entry => entry.draft ? [entry.draft.id] : []), ...(dirtySlide || dirtyRound ? [draft?.id ?? ''] : [])])}
-        disabled={structuralDisabled} onMove={moveInStoryboard}
-        onSelect={id => {
-          const section = semantic.introduction.find(item => item.slide?.id === id);
-          select(pendingCreate !== null && draft?.id === id ? selectedKey : section ? `system:${section.key}` : selectionForSlide(id, semantic));
-          setStoryboardOpen(false); setActivePanel('content');
-        }} />}
-      {!storyboardOpen && <><nav className="editor-panel-tabs" aria-label="Část editoru">
+      <nav className="editor-panel-tabs" aria-label="Část editoru">
         <button type="button" className={activePanel === 'structure' ? 'active' : ''} onClick={() => setActivePanel('structure')}>Struktura</button>
         <button type="button" className={activePanel === 'content' ? 'active' : ''} onClick={() => setActivePanel('content')}>Obsah</button>
         <button type="button" className={activePanel === 'preview' ? 'active' : ''} onClick={() => setActivePanel('preview')}>Náhled</button>
@@ -596,6 +582,7 @@ export function QuizEditorPage() {
           selectedKey={selectedKey}
           activeDraft={draft}
           disabled={structuralDisabled}
+          onMove={moveInOutline}
           pickerRoundId={pickerRoundId}
           onSelect={select}
           onOpenPicker={setPickerRoundId}
@@ -688,7 +675,7 @@ export function QuizEditorPage() {
         ) : (
           <EditorPreview slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer && can('quiz.answers.read')} onShowAnswer={value => { if (can('quiz.answers.read')) setShowAnswer(value); }} />
         )}
-      </section></>}
+      </section>
     </article></MediaAuthoringContext.Provider>
   );
 }
