@@ -15,6 +15,8 @@ import {
   SystemSectionForm,
 } from '../../features/editor/EditorForms';
 import { EditorOutline } from '../../features/editor/EditorOutline';
+import { EditorStoryboard } from '../../features/editor/EditorStoryboard';
+import { moveStoryboardQuestion } from '../../features/editor/storyboardMoves';
 import {
   createQuizSlide,
   createQuizRound,
@@ -155,6 +157,7 @@ export function QuizEditorPage() {
   const parkedRef = useRef<EditorEntries>({});
   const setParked = useCallback((entries: EditorEntries) => { parkedRef.current = entries; setParkedState(entries); }, []);
   const savePending = useRef(false);
+  const [storyboardOpen, setStoryboardOpen] = useState(false);
   const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null);
   const [pendingSelection, setPendingSelection] = useState<string | null>(null);
   const [removeRound, setRemoveRound] = useState<SemanticRound | null>(null);
@@ -177,7 +180,7 @@ export function QuizEditorPage() {
   const handledDeepLink = useRef<string | undefined>(undefined);
   const loadGeneration = useRef(0);
   const dirty = dirtySlide || dirtyQuiz || dirtyRound || Object.keys(parked).length > 0;
-  const blocker = useBlocker(dirty || uploading);
+  const blocker = useBlocker(dirty || uploading || saving);
   const semantic = useMemo(() => quiz === null ? null : buildSemanticQuizModel(quiz), [quiz]);
   const selectedRoundForDraft = semantic === null ? undefined : roundForSelection(selectedKey, semantic)
     ?? (selectedKey === 'draft' ? semantic.rounds.find((round) => round.id === draft?.roundId) : undefined);
@@ -327,7 +330,7 @@ export function QuizEditorPage() {
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if (!dirty && !uploadPending.current) return;
+      if (!dirty && !uploadPending.current && !savePending.current) return;
       event.preventDefault();
     };
     window.addEventListener('beforeunload', warn);
@@ -448,7 +451,8 @@ export function QuizEditorPage() {
   }
 
   async function mutate(action: (current: EditorQuiz) => Promise<{ readonly selectedSlideId?: string }>, preferredKey?: string): Promise<boolean> {
-    if (quiz === null || readOnly || dirty || uploadPending.current) return false;
+    if (quiz === null || readOnly || dirty || uploadPending.current || savePending.current) return false;
+    savePending.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -459,8 +463,23 @@ export function QuizEditorPage() {
       requestAnimationFrame(() => errorRef.current?.focus());
       return false;
     } finally {
+      savePending.current = false;
       setSaving(false);
     }
+  }
+
+  async function moveInStoryboard(id: string, roundId: string | undefined, beforeId?: string): Promise<boolean> {
+    if (quiz === null || readOnly || dirty || uploadPending.current || savePending.current) return false;
+    savePending.current = true; setSaving(true); setError(null);
+    try {
+      await moveStoryboardQuestion(quiz, id, roundId, beforeId);
+      return await reload(`slide:${id}`) !== null;
+    } catch (moveError) {
+      // Several revision-protected steps may have succeeded; read the actual order.
+      await reload(`slide:${id}`);
+      setError('Přesun nebyl dokončen. Některé kroky už mohou být uložené. ' + safeErrorMessage(moveError));
+      return false;
+    } finally { savePending.current = false; setSaving(false); }
   }
 
   if (loading && quiz === null) return <QuizLoading label="Načítám editor kvízu…" />;
@@ -553,7 +572,19 @@ export function QuizEditorPage() {
         </div>
       )}
 
-      <nav className="editor-panel-tabs" aria-label="Část editoru">
+      <nav className="editor-view-switch" aria-label="Zobrazení editoru">
+        <button type="button" aria-pressed={!storyboardOpen} onClick={() => setStoryboardOpen(false)}>Úpravy</button>
+        <button type="button" aria-pressed={storyboardOpen} onClick={() => setStoryboardOpen(true)}>Storyboard</button>
+      </nav>
+      {storyboardOpen && <EditorStoryboard quiz={preflightQuiz ?? quiz} selectedId={draft?.id}
+        changedIds={new Set([...Object.values(parked).filter(entry => entry.dirtySlide || entry.dirtyRound).flatMap(entry => entry.draft ? [entry.draft.id] : []), ...(dirtySlide || dirtyRound ? [draft?.id ?? ''] : [])])}
+        disabled={structuralDisabled} onMove={moveInStoryboard}
+        onSelect={id => {
+          const section = semantic.introduction.find(item => item.slide?.id === id);
+          select(pendingCreate !== null && draft?.id === id ? selectedKey : section ? `system:${section.key}` : selectionForSlide(id, semantic));
+          setStoryboardOpen(false); setActivePanel('content');
+        }} />}
+      {!storyboardOpen && <><nav className="editor-panel-tabs" aria-label="Část editoru">
         <button type="button" className={activePanel === 'structure' ? 'active' : ''} onClick={() => setActivePanel('structure')}>Struktura</button>
         <button type="button" className={activePanel === 'content' ? 'active' : ''} onClick={() => setActivePanel('content')}>Obsah</button>
         <button type="button" className={activePanel === 'preview' ? 'active' : ''} onClick={() => setActivePanel('preview')}>Náhled</button>
@@ -657,7 +688,7 @@ export function QuizEditorPage() {
         ) : (
           <EditorPreview slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer && can('quiz.answers.read')} onShowAnswer={value => { if (can('quiz.answers.read')) setShowAnswer(value); }} />
         )}
-      </section>
+      </section></>}
     </article></MediaAuthoringContext.Provider>
   );
 }
