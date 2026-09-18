@@ -23,7 +23,7 @@ test('measure 60 and 180 question libraries, preview response and active players
       for(let i=0;i<(count===60?120:48);i++){
         const index=(i*17)%count;const label=labels.get(index)??'Synthetic load question '+index;start=performance.now();await page.locator('.outline-question').nth(index).click();await expect(page.getByRole('textbox',{name:'Otázka *',exact:true})).toHaveValue(label);selectionMs.push(performance.now()-start);
         start=performance.now();await page.getByRole('button',{name:'Náhled',exact:true}).click();await expect(page.locator('.round-editor-preview .slide-copy')).toContainText(label);await expect(page.locator('.round-editor-preview')).toBeVisible();previewMs.push(performance.now()-start);await page.getByRole('button',{name:'Obsah',exact:true}).click();
-        if(i%10===0){const next=label+' edit';start=performance.now();await page.getByRole('textbox',{name:'Otázka *',exact:true}).fill(next);await page.getByRole('button',{name:'Uložit',exact:true}).click();await expect(page.locator('.save-state')).toHaveText('Uloženo');saveMs.push(performance.now()-start);labels.set(index,next);}
+        if(i%10===0){const next=label+' edit';start=performance.now();await page.getByRole('textbox',{name:'Otázka *',exact:true}).fill(next);await page.getByRole('button',{name:'Uložit vše',exact:true}).click();await expect(page.locator('.save-state')).toHaveText('Uloženo');saveMs.push(performance.now()-start);labels.set(index,next);}
         expect(await page.locator('video,audio,iframe').count()).toBeLessThanOrEqual(1);
       }
       const players=await page.evaluate(()=>window.__FILMOVY_KVIZ_MEDIA_DEBUG__);expect(players.peakPlayers).toBeLessThanOrEqual(1);

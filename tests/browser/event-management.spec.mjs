@@ -72,7 +72,7 @@ test('normal UI: shared media quiz, live cancellation, completed archive and sco
   let quizId;
   const menu = async name => { await page.locator('.event-actions summary').click(); await page.locator('.event-actions').getByRole('button',{name,exact:true}).click(); };
   const confirm = async name => { const dialog=page.getByRole('dialog'); await expect(dialog.getByRole('button',{name,exact:true})).toBeEnabled();await dialog.getByRole('button',{name,exact:true}).click();await expect(dialog).toHaveCount(0); };
-  const save = async () => { await page.getByRole('button',{name:'Uložit',exact:true}).click(); await expect(page.locator('.save-state')).toHaveText('Uloženo'); };
+  const save = async () => { await page.getByRole('button',{name:'Uložit vše',exact:true}).click(); await expect(page.locator('.save-state')).toHaveText('Uloženo'); };
   async function createEvent(label) {
     await page.goto('/admin/events/new'); await page.getByLabel('Název akce',{exact:true}).fill(prefix+label);await page.getByLabel('Datum a čas v Praze').fill('2031-07-20T19:30');await page.getByLabel('Místo',{exact:true}).fill('QA sál');await page.getByLabel('Veřejné upřesnění místa').fill('Praha');await page.getByRole('button',{name:'Vytvořit akci',exact:true}).click();await expect(page.getByRole('heading',{name:'Upravit akci',exact:true})).toBeVisible();
     const id=page.url().split('/').at(-1); ids.push(id); await person.db.doc('events/'+id).get();

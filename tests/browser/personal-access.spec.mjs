@@ -29,7 +29,7 @@ test('five isolated identities: UI invitation, verified signup, scoped editor, m
     await creator.goto('/admin/quizzes'); await expect(creator.getByRole('link', { name: 'Přidělený kvíz A', exact: true })).toBeVisible(); await expect(creator.getByText('Nepřístupný kvíz B', { exact: true })).toHaveCount(0);
     await creator.goto(`/admin/quizzes/${f.quizB}/edit`); await expect(creator.getByText('Obsah nelze zobrazit', { exact: true })).toBeVisible(); await expect(creator.getByLabel('Otázka *', { exact: true })).toHaveCount(0);
     await creator.goto(`/admin/quizzes/${f.quizA}/edit`); await creator.locator('.outline-question').filter({ hasText: 'Otázka pro kolegu' }).click(); await creator.getByLabel('Otázka *', { exact: true }).fill('Upraveno pozvaným tvůrcem');
-    await creator.getByRole('button', { name: 'Uložit', exact: true }).click(); await expect(creator.locator('.save-state')).toHaveText('Uloženo'); await expect(creator.getByRole('button', { name: 'Smazat', exact: true })).toHaveCount(0);
+    await creator.getByRole('button', { name: 'Uložit vše', exact: true }).click(); await expect(creator.locator('.save-state')).toHaveText('Uloženo'); await expect(creator.getByRole('button', { name: 'Smazat', exact: true })).toHaveCount(0);
     await creator.reload(); await creator.locator('.outline-question').filter({ hasText: 'Upraveno pozvaným tvůrcem' }).click();
     const moderator = await (await context()).newPage(); await login(moderator, f.moderator); await moderator.goto(`/admin/events/${f.eventA.eventId}`);
     await expect(moderator.getByRole('heading', { name: 'Detail akce' })).toBeVisible(); await expect(moderator.getByText('Vybraný kvíz se nepodařilo načíst.')).toHaveCount(0);

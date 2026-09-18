@@ -13,7 +13,7 @@ async function audit(page,name) {
   expect(result.failures,name).toEqual([]);expect(result.horizontalOverflow,name+' overflow').toBe(false);
   await page.screenshot({path:dir+'/'+name+'.png',mask:[page.locator('.admin-account > strong')]});
 }
-const save=async page=>{await page.getByRole('button',{name:'Uložit',exact:true}).click();await expect(page.locator('.save-state')).toHaveText('Uloženo');};
+const save=async page=>{await page.getByRole('button',{name:'Uložit vše',exact:true}).click();await expect(page.locator('.save-state')).toHaveText('Uloženo');};
 
 test('fresh system-light browser starts dark before JS, refreshes dark, and supports keyboard/high contrast',async({browser})=>{
   await mkdir(dir,{recursive:true});
@@ -47,7 +47,7 @@ test('real editor controls, modal focus, media and light content remain separate
     await page.getByRole('button',{name:'+ Přidat otázku',exact:true}).click();await audit(page,'question-type-menu');await page.getByRole('dialog',{name:/Typ otázky/}).getByRole('button',{name:'ABCD',exact:true}).click();
     await page.getByLabel('Otázka *',{exact:true}).fill('QA kontrast odpovědí');for(let i=0;i<4;i++)await page.getByLabel('Možnost '+String.fromCharCode(65+i),{exact:true}).fill('QA možnost '+(i+1));await page.getByLabel('Označit možnost B jako správnou').check();await save(page);
     expect(await page.getByLabel('Označit možnost B jako správnou').isChecked()).toBe(true);
-    for(const [width,height] of [[1920,1080],[1366,768],[1024,768]]){await page.setViewportSize({width,height});await audit(page,'editor-abcd-'+width);await expect(page.getByRole('button',{name:'Uložit',exact:true})).toBeInViewport();await expect(page.getByRole('button',{name:'+ Přidat kolo',exact:true})).toBeInViewport();}
+    for(const [width,height] of [[1920,1080],[1366,768],[1024,768]]){await page.setViewportSize({width,height});await audit(page,'editor-abcd-'+width);await expect(page.getByRole('button',{name:'Uložit vše',exact:true})).toBeInViewport();await expect(page.getByRole('button',{name:'+ Přidat kolo',exact:true})).toBeInViewport();}
     await page.setViewportSize({width:1920,height:1080});await page.locator('details.editor-extra > summary').filter({hasText:'Vzhled slidu'}).click();
     const picker=page.getByRole('region',{name:'Pozadí',exact:true});await picker.getByRole('button',{name:'Vložit odkaz',exact:true}).click();await audit(page,'media-url-picker');await picker.getByRole('textbox').fill('http://127.0.0.1:5198/qa-light.png');await picker.getByRole('button',{name:'Použít odkaz'}).click();await save(page);
     const slide=page.locator('.round-editor-preview .slide-renderer');await expect(slide.locator('.slide-background img')).toBeVisible();await slide.locator('img').evaluateAll(images=>Promise.all(images.map(img=>img.decode())));
