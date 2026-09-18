@@ -19,14 +19,14 @@ test('synthetic owned image/audio upload, editor preview, immutable projector im
     await page.route('**/finalizeQuizMediaUpload',async route=>{await pendingUpload;await route.continue();});
     await page.locator('[data-preflight-field="prompt"] textarea').fill('Syntetický obrázek upravený');
     await page.getByLabel('Obrázek otázky — soubor', {exact:true}).setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:syntheticImage()});
-    await expect(page.getByRole('button',{name:'Uložit',exact:true})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'Uložit vše',exact:true})).toBeDisabled();
     await page.keyboard.press('Control+s');
     expect((await f.quizRef.collection('slides').doc(f.ids.image).get()).data().text).toBe('Syntetický obrázek');
     releaseUpload();
     await expect(page.getByText('Ověřené médium tohoto kvízu', {exact:false}).first()).toBeVisible();
     const preview=page.locator('.round-editor-preview img');
     await expect.poll(()=>preview.evaluate(img=>img.naturalWidth)).toBe(8);
-    await page.getByRole('button',{name:'Uložit',exact:true}).click();
+    await page.getByRole('button',{name:'Uložit vše',exact:true}).click();
     await expect.poll(async()=>(await f.quizRef.collection('slides').doc(f.ids.image).get()).data().questionImage).toMatch(/^quiz-asset:/);
     await expect(page.locator('.save-state')).toHaveText('Uloženo');
     phase='audio upload';console.log('Media browser: image saved');
@@ -35,7 +35,7 @@ test('synthetic owned image/audio upload, editor preview, immutable projector im
     await expect(page.getByText('Ověřené médium tohoto kvízu', {exact:false}).first()).toBeVisible();
     await page.locator('[data-preflight-field="clipStartSeconds"] input').fill('0:01');
     await page.locator('[data-preflight-field="clipEndSeconds"] input').fill('0:02');
-    await page.getByRole('button',{name:'Uložit',exact:true}).click();
+    await page.getByRole('button',{name:'Uložit vše',exact:true}).click();
     await expect.poll(async()=>(await f.quizRef.collection('slides').doc(f.ids.audio).get()).data().mediaSource).toMatch(/^quiz-asset:/);
     await expect(page.locator('.save-state')).toHaveText('Uloženo');
     await expect.poll(()=>page.locator('audio').evaluate(a=>a.readyState)).toBeGreaterThanOrEqual(1);

@@ -70,7 +70,7 @@ test('imported slide survives two saves and reports a stale revision without los
 
     const firstSavedText = 'První uložená změna importovaného zadání';
     await prompt.fill(firstSavedText);
-    await waitForCallable(primary, 'updateQuizSlide', () => primary.getByRole('button', { name: 'Uložit', exact: true }).click());
+    await waitForCallable(primary, 'updateQuizSlide', () => primary.getByRole('button', { name: 'Uložit vše', exact: true }).click());
     await expect(primary.locator('.save-state')).toHaveText('Uloženo');
     await primary.reload();
     prompt = await selectOnlyQuestion(primary);
@@ -78,7 +78,7 @@ test('imported slide survives two saves and reports a stale revision without los
 
     const secondSavedText = 'Druhá uložená změna importovaného zadání';
     await prompt.fill(secondSavedText);
-    await waitForCallable(primary, 'updateQuizSlide', () => primary.getByRole('button', { name: 'Uložit', exact: true }).click());
+    await waitForCallable(primary, 'updateQuizSlide', () => primary.getByRole('button', { name: 'Uložit vše', exact: true }).click());
     await expect(primary.locator('.save-state')).toHaveText('Uloženo');
     await primary.reload();
     prompt = await selectOnlyQuestion(primary);
@@ -93,10 +93,10 @@ test('imported slide survives two saves and reports a stale revision without los
     const preservedDraft = 'Rozepsaná změna ze zastaralého editoru';
     await prompt.fill(winningText);
     await competingPrompt.fill(preservedDraft);
-    await waitForCallable(primary, 'updateQuizSlide', () => primary.getByRole('button', { name: 'Uložit', exact: true }).click());
+    await waitForCallable(primary, 'updateQuizSlide', () => primary.getByRole('button', { name: 'Uložit vše', exact: true }).click());
     await expect(primary.locator('.save-state')).toHaveText('Uloženo');
 
-    await waitForCallable(competing, 'updateQuizSlide', () => competing.getByRole('button', { name: 'Uložit', exact: true }).click());
+    await waitForCallable(competing, 'updateQuizSlide', () => competing.getByRole('button', { name: 'Uložit vše', exact: true }).click());
     await expect(competing.locator('.save-state')).toHaveText('Uložení se nezdařilo');
     const error = competing.locator('.round-editor-error');
     await expect(error).toContainText('Kvíz mezitím upravil někdo jiný.');
@@ -134,7 +134,7 @@ test('library CTA creates an empty quiz and carries its first round and free que
     await page.getByRole('dialog', { name: /Typ otázky/u }).getByRole('button', { name: 'Volná odpověď' }).click();
     await page.getByLabel('Otázka *').fill(question);
     await page.getByLabel('Správná odpověď *').fill(answer);
-    await waitForCallable(page, 'createQuizSlide', () => page.getByRole('button', { name: 'Uložit', exact: true }).click());
+    await waitForCallable(page, 'createQuizSlide', () => page.getByRole('button', { name: 'Uložit vše', exact: true }).click());
     await expect(page.locator('.save-state')).toHaveText('Uloženo');
 
     await page.getByRole('link', { name: '← Knihovna kvízů' }).click();

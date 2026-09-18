@@ -6,6 +6,7 @@ on:
       - main
   pull_request:
     branches:
+      - codex/performance-navigation
       - codex/historical-final-results
       - codex/owner-takeover
       - codex/justkviz-event-management
@@ -97,7 +98,7 @@ jobs:
       - name: Editor core workflow browser E2E (local emulators only)
         run: |
           pnpm exec firebase emulators:exec --only auth,firestore,functions --project demo-filmovy-kviz-v2 "pnpm seed:auth && pnpm test:e2e:editor-core-empty-browser"
-          pnpm exec firebase emulators:exec --only auth,firestore,functions --project demo-filmovy-kviz-v2 "pnpm seed:auth && pnpm seed:quizzes && pnpm test:e2e:editor-core-browser"
+          pnpm exec firebase emulators:exec --only auth,firestore,functions --project demo-filmovy-kviz-v2 "pnpm seed:auth && pnpm seed:quizzes && pnpm test:e2e:editor-core-browser && node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/editor-save-all.config.ts"
 
       - name: Live Auth, Firestore, and Functions emulator E2E
         run: >-
