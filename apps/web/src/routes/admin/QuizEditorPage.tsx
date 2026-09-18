@@ -540,6 +540,7 @@ export function QuizEditorPage() {
       <header className="round-editor-header">
         <div className="round-editor-title">
           <Link className="back-link" to="/admin/quizzes">← Knihovna kvízů</Link>
+          <span className="editor-context-label">Editor kvízu</span>
           <strong>{title || quiz.title}</strong>
         </div>
         <div className="round-editor-save">

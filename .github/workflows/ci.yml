@@ -6,6 +6,7 @@ on:
       - main
   pull_request:
     branches:
+      - codex/editor-storyboard
       - codex/editor-save-all
       - codex/performance-navigation
       - codex/historical-final-results

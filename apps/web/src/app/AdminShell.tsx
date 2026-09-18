@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 import { useAuth } from '../auth/AuthProvider';
 import { roleLabels } from '@filmovy-kviz/quiz-domain';
@@ -21,6 +21,7 @@ function AdminNavigation() {
           key={item.to}
           to={item.to}
           end={item.end}
+          data-area={item.to === '/admin/quizzes' ? 'quizzes' : item.to === '/admin/events' ? 'events' : 'overview'}
           className={({ isActive }) => (isActive ? 'admin-nav-link active' : 'admin-nav-link')}
         >
           {item.label}
@@ -33,6 +34,8 @@ function AdminNavigation() {
 }
 
 export function AdminShell() {
+  const { pathname } = useLocation();
+  const area = pathname.startsWith('/admin/quizzes') ? 'quizzes' : pathname.startsWith('/admin/events') ? 'events' : 'overview';
   const { currentUser, membership, signOut } = useAuth();
   const [pending, setPending] = useState(false);
 
@@ -49,7 +52,7 @@ export function AdminShell() {
   const isStaging = import.meta.env.VITE_APP_ENV === 'staging';
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell" data-area={area}>
       <aside className="admin-sidebar">
         <div className="admin-brand-group">
           <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>

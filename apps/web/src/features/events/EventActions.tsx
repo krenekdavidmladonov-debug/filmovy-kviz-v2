@@ -28,7 +28,7 @@ export function EventActions({ event, onChanged }: { event: EventRecord; onChang
       {actions.map(item => {
         const permitted = can(item === 'delete' ? 'event.delete' : 'event.manage');
         const reason = !permitted ? item === 'delete' ? 'Vyžaduje samostatné právo trvalého mazání.' : 'Vyžaduje právo správy akcí.' : item === 'delete' ? null : transitionProblem({ ...event, hasActiveSession: Boolean(event.liveSessionId) && ['ready', 'live', 'finalizing'].includes(event.lifecycleStatus) }, item);
-        return <div key={item}><button type="button" disabled={Boolean(reason)} onClick={() => setAction(item)}>{disposition === 'deleting' && item === 'delete' ? 'Pokračovat v mazání' : labels[item]}</button>{reason && <small>{reason}</small>}</div>;
+        return <div key={item}><button type="button" className={['cancel', 'trash', 'delete'].includes(item) ? 'event-action-destructive' : undefined} disabled={Boolean(reason)} onClick={() => setAction(item)}>{disposition === 'deleting' && item === 'delete' ? 'Pokračovat v mazání' : labels[item]}</button>{reason && <small>{reason}</small>}</div>;
       })}
     </div></details>
     {action && <ActionDialog key={action} event={event} action={action} onClose={() => setAction(null)} onChanged={onChanged} />}
