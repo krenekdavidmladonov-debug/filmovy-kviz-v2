@@ -46,6 +46,18 @@ Workers initially had read-only scope. The documentation worker later received o
 
 Offline sync, hosted video/transcoding, and unrelated product expansion are not automatically added to the completion scope. Ask the owner only for a material unresolved product decision after checking the existing contracts.
 
+## Autonomous continuation — enabled 2026-10-12
+
+The owner requested fully independent coordination and continuation. The active in-chat heartbeat **Samostatné dokončení JustKvíz** (`samostatn-dokon-en-justkv-z`) was created with a 30-minute interval. It resumes this chat and its existing work queue; it does not create a new project or a fresh team for each tick. It must inspect current agents and working copies before assigning work to avoid duplicate activity.
+
+Within an active run the lead proceeds from task assignment through implementation, independent review, tests, and the next ready task without waiting for an owner message. Routine technical decisions and recoverable failures belong to the lead. A worker's claim of completion is accepted only after reviewing its diff and the required evidence on the actual candidate SHA. The highest model settings remain reserved for the lead; worker effort is explicitly LOW, MEDIUM, or HIGH.
+
+The current autonomous phase ends with a reviewed, locally integrated release candidate, resolved demonstrated blockers, relevant passing checks, recorded limitations, and a concrete deployment scope, rollback and smoke plan ready for approval. The heartbeat must then report the outcome and pause itself. If only a missing external access, essential product decision or approval remains and there is no useful authorized work left, it reports the exact need once and pauses instead of repeating unsuccessful attempts.
+
+Report meaningful completed steps, newly significant failures, readiness, or required owner action; do not repeat unchanged status. The owner can stop the process in this chat. Local scheduled work requires the computer to remain awake and the desktop app running; scheduling does not bypass account limits, permissions or unavailable services. See the [official scheduled-task documentation](https://learn.chatgpt.com/docs/automations).
+
+This continuation request does not approve Firebase deployment, production access/data, real email sending, or destructive actions. Prepare any required approval against a concrete reviewed result; continue independent authorized work until then.
+
 ## Validation record
 
 Candidate under local validation: `8106c4a` in the existing clean `C:\Projects\filmovy-kviz-v2\.local-data\editor-save-all` worktree. Documentation edits are on the separate coordination branch. Demo/emulator selection is explicit; no cloud deploy or real email is part of these checks.
@@ -61,4 +73,4 @@ Candidate under local validation: `8106c4a` in the existing clean `C:\Projects\f
 
 Before release, require `pnpm check`, unit tests, staging guard checks, Firestore Rules tests, relevant callable/browser tests and Storage emulator coverage for media on the same candidate. Set browser targets explicitly to loopback; use synthetic fixtures and `demo-*` projects. Significant release or persisted-model changes also require the applicable migration gate from `DEVELOPMENT_WORKFLOW.md`.
 
-This session did not inspect production, establish current staging state, configure background automation, or authorize deployment. Remaining work above is a queue, not a claim that workers continue running after a chat turn ends.
+The initial audit did not inspect production or establish current staging state. Scheduled continuation was subsequently enabled at the owner's request as recorded above; no deployment has been authorized or performed.
