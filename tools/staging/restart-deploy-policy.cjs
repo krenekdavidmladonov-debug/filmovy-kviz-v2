@@ -248,6 +248,10 @@ function install({ cli, names, checkArtifact, log, operatorEmail }) {
     // Bind the one upload capability to the exact storageSource returned by the
     // fixed project's GCF API. Do not guess managed bucket naming conventions.
     assert.equal(decodeURIComponent(url.pathname), '/' + result.storageSource.bucket + '/' + result.storageSource.object);
+    // gcp/storage.upload passes URLSearchParams to apiv2.doRequest, which uses
+    // its toString() serialization (e.g. ~ => %7E and spaces => +). Preserve
+    // every ordered pair/value while registering the same wire capability.
+    url.search = url.searchParams.toString();
     state.uploadUrls.add(url.href); state.storageSource = result.storageSource;
     return result;
   };

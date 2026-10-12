@@ -13,6 +13,7 @@ const actualGcf = cli('gcp/cloudfunctionsv2');
 const actualProjectConfig = cli('functions/projectConfig');
 const actualDiscovery = cli('deploy/functions/runtimes/discovery/v1alpha1');
 const actualExtensionsPrepare = cli('deploy/extensions/prepare');
+const actualStorage = cli('gcp/storage');
 const ActualClient = cli('apiv2').Client;
 const names = JSON.parse(readFileSync(new URL('../tools/staging/restart-release-manifest.json', import.meta.url))).functions;
 const makeEndpoint = id => ({ id, project: policy.PROJECT, region: policy.REGION, entryPoint: id, runtime: 'nodejs22', platform: 'gcfv2', codebase: 'default', targetedByOnly: true, ...(id === 'readQuizMedia' || id === 'generatePrintArtifact' ? { httpsTrigger: {} } : { callableTrigger: {} }) });
@@ -108,10 +109,10 @@ test('evidence policy binds reviewed release/receipt/target and fresh actual pau
   for (const alter of [p => p.observedAt = '2026-10-12T11:00:00Z', p => p.observedAt = '2026-10-12T12:01:00Z', p => p.accessControl.collaborationEnabled = true, p => p.accessControl.revision = 18, p => p.accessControl.updateTime = 'invalid', p => p.accessControl.updateTime = '2026-10-12T10:00:01Z', p => p.functions.pop(), p => p.functions[0].name = 'deliverEmailTask', p => p.functions[0].serviceAccount = 'foreign', p => p.checks.failuresResolved = false, p => p.releaseSha = 'a'.repeat(40)]) { const copy = structuredClone(preflight); alter(copy); assert.throws(() => policy.freshPreflight(copy, names, expectedRevision, preflight.accessControl.updateTime, now)); }
 });
 
-function harness() {
+function harness(uploadUrl = 'https://storage.googleapis.com/synthetic-managed-upload/source.zip?GoogleAccessId=synthetic&Signature=abc%2Fxyz') {
   const writes = [], logs = [], order = [], modules = {};
-  class MockClient extends ActualClient { async request(req) { writes.push(req); order.push(req.method); return { body: {} }; } }
-  const upload = { uploadUrl: 'https://storage.googleapis.com/synthetic-managed-upload/source.zip?GoogleAccessId=synthetic&Signature=abc%2Fxyz', storageSource: { bucket: 'synthetic-managed-upload', object: 'source.zip' } };
+  class MockClient extends ActualClient { async request(req) { writes.push(req); order.push(req.method); return { body: {}, response: { headers: { get: () => 'synthetic-generation' } } }; } }
+  const upload = { uploadUrl, storageSource: { bucket: 'synthetic-managed-upload', object: 'source.zip' } };
   class Fabricator {
     constructor() { this.projectId = policy.PROJECT; this.projectNumber = policy.NUMBER; }
     async applyPlan() { order.push('apply'); return { ok: true }; }
@@ -151,6 +152,32 @@ test('hooked actual planner is checked before any upload, and mutated apply plan
   assert.equal(h.writes.length, 2);
   Object.values(plan.regionalChangesets)[0].endpointsToUpdate.pop();
   await assert.rejects(new h.Fabricator().applyPlan({ default: plan }));
+});
+test('real storage upload serializes the entire signed capability exactly, preserving encoded values and duplicate pairs', async () => {
+  const original = new URL('https://storage.googleapis.com/synthetic-managed-upload/source.zip?GoogleAccessId=synthetic%40example.test&Signature=~%2B+%20%2F%3D%40&duplicate=first&duplicate=second');
+  const expected = new URL(original); expected.search = expected.searchParams.toString();
+  assert.notEqual(expected.href, original.href);
+  assert.deepEqual([...expected.searchParams], [...original.searchParams]);
+  const h = harness(original.href); await discover(h); const args = makeArgs();
+  const issued = await h.modules['deploy/functions/deploy'].deploy({ projectId: policy.PROJECT, filters: args.filters }, { projectNumber: policy.NUMBER }, { functions: { default: args } });
+  assert.deepEqual([...h.state.uploadUrls], [expected.href]);
+  assert.equal(issued.uploadUrl, original.href);
+  const actualApi = cli('apiv2'), savedClient = actualApi.Client;
+  try {
+    // The real gcp/storage.upload creates this client; only transport is mocked.
+    actualApi.Client = h.MockClient;
+    assert.deepEqual(await actualStorage.upload({ file: 'synthetic.zip', stream: 'synthetic-stream' }, issued.uploadUrl, undefined, true), { generation: 'synthetic-generation' });
+    const put = h.writes.at(-1);
+    assert.equal(put.method, 'PUT'); assert(put.queryParams instanceof URLSearchParams);
+    assert.deepEqual([...put.queryParams], [...original.searchParams]);
+    assert.equal(policy.requestUrl(new h.MockClient({ urlPrefix: original.origin }), put).href, expected.href);
+    const allowedRequests = h.writes.length;
+    for (const alter of [url => url.searchParams.set('Signature', 'different'), url => url.searchParams.set('GoogleAccessId', 'different'), url => url.searchParams.append('extra', 'value'), url => url.searchParams.delete('duplicate'), url => url.searchParams.set('duplicate', 'changed'), url => url.pathname = '/synthetic-managed-upload/other.zip', url => url.hostname = 'foreign.example.test']) {
+      const changed = new URL(original); alter(changed);
+      await assert.rejects(actualStorage.upload({ file: 'synthetic.zip', stream: 'synthetic-stream' }, changed.href, undefined, true));
+      assert.equal(h.writes.length, allowedRequests);
+    }
+  } finally { actualApi.Client = savedClient; }
 });
 test('real discovery and dynamic Extensions prepare leave an empty object that reaches the guarded 70-update planner', async () => {
   const manifest = { specVersion: 'v1alpha1', extensions: {}, endpoints: Object.fromEntries(names.map(id => [id, { platform: 'gcfv2', entryPoint: id, region: [policy.REGION], ...(id === 'readQuizMedia' || id === 'generatePrintArtifact' ? { httpsTrigger: {} } : { callableTrigger: {} }) }])) };
