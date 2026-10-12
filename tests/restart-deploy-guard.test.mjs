@@ -14,6 +14,8 @@ const actualProjectConfig = cli('functions/projectConfig');
 const actualDiscovery = cli('deploy/functions/runtimes/discovery/v1alpha1');
 const actualExtensionsPrepare = cli('deploy/extensions/prepare');
 const actualStorage = cli('gcp/storage');
+const actualExperiments = cli('experiments');
+const ActualFabricator = cli('deploy/functions/release/fabricator').Fabricator;
 const ActualClient = cli('apiv2').Client;
 const names = JSON.parse(readFileSync(new URL('../tools/staging/restart-release-manifest.json', import.meta.url))).functions;
 const makeEndpoint = id => ({ id, project: policy.PROJECT, region: policy.REGION, entryPoint: id, runtime: 'nodejs22', platform: 'gcfv2', codebase: 'default', targetedByOnly: true, ...(id === 'readQuizMedia' || id === 'generatePrintArtifact' ? { httpsTrigger: {} } : { callableTrigger: {} }) });
@@ -109,9 +111,9 @@ test('evidence policy binds reviewed release/receipt/target and fresh actual pau
   for (const alter of [p => p.observedAt = '2026-10-12T11:00:00Z', p => p.observedAt = '2026-10-12T12:01:00Z', p => p.accessControl.collaborationEnabled = true, p => p.accessControl.revision = 18, p => p.accessControl.updateTime = 'invalid', p => p.accessControl.updateTime = '2026-10-12T10:00:01Z', p => p.functions.pop(), p => p.functions[0].name = 'deliverEmailTask', p => p.functions[0].serviceAccount = 'foreign', p => p.checks.failuresResolved = false, p => p.releaseSha = 'a'.repeat(40)]) { const copy = structuredClone(preflight); alter(copy); assert.throws(() => policy.freshPreflight(copy, names, expectedRevision, preflight.accessControl.updateTime, now)); }
 });
 
-function harness(uploadUrl = 'https://storage.googleapis.com/synthetic-managed-upload/source.zip?GoogleAccessId=synthetic&Signature=abc%2Fxyz') {
+function harness(uploadUrl = 'https://storage.googleapis.com/synthetic-managed-upload/source.zip?GoogleAccessId=synthetic&Signature=abc%2Fxyz', realFabricator = false) {
   const writes = [], logs = [], order = [], modules = {};
-  class MockClient extends ActualClient { async request(req) { writes.push(req); order.push(req.method); return { body: {}, response: { headers: { get: () => 'synthetic-generation' } } }; } }
+  class MockClient extends ActualClient { async request(req) { writes.push(req); order.push(req.method); return { body: req.method === 'PATCH' ? { name: `projects/${policy.PROJECT}/locations/${policy.REGION}/operations/` + req.path.split('/').at(-1) } : {}, response: { headers: { get: () => 'synthetic-generation' } } }; } }
   const upload = { uploadUrl, storageSource: { bucket: 'synthetic-managed-upload', object: 'source.zip' } };
   class Fabricator {
     constructor() { this.projectId = policy.PROJECT; this.projectNumber = policy.NUMBER; }
@@ -121,6 +123,7 @@ function harness(uploadUrl = 'https://storage.googleapis.com/synthetic-managed-u
     deleteV2Function() { throw Error('unwrapped delete'); }
   }
   Object.assign(modules, {
+    experiments: { isEnabled: actualExperiments.isEnabled },
     requireAuth: { requireAuth: async (options, skipAutoAuth) => { assert.equal(skipAutoAuth, true); return options.user?.email ?? null; } },
     'functions/projectConfig': { shouldUseRuntimeConfig: actualProjectConfig.shouldUseRuntimeConfig },
     'deploy/functions/prepareFunctionsUpload': { getFunctionsConfig: () => { throw Error('unwrapped legacy config read'); } },
@@ -130,12 +133,12 @@ function harness(uploadUrl = 'https://storage.googleapis.com/synthetic-managed-u
     ensureApiEnabled: { check: async () => true },
     'deploy/functions/release/planner': { createDeploymentPlan: actualPlanner.createDeploymentPlan },
     'deploy/functions/deploy': { deploy: async () => { order.push('upload'); return modules['gcp/cloudfunctionsv2'].generateUploadUrl(policy.PROJECT, policy.REGION); } },
-    'deploy/functions/release/fabricator': { Fabricator },
+    'deploy/functions/release/fabricator': { Fabricator: realFabricator ? ActualFabricator : Fabricator },
     'gcp/run': {}, 'functions/artifacts': {},
     'gcp/cloudfunctionsv2': { generateUploadUrl: async () => { await new MockClient({ urlPrefix: 'https://cloudfunctions.googleapis.com', apiVersion: 'v2' }).post(`projects/${policy.PROJECT}/locations/${policy.REGION}/functions:generateUploadUrl`); return upload; } },
   });
   const state = policy.install({ cli: n => { assert(modules[n], n); return modules[n]; }, names, operatorEmail: 'operator@example.test', checkArtifact: () => order.push('hash'), log: (event, fields) => { logs.push({ event, fields }); order.push(event); } });
-  return { modules, writes, logs, order, state, Fabricator, MockClient };
+  return { modules, writes, logs, order, state, Fabricator: modules['deploy/functions/release/fabricator'].Fabricator, MockClient };
 }
 async function discover(h) {
   return h.modules['deploy/functions/build'].resolveBackend({ codebase: 'default', force: false, isEmulator: false, build: { params: [], requiredAPIs: [], endpoints: Object.fromEntries(names.map(id => [id, { ...makeEndpoint(id), region: [policy.REGION] }])) } });
@@ -178,6 +181,61 @@ test('real storage upload serializes the entire signed capability exactly, prese
       assert.equal(h.writes.length, allowedRequests);
     }
   } finally { actualApi.Client = savedClient; }
+});
+test('real Fabricator applies all 70 updates through real GCF conversion and guarded transport without source-token reuse or IAM writes', async () => {
+  assert.equal(actualExperiments.ALL_EXPERIMENTS.functionsv2deployoptimizations.default, true);
+  const proto = ActualFabricator.prototype, descriptors = Object.getOwnPropertyDescriptors(proto);
+  const savedRequest = ActualClient.prototype.request, savedExperiment = actualExperiments.isEnabled;
+  const poller = cli('operation-poller'), savedPoll = poller.pollOperation;
+  const scraper = cli('deploy/functions/release/sourceTokenScraper').SourceTokenScraper;
+  const savedGetToken = scraper.prototype.getToken;
+  const run = cli('gcp/run'), savedInvoker = run.setInvokerUpdate;
+  const logger = cli('logger').logger, savedErrorLog = logger.error;
+  let sourceTokenReads = 0, polls = 0, iamWrites = 0;
+  try {
+    proto.logOpStart = proto.logOpSuccess = () => {};
+    const h = harness(undefined, true); await discover(h); const args = makeArgs();
+    await h.modules['deploy/functions/deploy'].deploy({ projectId: policy.PROJECT, filters: args.filters }, { projectNumber: policy.NUMBER }, { functions: { default: args } });
+    ActualClient.prototype.request = h.MockClient.prototype.request;
+    actualExperiments.isEnabled = h.modules.experiments.isEnabled;
+    for (const name of Object.keys(actualExperiments.ALL_EXPERIMENTS).filter(n => n !== 'functionsv2deployoptimizations')) assert.equal(actualExperiments.isEnabled(name), savedExperiment(name));
+    scraper.prototype.getToken = async () => { sourceTokenReads++; throw Error('Build reuse must remain disabled'); };
+    run.setInvokerUpdate = () => { iamWrites++; throw Error('IAM write forbidden'); };
+    poller.pollOperation = async opts => {
+      assert(opts.operationResourceName.startsWith(`projects/${policy.PROJECT}/locations/${policy.REGION}/operations/`));
+      assert.equal(typeof opts.onPoll, 'function'); polls++;
+      const id = opts.operationResourceName.split('/').at(-1);
+      return { serviceConfig: { service: `projects/${policy.PROJECT}/locations/${policy.REGION}/services/` + id.toLowerCase(), uri: 'https://synthetic.example.invalid' } };
+    };
+    const directExecutor = { run: async fn => fn() };
+    const fab = new h.Fabricator({ projectId: policy.PROJECT, projectNumber: policy.NUMBER, sources: { default: { storage: h.state.storageSource } }, executor: directExecutor, functionExecutor: directExecutor, runFunctionExecutor: directExecutor });
+    const plan = await h.modules['deploy/functions/release/planner'].createDeploymentPlan(args);
+    const summary = await fab.applyPlan({ default: plan });
+    assert.equal(summary.results.length, 70); assert(summary.results.every(result => !result.error));
+    const patches = h.writes.filter(req => req.method === 'PATCH');
+    assert.equal(patches.length, 70); assert.equal(polls, 70); assert.equal(sourceTokenReads, 0); assert.equal(iamWrites, 0);
+    for (const req of patches) {
+      assert(!Object.hasOwn(req.body.buildConfig, 'sourceToken'));
+      assert.deepEqual(req.body.buildConfig.source.storageSource, h.state.storageSource);
+      assert.equal(req.body.buildConfig.environmentVariables.GOOGLE_NODE_RUN_SCRIPTS, '');
+      assert(req.queryParams.updateMask.includes('buildConfig.source.storageSource'));
+    }
+    assert(h.logs.some(row => row.event === 'disabled-build-image-reuse'));
+    // Reproduce the old real-Fabricator cause synthetically: default-enabled
+    // optimization injects sourceToken and the unchanged write allowlist denies
+    // it before transport. Neither the token value nor body enters diagnostics.
+    actualExperiments.isEnabled = name => name === 'functionsv2deployoptimizations' || savedExperiment(name);
+    logger.error = () => {};
+    await assert.rejects(fab.updateV2Function(makeEndpoint('updateEventRegistration'), { getToken: async () => 'synthetic-only-do-not-log', abort: () => {}, poller: () => {} }), /Failed to update function updateEventRegistration/u);
+    assert(h.logs.some(row => row.event === 'blocked' && /Unexpected update field in buildConfig: sourceToken/u.test(row.fields.reason)));
+    assert.equal(h.writes.filter(req => req.method === 'PATCH').length, 70);
+    assert(!JSON.stringify(h.logs).includes('synthetic-only-do-not-log'));
+  } finally {
+    for (const [key, descriptor] of Object.entries(descriptors)) Object.defineProperty(proto, key, descriptor);
+    ActualClient.prototype.request = savedRequest; actualExperiments.isEnabled = savedExperiment;
+    poller.pollOperation = savedPoll; scraper.prototype.getToken = savedGetToken;
+    run.setInvokerUpdate = savedInvoker; logger.error = savedErrorLog;
+  }
 });
 test('real discovery and dynamic Extensions prepare leave an empty object that reaches the guarded 70-update planner', async () => {
   const manifest = { specVersion: 'v1alpha1', extensions: {}, endpoints: Object.fromEntries(names.map(id => [id, { platform: 'gcfv2', entryPoint: id, region: [policy.REGION], ...(id === 'readQuizMedia' || id === 'generatePrintArtifact' ? { httpsTrigger: {} } : { callableTrigger: {} }) }])) };

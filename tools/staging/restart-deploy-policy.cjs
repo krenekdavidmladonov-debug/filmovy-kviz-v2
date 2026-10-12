@@ -98,11 +98,14 @@ function requestPolicy(client, req, state, names) {
     const id = p.split('/').at(-1);
     assert(names.includes(id) && p === `/v2/projects/${PROJECT}/locations/${REGION}/functions/${id}`, 'Function update target mismatch');
     const body = req.body;
-    const keys = (value, allowed) => assert(Object.keys(value ?? {}).every(key => allowed.includes(key)), 'Unexpected update field');
-    keys(body, ['name', 'buildConfig', 'serviceConfig', 'labels']);
-    keys(body.buildConfig, ['runtime', 'entryPoint', 'source', 'environmentVariables']);
-    keys(body.buildConfig.source, ['storageSource']);
-    keys(body.serviceConfig, ['environmentVariables', 'secretEnvironmentVariables', 'ingressSettings', 'timeoutSeconds', 'serviceAccountEmail', 'availableMemory', 'minInstanceCount', 'maxInstanceCount', 'maxInstanceRequestConcurrency', 'availableCpu', 'vpcConnector', 'vpcConnectorEgressSettings', 'directVpcNetworkInterface', 'directVpcEgress']);
+    const keys = (value, allowed, location) => {
+      const unknown = Object.keys(value ?? {}).filter(key => !allowed.includes(key));
+      assert(unknown.length === 0, `Unexpected update field in ${location}: ${unknown.map(key => /^[A-Za-z][A-Za-z0-9_]{0,79}$/u.test(key) ? key : '<invalid-field-name>').join(',')}`);
+    };
+    keys(body, ['name', 'buildConfig', 'serviceConfig', 'labels'], 'function');
+    keys(body.buildConfig, ['runtime', 'entryPoint', 'source', 'environmentVariables'], 'buildConfig');
+    keys(body.buildConfig.source, ['storageSource'], 'buildConfig.source');
+    keys(body.serviceConfig, ['environmentVariables', 'secretEnvironmentVariables', 'ingressSettings', 'timeoutSeconds', 'serviceAccountEmail', 'availableMemory', 'minInstanceCount', 'maxInstanceCount', 'maxInstanceRequestConcurrency', 'availableCpu', 'vpcConnector', 'vpcConnectorEgressSettings', 'directVpcNetworkInterface', 'directVpcEgress'], 'serviceConfig');
     for (const key of ['vpcConnector', 'vpcConnectorEgressSettings', 'directVpcNetworkInterface', 'directVpcEgress']) assert(body.serviceConfig?.[key] == null);
     assert(body?.name === p.slice(4), 'Function body target mismatch');
     assert.equal(body.buildConfig?.entryPoint, id); assert.equal(body.buildConfig?.runtime, 'nodejs22');
@@ -143,6 +146,12 @@ module.exports = { PROJECT, NUMBER, REGION, RELEASE_SHA, RECEIPT_SHA256, namesEq
 function install({ cli, names, checkArtifact, log, operatorEmail }) {
   const state = { backendVerified: false, planVerified: false, applyVerified: false, uploadUrls: new Set(), storageSource: null };
   const fail = label => { log('blocked', { reason: label }); throw new Error(`Restart deployment guard: ${label}`); };
+  const experiments = cli('experiments'), isEnabled = experiments.isEnabled;
+  experiments.isEnabled = function(name) {
+    if (name === 'functionsv2deployoptimizations') return false;
+    return isEnabled.call(this, name);
+  };
+  log('disabled-build-image-reuse', { experiment: 'functionsv2deployoptimizations', reason: 'Pinned supported no-sourceToken branch; exact uploaded source remains required' });
   assert(typeof operatorEmail === 'string' && operatorEmail.includes('@'));
   const auth = cli('requireAuth'), requireAuth = auth.requireAuth;
   auth.requireAuth = async function(options) {
