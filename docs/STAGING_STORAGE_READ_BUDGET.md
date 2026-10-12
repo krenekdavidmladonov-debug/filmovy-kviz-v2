@@ -1,0 +1,53 @@
+# Návrh opravy Storage Rules ve V2 staging
+
+Stav: **NÁVRH K SAMOSTATNÉMU SCHVÁLENÍ; NIC TÍMTO DOKUMENTEM NENASAZENO.** Kandidátní commit: **`5fe7d9ba2f4f17dd1c8e727896ea7faa92b713fe`**. Aplikační Functions/Hosting zůstávají frozen `ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac`. Zdroj opravených `storage.rules`, SHA-256 lokálních UTF-8 bajtů: `fbc1eb76b53cf915ed1ef36ce45daeb75a184d5e4dee97d9b342deefaef4e89b`.
+
+## Důvod a přesný rozsah
+
+Původní `own` upload čte tři různé Firestore dokumenty: membership, quiz root a upload grant. Storage cross-service limit dovoluje dva. Oprava vypouští redundantní root/scope lookup; serverový grant již vzniká po ověření existence kvízu, scope a aktuálního členství uvnitř `runAccessTransaction`. Rules zachovávají verified token, UID/status/session cutoff, upload permission, aktuální membershipVersion, přesný actor/quiz/asset, uploading status, expiry, MIME/size a create-only přístup. Read/list/update/delete zůstávají zakázané.
+
+Navržené deployment zápisy: vytvoření jednoho immutable Firebase Rules rulesetu z přesného zdroje a přepnutí jediného existujícího Storage release na tento ruleset. Žádné Functions, Hosting, Firestore Rules/indexy, IAM, API enablement, invitations, memberships ani collaboration změny. Součástí kombinovaného návrhu je níže přesně vymezený náhradní image grant přes běžnou aplikaci; původní expirovaný grant zůstane zachovaný. Následný zbytek online QA již má samostatný dřívější souhlas.
+
+## Doložený místní baseline
+
+Jde o uložená pozorování, nikoli nově potvrzený cloudový stav. Rollout root: `.local-data/restart-rollout/20261012T193516745Z-9483853109af47358ce6632b13634203`.
+
+| Cíl | Zachycená hodnota |
+| --- | --- |
+| Projekt | `filmovy-kviz-v2-staging`, projectNumber `177615774316` |
+| Bucket | `filmovy-kviz-v2-staging.firebasestorage.app`, `EUROPE-WEST1` |
+| Storage release | `projects/filmovy-kviz-v2-staging/releases/firebase.storage/filmovy-kviz-v2-staging.firebasestorage.app` |
+| Původní ruleset | `projects/filmovy-kviz-v2-staging/rulesets/d6248aa5-66b6-4852-8bf3-4ac4e2617e58` |
+| Release updateTime | `2026-09-15T17:52:55.233780Z` |
+| Původní source UTF-8 SHA-256 | `4921b2a523bd56fe8f9d5e639b40b10da4af7bb8bd63218e8337047450576e63` |
+
+Bucket dokládá `.local-data/restart-preflight-20261012/bucket-metadata.json`; release a celý source jsou v rollout `post-rules/phase-gates.json` (pozorováno `2026-10-12T20:12:24.772Z`). `rules-verification.json` dokládá, že předchozí Firestore deployment Storage Rules nezměnil. Novější QA `.local-data/restart-qa/staging-qa-ddb862f-20261012-01/storage-service-agent-roles.json` je samostatný IAM podklad; před akcí ověřit čerstvou shodu, žádnou roli automaticky nepřidávat.
+
+Leadův aktuální **DRY_RUN, writes 0** znovu potvrdil přesný Storage baseline. Konkrétní plan SHA-256 je **`0bdb510cdbcb464321d9115770d34cfd88a3567b18f3149fb2c17c1955577457`**, receipt `storage-release-dry-run-01.jsonl` v QA root. Připravený lokální adaptér `.local-data/completion-hardening/qa-storage-rules-release.mjs` má SHA-256 `aa24b1016f22a810a1905be49884c913fa81418cdb06c49cf0b0c746a1a3fee1`; test `482ff39d69daf2e82cff15e552bd1d91fa4012428b6fd2faf77fa52cc042e9b3`. MEDIUM autor, LOW a lead review; leadův Node 22 běh **19/19 PASS**. Adaptér porovnává testované CRLF bajty s LF Git blobem commitu, odmítá cizí zdroj/approval/drift a nejasný výsledek automaticky neopakuje. Žádný apply ani rollback dosud neproběhl.
+
+LOW nezávisle svázal tyto důkazy v `.local-data/completion-hardening/storage-read-budget-validation/operator-verification.json`, SHA-256 `a3eff792c5b84a1607f11c03d33a131d38d7f230afa7b50f93927a6bd019e17a`. Počty GET jsou doložené kontrolovaným dry-run tokem a jeho odpověďmi, nikoli transportním trace.
+
+Použité API tvary: [vytvoření Rulesetu](https://firebase.google.com/docs/reference/rules/rest/v1/projects.rulesets/create) a [PATCH Release](https://firebase.google.com/docs/reference/rules/rest/v1/projects.releases/patch), s výslovným `updateMask: rulesetName`.
+
+## Podmínky před schválením a provedením
+
+1. **PASS:** HIGH implementace, MEDIUM a lead independent review; `pnpm check`; `pnpm test:rules` (50 testů); plný `pnpm test:e2e:media` v lokálních Auth/Firestore/Functions/Storage emulátorech s `demo-filmovy-kviz-v2` (pět PASS skupin, exit 0). Čtyři přesné soubory a tři logy váže `.local-data/completion-hardening/storage-read-budget-validation/verification.json`. Před commitem ověřené zdroje jsou totožné s kandidátem; pozdější dokumentace nemění Rules. Java evaluator používá skutečná Rules a syntetické dokumenty; adaptér limitu dokládá dvě vs. tři čtené cesty, nikoli cloudovou quota/IAM/CORS ekvivalenci.
+2. Lead provede schválený read-only preflight: GET přesného Storage release a jeho rulesetu přes `firebaserules.googleapis.com/v1/projects/...`, bucket metadata a relevantní service-agent IAM. Uložit raw odpovědi, časy a hashe. Release name/ruleset/updateTime i source hash se musí rovnat baseline; drift znamená STOP a nové posouzení, ne přepsání cizího deploymentu.
+3. Zachytit aktuální Functions/Hosting/Firestore Rules/IAM/API a paused control projekce pro následné porovnání. Použít stejného explicitního ověřeného CLI operátora pro získání tokenu, pinned Node 22 a `firebase-tools@15.28.2`, bez ADC fallbacku. Samotné změny vést úzkým operátorským adaptérem přes Firebase Rules REST; nevolat obecný CLI deploy, jehož implicitní IAM/cleanup/fallback větve nejsou součástí rozsahu.
+4. Před execution doložit konkrétní request fence: pouze GET přesného release/rulesetu, jeden POST přesného zdroje do rulesets a jeden PATCH přesného existujícího release. Zakázat IAM/API writes, DELETE, POST release, automatické opakování a cleanup. Zápis vyžaduje approval s přesným plan/source/candidate hashem; append-only receipt a trvalý apply-once fence se uloží před prvním požadavkem. Nejasný výsledek se pouze čte a smiřuje.
+5. Těsně před release PATCH znovu zkontrolovat baseline pointer/updateTime a vyhradit toto deployment okno pro jediného koordinátora. API neposkytuje atomickou CAS precondition: tato procesní kontrola sama nezaručuje nepřítomnost souběžného externího writeru. Cizí drift vždy znamená STOP. Uživatel schvaluje konkrétní SHA/hash/cíl/zápisy; případný rollback je níže připravený podmíněný návrat.
+
+## Readback, rollback a syntetický smoke
+
+- Po deploymentu GET stejného release a jím odkazovaného rulesetu; ověřit nový přesný pointer, celý seznam source files a byte-exact obsah `storage.rules` se schváleným SHA-256. Uložit exit/status, ruleset ID, updateTime a hashe receiptů. Porovnat ostatní zachycené projekce; nesmí nastat jiné deployment/permission/control změny. CLI exit 0 sám nestačí.
+- Při selhání nejprve readback: zjistit, zda release zůstal původní, přešel na zachycený nový ruleset, nebo obsahuje cizí pointer. Nepřepínat slepě. Schválený rollback může PATCH **jen tentýž release** zpět na výše uvedený původní ruleset, pouze když je aktuální pointer přesně náš nový a existuje výhradní okno. Cizí drift = STOP. Znovu ověřit source hash; nesmazat starý/nový ruleset ani objekty. Rollback vrací i známou chybu own upload, nikoli claim-only autoritu.
+- Smoke pouze s již zachyceným QA operator UID `staging-qa-ddb862f-20261012-01-operator` a quiz `quiz_baba5c0ac925bc2f8ead8485651af958c9465e16719aa98a44c00e016375e32c`. PNG 84 B, SHA-256 `11cfcd3c87baa4071b698ef6cfe28c4d359d9a3dbb7ad2cc9b7d5f683b725adc`.
+- `image-upload-inspection-01.json` a `-02.json` dokládají původní uploading asset `5701b92974b0b0cea7d7a5c7a96714e01b2d534914e2ae71375b5a18b91a456f`, membershipVersion 1 a chybějící objekt v době GET. Expiry je **2026-10-12T21:47:38.272Z**; existující callable ji při replay neobnovuje. Navržený recovery rozsah povolí právě **jeden náhradní image grant přes běžné UI/Function**. Původní expirovaný dokument a jeho receipts se ponechají, jeho expirace se nepřepisuje a nepoužije se k dalšímu uploadu. Před prvním náhradním begin ověřit, že starý objekt stále neexistuje. Neočekávaný objekt = STOP/readback.
+- Tím bude celkový limit nejvýše **3 mediaAssets dokumenty** (opuštěný image grant, náhradní image, původně plánované audio) a **2 Storage objekty**. Nový requestId i vrácený assetId/path uložit před/po odeslání do chráněné append-only receipt; pouze přesná opakování zachyceného idempotentního požadavku. Žádný třetí soubor, nová identita ani rozšíření oprávnění.
+- Po schválení provést jeden normální UI upload těchto 84 B, vyčkat skutečný finalize 200, ověřit authoritative ready metadata/generation a tokenless authenticated gateway. Direct read/overwrite/delete a viewer upload zůstávají denied. Receipt zachytí ID, revize, status a hashe bez tokenů, hesel nebo resumable URL. Potom pokračovat již schválenou akceptací audio/editor/snapshot/registrations/scoring/live/history/PDF; nezopakovat hotové provisioning, fixture ani první snapshot.
+
+Připravené pokračování `.local-data/completion-hardening/qa-editor-resume.mjs` má SHA-256 `73d820ec7739d572d8acd2341c05d3811bcd7782cfb61b7fb1ef4045c9716e5d`. HIGH autor, MEDIUM a lead review PASS; Node 22 syntax a skutečný offline `--plan` PASS. Lokální plán `editor-resume-plan.json` má plan SHA-256 **`c59a5c7201a068ec21b0dce33b29709283443c6837605456fd9a333bc6f084f6`**. Po schválení vyžaduje čerstvý post-deploy Rules readback a `--old-image-inspection`, která prokáže absenci objektu **až po přesné expiraci** starého grantu. Oba readback hashe i chráněná credential příloha se navážou na schválený rozsah. Jednorázový fence a přesné privátní requesty vznikají před mutacemi; plný `EDITOR_VERIFIED` až po všech UI/server/media/focus kontrolách. Soukromé desktop/390px screenshoty vyžadují následné vizuální posouzení leadem. Tento helper zatím v browseru neběžel.
+
+## Omezení a akceptace
+
+PASS znamená přesný Storage source readback, nezměněný ostatní rozsah a úspěšný bounded own-image upload/finalize/read po samostatně vyřešené expiraci. Neznamená dokončenou online QA, production readiness nebo ověření všech cloudových kombinací. Server-issued scope capability je omezená na pending upload; attach/read/publication dále autorizují současný scope. Neexistuje app API pro quiz-root deletion či ownership transfer; budoucí zavedení musí pending grants atomicky odvolat. Privilegovanou out-of-band změnu rootu samotná create rule nedetekuje. Podrobnosti: [MEDIA_STORAGE.md](MEDIA_STORAGE.md), [STAGING_ACCEPTANCE_DDB862F.md](STAGING_ACCEPTANCE_DDB862F.md), [STAGING_EXECUTION_DDB862F.md](STAGING_EXECUTION_DDB862F.md).
