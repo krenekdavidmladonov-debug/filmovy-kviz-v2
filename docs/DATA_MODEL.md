@@ -93,7 +93,7 @@ Owned assets are implemented at quizzes/{quizId}/mediaAssets/{assetId}: private 
 
 ### `publicEvents/{eventId}`
 
-Implemented safe listing data: title, venue display/public location, start time/time zone, coarse registration/availability state, team-size range, revision, and updated timestamp. Exact team/people capacities, quiz assignment/snapshot data, answers, organizer details, and contacts are excluded. Anonymous clients may read/query; all writes are server-only.
+Implemented safe listing data: title, venue display/public location, start time/time zone, registration publication/status/window, team-size range, revision, and updated timestamp. Since the registration slice, `capacity.teams` and `capacity.people` each expose exact aggregate `accepted` and `maximum` counts; they do not identify individual teams or people. Quiz assignment/snapshot data, answers, organizer details, and contacts are excluded. Anonymous clients may read/query; all writes are server-only. The exact allowlist is covered by the public event projection test in `tests/events.test.ts`.
 
 ### `publicSessions/{sessionId}`
 
