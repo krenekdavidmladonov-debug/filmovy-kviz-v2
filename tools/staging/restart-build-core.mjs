@@ -94,3 +94,8 @@ export function restartViteConfig(root, domain, hosting) {
   // Exact matching also prevents silently resolving new domain subpaths there.
   return `import { defineConfig } from ${JSON.stringify(url('apps/web/node_modules/vite/dist/node/index.js'))};\nimport react from ${JSON.stringify(url('apps/web/node_modules/@vitejs/plugin-react/dist/index.js'))};\nexport default defineConfig({root:${JSON.stringify(path.join(root, 'apps/web'))},envDir:false,plugins:[react()],resolve:{alias:[{find:/^@filmovy-kviz\\/quiz-domain$/,replacement:${JSON.stringify(path.join(domain, 'index.js'))}}]},build:{outDir:${JSON.stringify(hosting)},sourcemap:false}});\n`;
 }
+
+export function assertStagingBanner(frontend) {
+  // Check the rendered label in JS, rather than a CSS class or an old English marker.
+  assert(frontend.some(file => file.name.endsWith('.js') && /["']span["']\s*,\s*\{\s*className\s*:\s*["']admin-environment-label["']\s*,\s*children\s*:\s*["']Testovací verze["']/u.test(file.text)), 'Current staging banner required');
+}

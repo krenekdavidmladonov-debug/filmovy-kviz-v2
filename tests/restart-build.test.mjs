@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import { validateInputs, targetedEntry, runtimeClosure, artifactPackage, assertArtifactPath, restartViteConfig } from '../tools/staging/restart-build-core.mjs';
+import { validateInputs, targetedEntry, runtimeClosure, artifactPackage, assertArtifactPath, restartViteConfig, assertStagingBanner } from '../tools/staging/restart-build-core.mjs';
 import { STAGING_PROJECT, STAGING_APP } from '../tools/staging/guard.mjs';
 
 const json = relative => JSON.parse(readFileSync(new URL(relative, import.meta.url), 'utf8'));
@@ -75,4 +75,15 @@ test('generated Vite config resolves domain exactly to fresh build, bypassing st
   assert.equal('@filmovy-kviz/quiz-domain'.replace(alias.find, alias.replacement), path.join(fresh, 'index.js'));
   assert(!alias.replacement.includes(path.join('packages', 'quiz-domain', 'lib')));
   assert(!alias.replacement.includes('node_modules'));
+});
+
+test('staging banner guard requires the current rendered JS label, not stale text or CSS', () => {
+  const banner = 'D.jsx("span",{className:"admin-environment-label",children:"Testovací verze"})';
+  const file = text => [{ name: 'assets/index-synthetic.js', text }];
+  assert.doesNotThrow(() => assertStagingBanner(file(banner)));
+  for (const text of ['STAGING', banner.replace('Testovací verze', 'Production'), banner.replace('admin-environment-label', 'ordinary-label'), 'const label="Testovací verze"; const css="admin-environment-label";']) {
+    assert.throws(() => assertStagingBanner(file(text)));
+  }
+  assert.throws(() => assertStagingBanner([{ name: 'assets/main.css', text: banner }]));
+  assert.throws(() => assertStagingBanner([]));
 });
