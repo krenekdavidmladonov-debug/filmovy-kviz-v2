@@ -11,6 +11,8 @@ const actualPlanner = cli('deploy/functions/release/planner');
 const actualHelpers = cli('deploy/functions/functionsDeployHelper');
 const actualGcf = cli('gcp/cloudfunctionsv2');
 const actualProjectConfig = cli('functions/projectConfig');
+const actualDiscovery = cli('deploy/functions/runtimes/discovery/v1alpha1');
+const actualExtensionsPrepare = cli('deploy/extensions/prepare');
 const ActualClient = cli('apiv2').Client;
 const names = JSON.parse(readFileSync(new URL('../tools/staging/restart-release-manifest.json', import.meta.url))).functions;
 const makeEndpoint = id => ({ id, project: policy.PROJECT, region: policy.REGION, entryPoint: id, runtime: 'nodejs22', platform: 'gcfv2', codebase: 'default', targetedByOnly: true, ...(id === 'readQuizMedia' || id === 'generatePrintArtifact' ? { httpsTrigger: {} } : { callableTrigger: {} }) });
@@ -149,6 +151,36 @@ test('hooked actual planner is checked before any upload, and mutated apply plan
   assert.equal(h.writes.length, 2);
   Object.values(plan.regionalChangesets)[0].endpointsToUpdate.pop();
   await assert.rejects(new h.Fabricator().applyPlan({ default: plan }));
+});
+test('real discovery and dynamic Extensions prepare leave an empty object that reaches the guarded 70-update planner', async () => {
+  const manifest = { specVersion: 'v1alpha1', extensions: {}, endpoints: Object.fromEntries(names.map(id => [id, { platform: 'gcfv2', entryPoint: id, region: [policy.REGION], ...(id === 'readQuizMedia' || id === 'generatePrintArtifact' ? { httpsTrigger: {} } : { callableTrigger: {} }) }])) };
+  const raw = actualDiscovery.buildFromV1Alpha1(manifest, policy.PROJECT, policy.REGION, 'nodejs22');
+  assert.deepEqual(raw.extensions, {}); policy.rawBuild(raw, names);
+  const extensionPayload = {}, extensionContext = {};
+  const extensionsHelper = cli('extensions/extensionsHelper'), utils = cli('utils');
+  const originalEnsure = extensionsHelper.ensureExtensionsApiEnabled, originalLog = utils.logLabeledError;
+  let blockedRead = 0;
+  try {
+    extensionsHelper.ensureExtensionsApiEnabled = async () => { blockedRead++; throw Error('Synthetic blocked extension metadata origin'); };
+    utils.logLabeledError = () => {};
+    await actualExtensionsPrepare.prepareDynamicExtensions(extensionContext, { project: policy.PROJECT, projectNumber: policy.NUMBER, only: names.map(n => 'functions:' + n).join(','), config: { src: { functions: { source: 'functions', codebase: 'default', runtime: 'nodejs22' } } } }, extensionPayload, { default: raw });
+  } finally { extensionsHelper.ensureExtensionsApiEnabled = originalEnsure; utils.logLabeledError = originalLog; }
+  assert.equal(blockedRead, 1); assert.deepEqual(extensionPayload, {}); assert.deepEqual(extensionContext, {});
+  const h = harness(); await discover(h); const args = makeArgs();
+  // Same extPayload object assigned by Functions prepare.js after the helper's
+  // caught read failure; the real planner executes before the mocked upload.
+  await h.modules['deploy/functions/deploy'].deploy({ projectId: policy.PROJECT, filters: args.filters, extensions: extensionContext }, { projectNumber: policy.NUMBER }, { functions: { default: { wantBackend: args.wantBackend, haveBackend: args.haveBackend } }, extensions: extensionPayload });
+  assert(h.order.indexOf('verified-update-only-plan') < h.order.indexOf('upload'));
+  assert.equal(h.writes.length, 1); assert(h.logs.some(l => l.event === 'empty-dynamic-extensions' && l.fields.declaredExtensions === 0 && l.fields.plannedExtensionOperations === 0));
+});
+test('nonempty, malformed, array and hidden Extensions values stop before the original deploy adapter', async () => {
+  for (const extensions of [{ instance: {} }, [], null, false, '', Object.create(null), Object.defineProperty({}, 'hidden', { value: {} }), { [Symbol('extension')]: {} }]) {
+    const h = harness(); await discover(h); const args = makeArgs();
+    await assert.rejects(h.modules['deploy/functions/deploy'].deploy({ projectId: policy.PROJECT, filters: args.filters }, { projectNumber: policy.NUMBER }, { functions: { default: args }, extensions }));
+    assert.equal(h.writes.length, 0); assert(!h.order.includes('upload'));
+    const raw = { params: [], extensions, endpoints: Object.fromEntries(names.map(id => [id, { ...makeEndpoint(id), region: [policy.REGION] }])) };
+    assert.throws(() => policy.rawBuild(raw, names));
+  }
 });
 test('operator attribution permits only explicit reviewed CLI account without ADC or token fallback', async () => {
   const h = harness(), auth = h.modules.requireAuth.requireAuth;

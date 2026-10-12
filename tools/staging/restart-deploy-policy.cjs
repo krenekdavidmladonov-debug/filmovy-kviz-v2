@@ -7,6 +7,9 @@ const RECEIPT_SHA256 = '3507ab5d2742e50ff1798dfb1ffa1a3c2a166d1643d3c7ec3cd700bd
 const HTTP_NAMES = new Set(['generatePrintArtifact', 'readQuizMedia']);
 const sorted = values => [...values].sort();
 function namesEqual(actual, expected) { assert.deepEqual(sorted(actual), sorted(expected), 'Exact 70 endpoints required'); }
+function emptyExtensions(value) {
+  assert(value === undefined || (value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype && Reflect.ownKeys(value).length === 0), 'Only absent or empty plain Extensions metadata allowed');
+}
 function endpoint(e, names, raw = false) {
   assert(names.includes(e.id), 'Unknown endpoint');
   assert.equal(e.project, PROJECT); assert.equal(e.platform, 'gcfv2');
@@ -32,6 +35,7 @@ function backend(value, names, allEndpoints, { existing = false, allowHealth = f
   }
 }
 function rawBuild(value, names) {
+  emptyExtensions(value.extensions);
   assert.equal((value.params ?? []).length, 0, 'No params or secrets');
   assert(!value.requiredRoles?.length && !Object.keys(value.lifecycleHooks ?? {}).length);
   namesEqual(Object.keys(value.endpoints), names);
@@ -207,7 +211,8 @@ function install({ cli, names, checkArtifact, log, operatorEmail }) {
   const deploy = cli('deploy/functions/deploy'), originalDeploy = deploy.deploy;
   deploy.deploy = async function(context, options, payload) {
     assert(state.backendVerified); assert.equal(context.projectId, PROJECT);
-    assert.equal(String(options.projectNumber), NUMBER); assert(!payload.extensions);
+    assert.equal(String(options.projectNumber), NUMBER); emptyExtensions(payload.extensions);
+    if (payload.extensions !== undefined) log('empty-dynamic-extensions', { declaredExtensions: 0, plannedExtensionOperations: 0 });
     assert.deepEqual(Object.keys(payload.functions ?? {}), ['default']);
     const current = payload.functions.default;
     await verifyPlan({ ...current, codebase: 'default', projectId: PROJECT, filters: context.filters });
