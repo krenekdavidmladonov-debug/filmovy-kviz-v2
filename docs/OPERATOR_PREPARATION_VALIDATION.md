@@ -2,6 +2,16 @@
 
 The application remains frozen at `ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac`. These local operator tools are isolated on `codex/restart-rollout-preparation`; they were not pushed into PR #39 or included in its application artifact/CI.
 
+This is the **initial preparation** evidence. The subsequent owner-approved deployment and three operator compatibility fixes (`8dc0633`, `25777ce`, `40fee6c`) are recorded in [STAGING_EXECUTION_DDB862F.md](STAGING_EXECUTION_DDB862F.md). The final guard revision passed 15 targeted real pinned-CLI offline tests plus independent review; do not attribute the earlier 23-test receipt below to those later bytes. The exact application artifact stayed unchanged throughout.
+
+## Subsequent local QA provisioning preparation
+
+`tools/staging/restart-qa.mjs`, `restart-qa-core.mjs`, `restart-qa-store.mjs` and `tests/restart-qa.test.mjs` implement only the exact two synthetic identities/grants in [STAGING_ACCEPTANCE_DDB862F.md](STAGING_ACCEPTANCE_DDB862F.md). HIGH authored; MEDIUM and lead independently reviewed the same four source hashes. No cloud dry-run/apply, sign-in, identity creation, membership update or content operation was executed.
+
+Receipt `.local-data/completion-hardening/restart-qa-validation.json`, SHA-256 **`1cf89987157b1067f7c51696d171ace212ba9f7f45ac189206bfa147a2c5ec4e`**, records those hashes and exact limits. HIGH reported 19 offline Node tests, syntax and targeted ESLint PASS on those bytes; targeted stdout was not separately retained. The lead ran `pnpm check` PASS and `pnpm test:rules` **50 PASS** on `demo-filmovy-kviz-v2`, with full logs/hashes in the receipt. Initial launcher attempts failed before checks/emulator startup because of sandbox pnpm-cache permissions and missing Java bin on PATH; normal cache access and the pinned Java PATH resolved them. These were local prerequisites, not application or cloud failures.
+
+The tool's `--help` describes offline credential preparation, default read-only dry-run, separately approved exact-plan apply, and read-only reconciliation. After any write intent the append-only ledger and create-only fence prohibit automatic retry. Auth and Firestore are not atomic; a partial outcome may retain Auth accounts without memberships. Apply requires explicit whole-QA retention; cleanup, later scope/fixture changes, disablement and collaboration resume are not implemented. This local verification is preparation evidence, not live provisioning acceptance or new authority.
+
 | Local commit | Scope and review |
 | --- | --- |
 | `4e6ba67` | Lead-authored audited collaboration pause; MEDIUM independent review and re-review. Fixed missing concrete operator attribution and implicit transport retry. |
