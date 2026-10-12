@@ -1,6 +1,6 @@
 # Restart: lokální akceptace a schvalované vydání V2 staging
 
-Tento plán nepovoluje cloudový přístup ani nasazení. Lokálně integrovaný kandidát na `codex/restart-integration` je `8b6245608850c9cad959fb14ab6a754f485e1dad`; pozdější dokumentační commit pouze zapisuje výsledky. Přesná lokální evidence a omezení jsou v [RESTART_VALIDATION.md](RESTART_VALIDATION.md). Lokální vývoj a testy používají pouze emulátory a `demo-*` projekt. V1 a produkční Firebase zůstávají mimo rozsah.
+Tento plán sám nepovoluje nasazení. Vlastník dne 2026-10-12 schválil sladění `AGENTS.md` a čtecí kontrolu V2 stagingu; její výsledky jsou v [RESTART_PREFLIGHT.md](RESTART_PREFLIGHT.md). Ověřený aplikační základ na `codex/restart-integration` je `8b6245608850c9cad959fb14ab6a754f485e1dad`; navazující změny doplňují dokumentaci a přípravu artefaktu. Přesná lokální evidence a omezení jsou v [RESTART_VALIDATION.md](RESTART_VALIDATION.md). V1 a produkční Firebase zůstávají mimo rozsah.
 
 ## Sjednocený rozsah
 
@@ -33,7 +33,7 @@ Všechny brány musí mít výsledek pro konečný kandidát; zapsané testy neb
 
 Jediný navrhovaný cíl je `filmovy-kviz-v2-staging`, region `europe-west1`. Potřebné operátorské credentials zůstávají mimo repozitář; žádné klíče, tokeny ani `.env` změny. Vyžadovat čistý schválený commit, Node 22 a auditovatelný artefakt frontend/backend/Rules/indexy ze stejného SHA s checksums a pevným staging cílem.
 
-Existující build runbooky mají historické branch guardy a různý rozsah: [build-complete-editor.mjs](../tools/staging/build-complete-editor.mjs) vyžaduje `codex/complete-quiz-editor`, [prepare-release.mjs](../tools/event-management/prepare-release.mjs) vyžaduje `codex/justkviz-event-management`. Nejsou hotovým sjednoceným builderem pro tuto větev. Před schválením dodat a lokálně ověřit přesnou přípravu artefaktu a explicitní deployment seznam; guardy neobcházet. Nevydávat obecný full-deploy wrapper za tento cílený rollout.
+Historické buildery a jejich branch guardy zůstávají zachované. Nový [build-restart.mjs](../tools/staging/build-restart.mjs) připravuje offline sjednocený artefakt pro čistý přesný SHA větve `codex/restart-integration`: čerstvý domain pro frontend i backend, přesných 70 exportů, uzavřený balík závislostí, kopie Rules/indexů, relativní konfiguraci a checksums. Bere pouze explicitní veřejný SDK config a schváleně ověřená bucket metadata ze souborů mimo Git. Nic neinstaluje ani nenasazuje; samostatná lokální kontrola zabaleného runtime a skutečný výsledek přípravy musí být zaznamenány před žádostí o deployment.
 
 Čtecí preflight musí potvrdit aktuální Hosting release/source, Functions source/build, Rules/indexy, Auth provider a kompatibilitu membership/issuerů existujících referee grantů. Inventář původního obsahu a přesných QA IDs musí umožnit prokázat zachování dat; soukromé payloady nesmí skončit ve veřejné evidenci.
 
@@ -41,11 +41,11 @@ Samostatně ověřit potřebná API, skutečný application bucket a jeho lokali
 
 Kompatibilní memberships připravit pouze pro nově ověřené přesné identity podle [PERSONAL_ACCESS.md](PERSONAL_ACCESS.md); žádná automatická povýšení na owner. Stav skutečného osobního ownera nově ověřit: historické dokumenty se v tomto bodě nesmějí vydávat za dnešní stav. Owner handoff/takeover je oddělený schvalovaný postup. Invitations ponechat vypnuté až do kompletního online ověření.
 
-Před vydáním vyřešit s vlastníkem nesoulad politiky: `AGENTS.md` doslova vyžaduje role `admin` nebo `moderator`, zatímco převzatý kandidát používá aktivní serverem spravované membership, konkrétní permissions a resource scopes a ignoruje legacy claims. Bezpečnostní vlastnost „přihlášení samo nestačí“ je zachována, úplný doslovný soulad však nelze tvrdit. Navržená změna pravidla vyžaduje souhlas vlastníka; v této fázi se `AGENTS.md` nemění.
+Vlastník dne 2026-10-12 schválil změnu pravidla v `AGENTS.md`: oprávnění určují aktivní serverem spravované membership, konkrétní permissions a resource scopes. Samotné přihlášení, název role ani legacy claims nestačí. Pravidlo bylo takto sjednoceno; tato dřívější blokace je vyřešena.
 
 ## Pořadí schválení a delivery
 
-1. **Schválení pouze read-only cloud validace:** vymezit staging projekt, čtené metadata/identity/inventory a ochranu původních dat. Teprve po tomto výslovném schválení provést a zaznamenat čtecí preflight; žádné zápisy, deploy ani nové identity.
+1. **Schválený čtecí preflight:** dokončen v rozsahu projektu a `europe-west1`, bez obsahu kvízů/kontaktů/mediálních objektů. Aktuální evidence je v RESTART_PREFLIGHT.md; metadata nejsou důkaz runtime autorizace. Pozvánky jsou již zapnuté (`collaborationEnabled=true`, revision 18), proto budoucí rollout vyžaduje konkrétní schválení auditovaného CAS pozastavení. Stávající memberships a pozvánky se tím neodvolají.
 2. **Konkrétní schválení zápisů:** předložit konečné SHA, checksums, sjednocený manifest, zjištěné cloud rozdíly, přesné infrastructure/membership/IAM změny, izolovaný QA rozsah a rollback. Zvlášť uvést aktivaci invitations a owner postup, pokud se navrhují. Chybějící předpoklad znamená stop, nikoli implicitní souhlas s opravou infrastruktury.
 3. **Schválené nasazení:** zachovat invitations vypnuté; připravit jen schválené kompatibilní memberships a předpoklady. Nasadit explicitní backend guards a ověřit je, poté odpovídající indexy/Firestore Rules/Storage Rules a frontend ze stejného artefaktu. Nevytvářet omezené aktivní spolupracovníky, dokud zůstává starý unrestricted backend. Bez plošného deploye, automatického mazání jiných Functions nebo backfillu původních dat.
 4. **Schválený staging smoke:** jednorázové izolované QA identity a obsah; povolené i zamítnuté scopes, revokace, editor/save-all/conflict/reload, lifecycle/live/snapshot/print a public reveal. U médií ověřit upload/finalize/read, chybějící download tokeny a odmítnutý anonymní replay; emulator toto cloudové chování sám neprokazuje. Reálné YouTube přehrání evidovat samostatně.
@@ -61,4 +61,4 @@ Nikdy nevracet claim-only backend nad aktivní restricted memberships ani pre-di
 
 [STAGING.md](STAGING.md) popisuje bootstrap ze září, staré claim roles a tehdy chybějící application Storage. Complete-editor/access/event runbooky zachycují další odlišné cloud inventáře, handoff stavy a prerequisites. Jsou podklady a historické receipts, nikoli dnešní cloud validace ani oprávnění pro nové akce.
 
-Tento plán vznikl čtením lokálních zdrojů a manifestů; žádná nová cloud kontrola ani deploy zde neproběhly. Lokální výsledky mají samostatnou [evidenci](RESTART_VALIDATION.md). Nově potvrzený cloudový stav musí mít vlastní čas, schválení, SHA a evidence. Aktuální cloud stav, vzdálené CI a online akceptace zůstávají **nepotvrzené**.
+Lokální výsledky mají samostatnou [evidenci](RESTART_VALIDATION.md); nová schválená čtecí kontrola je odděleně v [RESTART_PREFLIGHT.md](RESTART_PREFLIGHT.md). Nasazení, vzdálené CI a online akceptace neproběhly. Souhlas se čtením nesmí být zaměněn za souhlas s konkrétními zápisy, které budou předloženy s hotovým artefaktem.

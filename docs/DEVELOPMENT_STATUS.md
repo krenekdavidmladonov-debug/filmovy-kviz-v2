@@ -121,10 +121,22 @@ Broader local coverage passed for personal access/issuer revocation, save-all/co
 
 The local completion condition is satisfied. Outstanding items are external: current cloud inventory/IAM/bucket/Auth, actual staging build artifacts and online smoke, remote GitHub CI/review, owner policy alignment, real-data migration approval, and venue/projector/audio acceptance. They are not represented as passed. The prepared [release plan](RESTART_RELEASE_PLAN.md) names the unified 70-function scope, excluded email paths, artifact prerequisites, deployment sequence, smoke checks and compatible rollback.
 
-### Exact next step and approval boundary
+### Historical approval boundary after local completion
 
 1. **Owner policy decision:** approve updating the literal `admin/moderator` wording in `AGENTS.md` to require active server-managed membership, concrete permission and resource scope; legacy claims alone remain insufficient. The inherited candidate already implements this model, but the instruction itself has not been changed.
 2. **Owner authorization for read-only V2 staging preflight:** exact proposed target `filmovy-kviz-v2-staging`, region `europe-west1`; inspect current release/function inventory, security configuration, bucket/IAM and Auth/membership readiness. No production project, credential copying, content export, writes, new accounts or email. The current heartbeat authorizes demo emulators only.
 3. **Lead after authorization:** establish current cloud prerequisites and remote CI access, prepare/verify a unified artifact builder without bypassing the historical branch guards, then present exact checksums and requested writes for a separate deployment approval. Do not deploy from this heartbeat or infer approval from a prior release receipt.
 
 The app tool confirmed heartbeat `samostatn-dokon-en-justkv-z` as **PAUSED** after local completion on 2026-10-12. Its existing prompt and 30-minute schedule were preserved. It will not keep retrying unavailable access or expand product scope; the next phase requires the two specific owner decisions above.
+
+## Approved preflight continuation — 2026-10-12
+
+The owner's reply **„dávám schválení ke všemu.“** approved both specific requests immediately above: alignment of `AGENTS.md` with active membership/permissions/resource scope, and read-only preflight of `filmovy-kviz-v2-staging`. The lead applied the single policy correction and performed only the approved metadata/security reads. This resolves the role wording mismatch. It does not authorize a newly discovered cloud write, IAM/identity change, email or deployment.
+
+The existing candidate/worktrees were reused. GPT-6.1 Sol MEDIUM prepared the offline unified builder; HIGH independently reviewed it and the cloud boundaries; LOW recorded evidence. Independent review caught and resolved a stale ignored domain build risk: both frontend and backend now bind to freshly compiled domain output from the exact candidate. Node 22 passed all 18 staging/inventory/builder tests and `pnpm check`. No application/runtime source changed from `8b62456`, so its completed unit/Rules/browser results remain attributed to that tested source rather than being unnecessarily rerun.
+
+The cloud preflight found 71 active functions (the exact 70-function inventory plus `health`), no excluded email endpoint, the required bucket/permissions/service agent and both ready indexes. Runtime configuration matches the V2 project/bucket without emulator variables. Storage Rules match the candidate; Firestore Rules still match `8106c4a` and lack the reviewed snapshot-revocation fix. Existing collaboration is **enabled**, revision **18**, with an active verified owner and moderator. No owner creation, permission expansion or blanket infrastructure repair is needed. See [RESTART_PREFLIGHT.md](RESTART_PREFLIGHT.md) for exact evidence, limitations and remaining checks.
+
+GitHub remains a separate blocker: both connector and CLI repository API calls return 404; the CLI is authenticated as the repository owner and Git remote HEAD is readable at `0d452d8`. No remote CI result has been established. Do not infer API/PR/CI access from Git transport success or replace the existing credentials with another source.
+
+Next: prepare the offline artifact from a clean committed SHA using verified local SDK/bucket inputs, validate its packaged runtime and checksums, then record the concrete deployment request. Keep the paused heartbeat paused at the approval/access boundary. No cloud writes have occurred in this continuation.

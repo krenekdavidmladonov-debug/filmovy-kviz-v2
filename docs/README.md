@@ -4,9 +4,10 @@ This directory indexes JustKvíz V2 product, architecture, security, migration, 
 
 ## Current local integration and release planning
 
-- [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) — dated restart/integration evidence, validation results, remaining work and the unresolved literal role-policy alignment with `AGENTS.md`.
+- [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) — dated restart/integration evidence, validation results, remaining work and the 2026-10-12 owner approval aligning [AGENTS.md](../AGENTS.md) with active server-managed membership, concrete permissions and resource scope.
 - [RESTART_VALIDATION.md](RESTART_VALIDATION.md) — tested commits, pinned runtime, local receipt/log paths, resolved test failures and remaining verification limits.
-- [RESTART_RELEASE_PLAN.md](RESTART_RELEASE_PLAN.md) — unified staging scope, release inventory, approval prerequisites and fail-closed rollback; no cloud access or deployment authorization.
+- [RESTART_PREFLIGHT.md](RESTART_PREFLIGHT.md) — approved read-only V2 staging inventory, current invitation state, cloud differences and remaining release prerequisites.
+- [RESTART_RELEASE_PLAN.md](RESTART_RELEASE_PLAN.md) — unified staging scope, release inventory, approval prerequisites and fail-closed rollback; read-only V2 staging preflight was authorized on 2026-10-12, while cloud writes and deployment require separate approval.
 
 Older branch names, cloud inventories and online receipts in individual release documents are historical context. Use the dated status and restart plan for current coordination; invitations, owner setup and actual email provisioning require their separate gates.
 

@@ -126,6 +126,6 @@ Integrated contracts and release context: [complete editor](docs/COMPLETE_EDITOR
 
 Do not deploy or connect this repository to the existing production Firebase project without explicit authorization. Never add credentials or service-account keys to Git. See [docs/SECURITY.md](docs/SECURITY.md) and [AGENTS.md](AGENTS.md).
 
-The literal `admin/moderator` role wording in `AGENTS.md` differs from the integrated membership/permission/scope model. That policy alignment remains an owner decision before release; see [DEVELOPMENT_STATUS.md](docs/DEVELOPMENT_STATUS.md) and [RESTART_RELEASE_PLAN.md](docs/RESTART_RELEASE_PLAN.md). `AGENTS.md` has not been changed.
+On 2026-10-12 the owner approved aligning [AGENTS.md](AGENTS.md) with the integrated authorization model: active server-managed membership, concrete permissions and applicable resource scope, enforced by Security Rules and server code. Legacy claims alone grant no authority. The owner also authorized read-only V2 staging preflight; this does not establish cloud readiness or authorize deployment. See [DEVELOPMENT_STATUS.md](docs/DEVELOPMENT_STATUS.md) for the current scope and results.
 
 Current public branding and release scope: [JustKvíz rebrand](docs/JUSTKVIZ_REBRAND.md). The existing staging URL and technical identifiers remain unchanged.
