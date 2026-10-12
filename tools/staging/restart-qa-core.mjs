@@ -79,14 +79,26 @@ function assertAuth(user, expected, createdAt) {
     && typeof user.createdAt === 'string' && /^\d+$/u.test(user.createdAt), 'QA_AUTH_READBACK_MISMATCH');
   if (createdAt) demand(user.createdAt === createdAt, 'QA_AUTH_CREATION_CHANGED');
 }
-function assertFinal(audit, control, members, plan) {
+// Firestore REST omits empty protobuf container members on readback. Only
+// singleton typed values with an exactly empty container are equivalent;
+// missing fields, other types and extra container data remain distinguishable.
+function canonicalReadback(value) {
+  if (Array.isArray(value)) return value.map(canonicalReadback);
+  if (value === null || typeof value !== 'object') return value;
+  if (exactKeys(value, ['arrayValue']) && exactKeys(value.arrayValue, [])) return { arrayValue: { values: [] } };
+  if (exactKeys(value, ['mapValue']) && exactKeys(value.mapValue, [])) return { mapValue: { fields: {} } };
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, canonicalReadback(item)]));
+}
+// Pure saved-evidence assertion; callers still establish Auth ownership separately.
+export function assertQaReadback(audit, control, members, plan) {
+  demand(Array.isArray(members) && members.length === plan.memberships.length, 'EXACT_QA_MEMBERSHIP_READBACK_REQUIRED');
   const { at, ...actualAudit } = audit?.fields ?? {};
-  demand(audit?.name === plan.auditName && isDeepStrictEqual(actualAudit, plan.auditFields) && typeof at?.timestampValue === 'string', 'QA_AUDIT_MISMATCH');
+  demand(audit?.name === plan.auditName && isDeepStrictEqual(canonicalReadback(actualAudit), canonicalReadback(plan.auditFields)) && typeof at?.timestampValue === 'string', 'QA_AUDIT_MISMATCH');
   assertControl(control, plan, true);
   demand(control.updateTime === audit.updateTime, 'CONTROL_CHANGED_AFTER_PROVISION');
   for (let i = 0; i < members.length; i++) {
     const { createdAt, ...actual } = members[i]?.fields ?? {};
-    demand(members[i]?.name === plan.memberships[i].name && isDeepStrictEqual(actual, plan.memberships[i].fields)
+    demand(members[i]?.name === plan.memberships[i].name && isDeepStrictEqual(canonicalReadback(actual), canonicalReadback(plan.memberships[i].fields))
       && typeof createdAt?.timestampValue === 'string' && members[i].updateTime === audit.updateTime, 'QA_MEMBERSHIP_READBACK_MISMATCH');
   }
 }
@@ -115,7 +127,7 @@ export async function executeQa({ plan, credentials, store, apply = false, recon
     }
     if (audit) {
       demand(owned.length === 2, 'AUTH_OWNERSHIP_UNCONFIRMED');
-      assertFinal(audit, control, members, plan);
+      assertQaReadback(audit, control, members, plan);
       return { mode: 'READ_RECONCILED_APPLIED', planSha256: plan.planSha256, auditName: plan.auditName, controlUpdateTime: control.updateTime, writes: 0 };
     }
     demand(members.every(member => member === null), 'PARTIAL_OR_FOREIGN_MEMBERSHIP_STATE');
@@ -145,6 +157,6 @@ export async function executeQa({ plan, credentials, store, apply = false, recon
   await store.commit(plan.writes);
   const finalAudit = await store.read(plan.auditName), finalControl = await store.read(plan.controlName);
   const finalMembers = await Promise.all(plan.memberships.map(member => store.read(member.name)));
-  assertFinal(finalAudit, finalControl, finalMembers, plan);
+  assertQaReadback(finalAudit, finalControl, finalMembers, plan);
   return { mode: 'APPLIED', planSha256: plan.planSha256, auditName: plan.auditName, controlUpdateTime: finalControl.updateTime, authCreates: 2, firestoreWrites: 4 };
 }

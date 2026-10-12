@@ -1,6 +1,8 @@
-# Návrh syntetické online akceptace ddb862f
+# Schválená syntetická online akceptace ddb862f
 
-Stav online QA: **NÁVRH, NEPOVOLENO, NESPÚŠTĚNO**. Aplikační zdroj `ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac`, tree `63e2dda958f2faf6ade85e780c9bdd28ad4bd52a`; následné dokumentační HEAD není jiný aplikační kandidát. Jeho samostatně schválené nasazení je již [dokončené a ověřené](STAGING_EXECUTION_DDB862F.md). Následující QA přidává nové identity, granty a syntetický obsah, které nebyly součástí konkrétního souhlasu s deploymentem.
+Stav online QA: **SCHVÁLENO, PROBÍHÁ**. Poslední zpráva vlastníka **Schvaluji** schválila celý níže vymezený retenční QA rozsah. Aplikační zdroj `ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac`, tree `63e2dda958f2faf6ade85e780c9bdd28ad4bd52a`; následné dokumentační HEAD není jiný aplikační kandidát. Jeho samostatně schválené nasazení je již [dokončené a ověřené](STAGING_EXECUTION_DDB862F.md). Nový souhlas zahrnuje uvedené QA identity, granty a syntetický obsah i jejich ponechání ve stagingu.
+
+Provisioning proběhl právě jednou a je potvrzený výsledkem **READ_RECONCILED_APPLIED**: dvě Auth identity, přesné memberships, audit a pozastavené pozvánky při revizi 20. Původní `QA_AUDIT_MISMATCH` způsobilo vynechání prázdných protobuf položek v JSON; úzká přezkoumaná oprava a 22 cílených testů, `pnpm check`, 50 demo Rules testů prošly. Smíření pouze četlo, žádný zápis se neopakoval. UI přihlášení a vytvoření jediného kvízu prošlo, autor nyní navazuje na zachycený rozpracovaný upload. Tato rozpracovaná fáze není online PASS; podrobnosti a přesný další krok jsou v [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md).
 
 Jediný cíl: `filmovy-kviz-v2-staging`, `europe-west1`, `https://filmovy-kviz-v2-staging.web.app`. Žádný V1/production, skutečné kontakty, email delivery, import či změna existující identity. Lokální a CI výsledky jsou v [COMPLETION_VALIDATION.md](COMPLETION_VALIDATION.md), dokončené nasazení má vlastní [záznam](STAGING_EXECUTION_DDB862F.md).
 

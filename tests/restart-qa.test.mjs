@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { PROJECT, RELEASE_SHA, RECEIPT_SHA256, QA_RUN_ID, USERS, qaPlan, validateCredentials, executeQa } from '../tools/staging/restart-qa-core.mjs';
+import { PROJECT, RELEASE_SHA, RECEIPT_SHA256, QA_RUN_ID, USERS, qaPlan, validateCredentials, executeQa, assertQaReadback } from '../tools/staging/restart-qa-core.mjs';
 import { qaStore, connectQaStore } from '../tools/staging/restart-qa-store.mjs';
 
 const approval = () => ({ projectId: PROJECT, releaseSha: RELEASE_SHA, artifactReceiptSha256: RECEIPT_SHA256, qaRunId: QA_RUN_ID,
@@ -133,6 +133,59 @@ test('lost Firestore commit response reconciles exact audit and confirmed Auth w
   f.store.commit = async writes => { await commit(writes); throw new Error('lost response'); };
   await assert.rejects(f.run({ apply: true })); assert.equal(f.writes.length, 3);
   assert.equal((await f.run({ reconcile: true })).mode, 'READ_RECONCILED_APPLIED'); assert.equal(f.writes.length, 3);
+});
+
+// Actual REST readback shape: protobuf omits values on empty arrays, including
+// the doubly encoded grant inside the audit. Never drop the typed value itself.
+function omitEmptyContainerMembers(value) {
+  if (Array.isArray(value)) return value.map(omitEmptyContainerMembers);
+  if (value === null || typeof value !== 'object') return value;
+  if (Object.keys(value).length === 1 && Array.isArray(value.values) && value.values.length === 0) return {};
+  if (Object.keys(value).length === 1 && value.fields && Object.keys(value.fields).length === 0) return {};
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, omitEmptyContainerMembers(item)]));
+}
+
+test('actual empty-container REST representation passes final readback and read-only reconciliation without changing plan', async () => {
+  const f = fixture(), originalPlan = structuredClone(f.plan), commit = f.store.commit;
+  f.store.commit = async writes => {
+    await commit(writes);
+    for (const [name, doc] of f.docs) f.docs.set(name, omitEmptyContainerMembers(doc));
+  };
+  assert.equal((await f.run({ apply: true })).mode, 'APPLIED');
+  assert.deepEqual(f.docs.get(f.plan.memberships[0].name).fields.quizzes.mapValue.fields.ids, { arrayValue: {} });
+  assert.notDeepEqual(f.docs.get(f.plan.auditName).fields.changes, f.plan.auditFields.changes);
+  assert.equal((await f.run({ reconcile: true })).mode, 'READ_RECONCILED_APPLIED');
+  assert.deepEqual(f.plan, originalPlan); assert.equal(f.writes.length, 3);
+});
+
+test('empty-container normalization rejects wrong types, missing grants, additional data and changed revisions', async () => {
+  const mutations = [
+    f => { f.docs.get(f.plan.memberships[0].name).fields.quizzes.mapValue.fields.ids = { mapValue: {} }; },
+    f => { f.docs.get(f.plan.memberships[0].name).fields.quizzes.mapValue.fields.ids = {}; },
+    f => { f.docs.get(f.plan.memberships[0].name).fields.quizzes.mapValue.fields.ids = { arrayValue: { values: null } }; },
+    f => { f.docs.get(f.plan.memberships[0].name).fields.quizzes.mapValue.fields.ids = { arrayValue: { values: [], extra: true } }; },
+    f => { f.docs.get(f.plan.memberships[0].name).fields.quizzes.mapValue.fields.ids = { arrayValue: { values: [{ stringValue: 'foreign-quiz' }] } }; },
+    f => { delete f.docs.get(f.plan.memberships[0].name).fields.permissions; },
+    f => { f.docs.get(f.plan.memberships[0].name).fields.role.stringValue = 'owner'; },
+    f => { f.docs.get(f.plan.auditName).fields.changes.mapValue.fields.revision.integerValue = '21'; },
+    f => { f.docs.get(f.plan.controlName).fields.revision.integerValue = '21'; },
+    f => { f.docs.get(f.plan.auditName).fields.changes.mapValue.fields.identities.arrayValue.values[0].mapValue.fields.grant = { mapValue: {} }; },
+  ];
+  for (const mutate of mutations) {
+    const f = fixture(); await f.run({ apply: true });
+    for (const [name, doc] of f.docs) f.docs.set(name, omitEmptyContainerMembers(doc));
+    mutate(f); await assert.rejects(f.run({ reconcile: true })); assert.equal(f.writes.length, 3);
+  }
+});
+
+test('pure readback assertion requires both exact membership documents', async () => {
+  const f = fixture(); await f.run({ apply: true });
+  const audit = f.docs.get(f.plan.auditName), control = f.docs.get(f.plan.controlName);
+  const members = f.plan.memberships.map(member => f.docs.get(member.name));
+  assertQaReadback(audit, control, members, f.plan);
+  for (const incomplete of [undefined, [], members.slice(0, 1), [...members, members[0]]]) {
+    assert.throws(() => assertQaReadback(audit, control, incomplete, f.plan), /EXACT_QA_MEMBERSHIP_READBACK_REQUIRED/);
+  }
 });
 
 test('pause changes or deleted/recreated/disabled Auth before commit leave users without membership', async () => {

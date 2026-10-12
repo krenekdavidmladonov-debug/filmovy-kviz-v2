@@ -4,7 +4,15 @@ The application remains frozen at `ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac`. Th
 
 This is the **initial preparation** evidence. The subsequent owner-approved deployment and three operator compatibility fixes (`8dc0633`, `25777ce`, `40fee6c`) are recorded in [STAGING_EXECUTION_DDB862F.md](STAGING_EXECUTION_DDB862F.md). The final guard revision passed 15 targeted real pinned-CLI offline tests plus independent review; do not attribute the earlier 23-test receipt below to those later bytes. The exact application artifact stayed unchanged throughout.
 
-## Subsequent local QA provisioning preparation
+## Approved QA provisioning readback compatibility
+
+After the owner's separate QA/retention approval, the lead applied the original exact two-identity plan once. Firestore omitted eight empty protobuf `arrayValue.values` members in its response. Strict JSON equality reported an unconfirmed result even though both memberships, audit and paused-control revision 20 were committed. The readback comparison now canonicalizes only equivalent empty typed containers; plan construction and writes are unchanged. Wrong types, extra fields, missing grants, changed revisions and incomplete membership sets remain rejected.
+
+MEDIUM authored; HIGH independently validated the saved actual response and adversarial mutations; lead reviewed and ran **22 targeted tests, `pnpm check`, and 50 demo Rules tests, all PASS**. Core SHA-256 `55d3f956d0c9c65d4fd00db0dad5620cd57555ce907ac2a33080e62c05fcc88a`, test SHA-256 `c1d724b9acd94067f794c9b726837b2400e37f302711a86d0344b2b66c5b5b60`. LOW independently bound these bytes and retained logs in `.local-data/completion-hardening/qa-readback-validation/verification.json`, SHA-256 `c03444f4d24cfea750321636f80c8b548cfd388cc28fe78e2d8156d0e3e15e98`.
+
+Supported `--reconcile` returned `READ_RECONCILED_APPLIED`, **zero writes**, for original plan `429bab2f64931b852c6610f21406b9514614be7fcbf27eaa1633087a6b8646c9`; control updateTime `2026-10-12T21:09:48.468841Z`. The original ledger, failed-readback evidence and create-only fence are retained. This confirms provisioning only; the online acceptance journey remains separately in progress.
+
+## Earlier local QA provisioning preparation
 
 `tools/staging/restart-qa.mjs`, `restart-qa-core.mjs`, `restart-qa-store.mjs` and `tests/restart-qa.test.mjs` implement only the exact two synthetic identities/grants in [STAGING_ACCEPTANCE_DDB862F.md](STAGING_ACCEPTANCE_DDB862F.md). HIGH authored; MEDIUM and lead independently reviewed the same four source hashes. No cloud dry-run/apply, sign-in, identity creation, membership update or content operation was executed.
 
