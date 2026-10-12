@@ -94,7 +94,7 @@ export function QuizDetailPage() {
       <section className="round-list" aria-label="Kola a otázky">
         {quiz.rounds.length === 0 ? (
           <div className="quiz-state-card compact">
-            <div><h2>Kvíz zatím nemá kola</h2><p>Editor bude doplněn v další etapě.</p></div>
+            <div><h2>Kvíz zatím nemá kola</h2><p>Otevřete editor a přidejte první kolo.</p></div>
           </div>
         ) : quiz.rounds.map((round) => (
           <section className="round-card" key={round.id}>

@@ -1,10 +1,10 @@
 # Owned media foundation
 
-This package adds image/audio assets to the existing quiz editor and player contract. It does not deploy or migrate anything. Legacy HTTP images and YouTube audio/video remain compatible; video, answer-image and background-image uploads are outside this foundation.
+This package adds image/audio assets to the existing quiz editor and player contract. It does not deploy or migrate anything. Legacy HTTP images and YouTube audio/video remain compatible; video uploads remain out of scope. Media authoring adds independent answer/background image roles through this same protocol.
 
 ## Data and immutable ownership
 
-The reserved value quiz-asset:<quizId>/<sha256 assetId> occupies existing string fields: IMAGE questionImage or AUDIO mediaSource. No signed URL, access token, local Blob URL or file bytes are persisted in a slide/publication. The server derives assetId from quiz/admin/request ID. The private document at quizzes/{quizId}/mediaAssets/{assetId} records quizId, assetId, kind, contentType, size, createdBy, createdAt, uploadExpiresAt, fingerprint and status. Finalization adds readyAt and the immutable Storage object generation.
+The reserved value quiz-asset:<quizId>/<sha256 assetId> occupies existing string fields: IMAGE questionImage, AUDIO mediaSource, or image answerImage/backgroundImage. No signed URL, access token, local Blob URL or file bytes are persisted in a slide/publication. The server derives assetId from quiz/admin/request ID. The private document at quizzes/{quizId}/mediaAssets/{assetId} records quizId, assetId, kind, contentType, size, createdBy, createdAt, uploadExpiresAt, fingerprint and status. Finalization adds readyAt and the immutable Storage object generation.
 
 Files use quiz-assets/{quizId}/{assetId}/source. Once created they cannot be overwritten or deleted by clients. Existing event locking copies the reference into the immutable snapshot; subsequent library edits choose a new reference. Metadata and object are retained even if the library question stops using them. There is no automatic physical cleanup, orphan sweep or bucket lifecycle rule. Retention/cleanup is a future decision requiring snapshot-aware reference analysis.
 
@@ -29,7 +29,7 @@ The gateway reads a pinned object generation. Clients create in-memory Blob URLs
 
 ## Player and UI compatibility
 
-MediaPlayer selects the existing YouTube adapter or a native audio adapter, sharing the existing command/generation, reducer, callbacks and single-player budget. IMAGE uses the existing separate question/image contain layout with black bars. AUDIO remains manual: idle does not play; START/END apply to the ordinary question, STOP releases the prior player, REPLAY creates a new generation. Native pause reports ready and native resume reports playing for that same generation; stale and terminal callbacks remain rejected. Recap uses the existing playback plan from 0:00 without the ordinary END limit. Browser autoplay restrictions report an error and require a manual retry.
+MediaPlayer selects the existing YouTube adapter or a native audio/video adapter, sharing the existing command/generation, reducer, callbacks and single-player budget. IMAGE uses the existing separate question/image contain layout with black bars. AUDIO remains manual: idle does not play; START/END apply to the ordinary question, STOP releases the prior player, REPLAY creates a new generation. Native pause reports ready and native resume reports playing for that same generation; stale and terminal callbacks remain rejected. Recap uses the existing playback plan from 0:00 without the ordinary END limit. Browser autoplay restrictions report an error and require a manual retry.
 
 ## Offline verification
 
@@ -47,3 +47,11 @@ CI includes these Storage contracts and a synthetic browser upload/editor/projec
 No staging configuration was changed. A separate approved deployment must select the exact reviewed SHA and V2 staging bucket, verify default bucket configuration and private bucket IAM, deploy the three endpoints and versioned Storage Rules, then test the cross-service Firestore Rules dependency and browser CORS in that environment. Review the documented Storage Rules service permission before any permission changes. Confirm tokenless reads, public reveal timing, immutable snapshots, bounded object sizes and HTTP response limits/cost at expected audience volume. No public bucket permission is required. No cleanup/lifecycle policy should be enabled implicitly.
 
 References: [Storage Rules conditions and Firestore lookups](https://firebase.google.com/docs/storage/security/rules-conditions), [Storage emulator connections and limitations](https://firebase.google.com/docs/emulator-suite/connect_storage).
+
+## Authoring extension
+
+MediaUploadField is the single picker for upload, validated HTTP(S) link and ready assets of the current quiz. Images have separate question, answer and background roles; only background uses cover. Direct audio supports mp3/wav/ogg/m4a; video supports mp4/webm/ogv links, plus the existing YouTube parser. Codec/server availability is checked by the actual browser player. The ready-asset library displays up to 200 records; it is not a cross-quiz search.
+
+A changed source clears START/END and requires a new valid interval. The unchanged imported 0/0 exception from PR #26 remains intact. Equal mapped media fields preserve their original representation; a changed empty string explicitly detaches a role and shadows legacy fallback without deleting its history. An upload cancellation invalidates late completions, and question selection/save are blocked during transfer. Grants/finalization time out after 30 seconds, transfer after two minutes, media reads after 15 seconds. Error/retry retains the draft.
+
+See [MEDIA_AUTHORING_RELEASE.md](MEDIA_AUTHORING_RELEASE.md) for provenance, tests, rollout scope and component rollback. No cloud operation is performed by the build script.

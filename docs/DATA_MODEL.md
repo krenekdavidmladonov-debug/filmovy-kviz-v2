@@ -6,7 +6,7 @@ This is a first design, not a migration contract. Fields should be introduced on
 
 ### `users/{uid}`
 
-Staff profile: `displayName`, `email`, `disabled`, and timestamps. Authorization is based on server-managed custom claims (`admin` or `moderator`), not a browser-writable role field.
+Legacy profile documents are no longer authority and are denied to clients. Personal identity lives in Firebase Auth. Current permissions, scope and revocation live in server-managed `memberships/{uid}`; invitations, control state and immutable audit are defined in [PERSONAL_ACCESS.md](PERSONAL_ACCESS.md). Content documents and historical authors remain unchanged.
 
 ### `quizzes/{quizId}`
 
@@ -14,11 +14,14 @@ Quiz metadata: `title`, `description`, `status` (`draft`, `ready`, `archived`), 
 
 Current required fields:
 
+- `schemaVersion` for newly created native roots;
 - `title`, `description`, `status`;
 - `createdAt`, `updatedAt` as Firestore timestamps;
 - `createdBy`, `updatedBy` as trusted actor identifiers;
 - `slideCount`, `roundCount`, `questionCount` as denormalized list counters maintained by trusted server/editor workflows.
 - `revision` as a monotonic non-negative integer maintained by trusted editor workflows. A missing revision on an untouched migrated document is interpreted as `0` and initialized on its first mutation.
+
+The admin-only `createQuiz` workflow creates an empty private root with `schemaVersion: 1`, `description: ''`, `status: draft`, `revision: 0`, and all three counters at `0`; it does not create placeholder rounds, questions, slides, snapshots, or public projections. Its opaque quiz ID is deterministic for the authenticated admin UID plus client `requestId`. New roots also keep an immutable private `creationFingerprint` over the normalized title, allowing an identical retry to return the same root while rejecting reuse of that request ID for different content. Trusted timestamps and actor fields come from the Function.
 
 V1-migrated drafts may additionally contain private `legacy: { source, metadata }`. Version-2 imports retain only explicitly allowlisted compatibility metadata and extend the same legacy object with source project/collection/ID and export/content fingerprints. It is never copied into a public projection. See tools/migration-v1/CLOUD_IMPORT.md.
 
@@ -32,7 +35,7 @@ The separate slide stream is intentionally lossless, presentation-oriented, and 
 
 Guided preflight repair does not add a persisted readiness flag or a new collection. A Choice repair receives only an option index, reads the authoritative `options`, and updates the private normalized `correctAnswer` on the slide and its derived private question record. A Video repair updates only normalized `clipStartSeconds` and `clipEndSeconds`. Both retain all other slide fields—including `legacy.raw` and unknown extensions—and increment the parent quiz `revision`. The original V1-derived raw value remains preserved under the private legacy payload.
 
-Known editor fields include `title`, `text`, `moderatorNote`, general string `options`, private `correctAnswer`, classified media references, and the known legacy presentation controls `videoStart`, `videoEnd`, `audioTrigger`, `backgroundOverlay`, `answerOverlay`, and `sourceQuestionNumber`. The projector foundation adds normalized `backgroundImage`, `questionImage`, `answerImage`, `mediaSource`, `clipStartSeconds`, `clipEndSeconds`, and top-level `backgroundOverlay`. It also stores derived `roundTitle`, `questionNumber`, and `questionCount` for an explicit within-round display contract. Compatibility mapping uses legacy media/presentation only when normalized fields are absent. The editor supports validated legacy URLs and ready quiz-scoped owned image/audio references; upload metadata and immutable generations are documented in MEDIA_STORAGE.md. A new round is represented by an explicit round-header slide with its own `roundId`; the user sees round settings rather than that implementation detail. Unknown slide/media values remain locked or fallback-rendered and are retained rather than guessed.
+Known editor fields include `title`, `text`, `moderatorNote`, general string `options`, private `correctAnswer`, classified media references, and the known legacy presentation controls `videoStart`, `videoEnd`, `audioTrigger`, `backgroundOverlay`, `answerOverlay`, and `sourceQuestionNumber`. The projector foundation adds normalized `backgroundImage`, `questionImage`, `answerImage`, `mediaSource`, `clipStartSeconds`, `clipEndSeconds`, and top-level `backgroundOverlay`. It also stores derived `roundTitle`, `questionNumber`, and `questionCount` for an explicit within-round display contract. Compatibility mapping uses legacy media/presentation only when normalized fields are absent. An imported presentation range of exactly `videoStart: 0` and `videoEnd: 0`, with top-level start absent or `0` and no top-level end key, is a legacy unset sentinel rather than a playable zero-length clip: the editor maps it to `null/null`, and an unrelated save retains the existing stored timing keys instead of normalizing or deleting them. The editor supports validated legacy URLs and ready quiz-scoped owned image/audio references; upload metadata and immutable generations are documented in MEDIA_STORAGE.md. `backgroundImage` and `backgroundOverlay` are renderable normalized fields, but the current editor has only partial URL/overlay authoring and no owned-background selection/upload workflow. A new round is represented by an explicit round-header slide with its own `roundId`; the user sees round settings rather than that implementation detail. Unknown slide/media values remain locked or fallback-rendered and are retained rather than guessed.
 
 ### `quizzes/{quizId}/rounds/{roundId}`
 
@@ -126,3 +129,12 @@ Admin-only preview/confirmation creates an immutable emailCampaigns record and r
 ## Private migration import journals
 
 `migrationV1Imports/{quizId}` records a staging intent for a multi-batch library import. Its `state/complete` child is created atomically with the final `quizzes/{quizId}` root. Missing completion blocks re-import; the absent quiz root prevents library visibility while private children are staged. All journal client access is denied by existing default-deny Rules. No runtime application changes or synchronization are introduced.
+
+Media authoring extends the shared picker/gateway/renderer to question, private answer and background roles. Explicit empty fields detach without deleting legacy data or snapshot assets. See MEDIA_AUTHORING_RELEASE.md for the complete contract and deployment scope.
+
+
+Complete editor extends the same private ordered stream with explicit draft/ready authoring, independent answer mode, default appearance, atomic round/recap creation and private in-memory rehearsal. Drafts block preflight, snapshot lock and live publication. See [COMPLETE_EDITOR_RELEASE.md](COMPLETE_EDITOR_RELEASE.md) for field compatibility, authorization, verification and the integrated deployment manifest.
+
+## Event management extension
+
+See [EVENT_MANAGEMENT.md](EVENT_MANAGEMENT.md) for the independent disposition overlay, scoped permission mapping, shared transactional guards, capability revocation and exact server-side deletion ownership/allowlist. No content backfill or Storage cleanup is introduced. Cloud team email remains disabled.

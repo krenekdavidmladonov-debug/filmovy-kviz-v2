@@ -1,3 +1,4 @@
+import { seedEmulatorMembership } from '../../functions/src/dev/seed-membership.js';
 import { expect, test } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -23,7 +24,7 @@ test.beforeAll(async () => {
   loginEmail = 'score-browser-' + randomUUID() + '@example.test'; loginPassword = randomUUID();
   const user = await auth.createUser({ email: loginEmail, password: loginPassword });
   cleanup = async () => { await auth.deleteUser(user.uid); await sdk.deleteApp(app); };
-  await auth.setCustomUserClaims(user.uid, { role: 'admin' });
+  await auth.setCustomUserClaims(user.uid, { role: 'admin' }); await seedEmulatorMembership(user.uid, 'admin');
 });
 test.afterAll(async () => { await cleanup?.(); });
 

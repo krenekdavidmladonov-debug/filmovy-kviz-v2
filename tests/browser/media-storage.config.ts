@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: '.', testMatch: 'media-storage.spec.mjs', workers: 1, timeout: 180_000, expect: { timeout: 15_000 },
+  testDir: '.', testMatch: ['media-storage.spec.mjs', 'media-authoring.spec.mjs'], workers: 1, timeout: 180_000, expect: { timeout: 15_000 },
   reporter: [['line']], preserveOutput: 'failures-only',
   use: { actionTimeout: 20000, navigationTimeout: 20000, baseURL: 'http://127.0.0.1:5198', trace: 'off', screenshot: 'off', video: 'off',
     launchOptions: process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {} },

@@ -4,29 +4,35 @@ import type { SemanticRound } from './semanticModel';
 
 export function UnsavedChangesDialog({
   busy,
+  saveLabel = 'Uložit a pokračovat',
   onSave,
   onDiscard,
   onCancel,
 }: {
   readonly busy: boolean;
+  readonly saveLabel?: string;
   readonly onSave: () => void;
   readonly onDiscard: () => void;
   readonly onCancel: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const [opener] = useState(() => document.activeElement);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog !== null && !dialog.open) dialog.showModal();
     cancelRef.current?.focus();
-    return () => { if (dialog?.open) dialog.close(); };
-  }, []);
+    return () => {
+      if (dialog?.open) dialog.close();
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, [opener]);
   return (
     <dialog ref={dialogRef} className="editor-dialog" aria-labelledby="unsaved-dialog-title" onCancel={(event) => { event.preventDefault(); onCancel(); }}>
       <h2 id="unsaved-dialog-title">Máte neuložené změny.</h2>
       <p>Než budete pokračovat, zvolte, co se má s rozepsanými změnami stát.</p>
       <div className="editor-dialog-actions">
-        <button type="button" className="primary-button" disabled={busy} onClick={onSave}>Uložit a pokračovat</button>
+        <button type="button" className="primary-button" disabled={busy} onClick={onSave}>{saveLabel}</button>
         <button type="button" className="secondary-button" disabled={busy} onClick={onDiscard}>Pokračovat bez uložení</button>
         <button ref={cancelRef} type="button" className="secondary-button" disabled={busy} onClick={onCancel}>Zrušit</button>
       </div>
@@ -53,12 +59,16 @@ export function RemoveRoundDialog({
   const [targetRoundId, setTargetRoundId] = useState(targets[0]?.id ?? '');
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const [opener] = useState(() => document.activeElement);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog !== null && !dialog.open) dialog.showModal();
     cancelRef.current?.focus();
-    return () => { if (dialog?.open) dialog.close(); };
-  }, []);
+    return () => {
+      if (dialog?.open) dialog.close();
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, [opener]);
   return (
     <dialog ref={dialogRef} className="editor-dialog" aria-labelledby="remove-round-title" onCancel={(event) => { event.preventDefault(); onCancel(); }}>
       <h2 id="remove-round-title">Odstranit {round.position}. kolo?</h2>

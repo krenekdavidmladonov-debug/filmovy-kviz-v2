@@ -1,14 +1,14 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
 import { productConfig } from '../config/product';
+import { Brand } from '../ui/Brand';
 
 export function AppLayout() {
   return (
     <div className="app-shell">
       <header className="site-header">
         <NavLink className="brand" to="/events" aria-label={`${productConfig.adminLabel} – úvod`}>
-          <span className="brand-mark" aria-hidden="true">{productConfig.shortName}</span>
-          <span>{productConfig.name}</span>
+          <Brand />
         </NavLink>
         <NavLink className="nav-link" to="/admin">Administrace</NavLink>
       </header>

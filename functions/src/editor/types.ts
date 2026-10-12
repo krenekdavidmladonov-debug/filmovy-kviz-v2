@@ -46,6 +46,11 @@ export interface EditorPresentationInput {
 }
 
 export interface EditorSlideInput {
+  readonly authoringStatus?: 'draft' | 'ready';
+  readonly answerMode?: 'open' | 'choice';
+  readonly imageLayout?: 'split' | 'stacked';
+  readonly answerExplanation?: string;
+
   readonly kind: EditorSlideKind;
   readonly title: string;
   readonly text: string;

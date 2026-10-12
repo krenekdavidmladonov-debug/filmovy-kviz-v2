@@ -13,7 +13,7 @@ function endpointUrl(): string {
 
 function responseFilename(header: string | null): string {
   const match = /filename="?([^";]+)"?/iu.exec(header ?? '');
-  return match?.[1] ?? 'filmovy-kviz.pdf';
+  return match?.[1] ?? 'justkviz.pdf';
 }
 
 async function errorMessage(response: Response): Promise<string> {

@@ -6,6 +6,18 @@ on:
       - main
   pull_request:
     branches:
+      - codex/editor-storyboard
+      - codex/editor-save-all
+      - codex/performance-navigation
+      - codex/historical-final-results
+      - codex/owner-takeover
+      - codex/justkviz-event-management
+      - codex/justkviz-ui-cleanup-01
+      - codex/justkviz-users-access
+      - codex/justkviz-dark-mode
+      - codex/justkviz-rebrand
+      - codex/complete-quiz-editor
+      - release/staging-editor-core-hotfix
       - main
       - chore/v2-staging-environment
 
@@ -20,7 +32,7 @@ jobs:
   quality-gate:
     name: Quality gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       VITE_FIREBASE_API_KEY: demo-api-key
       VITE_FIREBASE_AUTH_DOMAIN: demo-filmovy-kviz-v2.firebaseapp.com
@@ -75,6 +87,21 @@ jobs:
       - name: Install Playwright Chromium for browser E2E
         run: pnpm exec playwright install chromium
 
+      - name: Personal access Firestore and Storage isolation contracts
+        run: >-
+          pnpm exec firebase emulators:exec --only firestore,storage --project demo-justkviz-access --config firebase.access-rules.json
+          "pnpm exec vitest run --config vitest.access-rules.config.ts"
+
+      - name: Personal invitations, five browser identities, revoked grants and password recovery
+        run: >-
+          pnpm exec firebase emulators:exec --only auth,firestore,functions,storage --project demo-filmovy-kviz-v2
+          "node tools/local-emulator-environment.mjs full tests/access/emulator.mjs && node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/personal-access.config.ts && node tools/local-emulator-environment.mjs full tests/access/media-sessions.mjs"
+
+      - name: Editor core workflow browser E2E (local emulators only)
+        run: |
+          pnpm exec firebase emulators:exec --only auth,firestore,functions --project demo-filmovy-kviz-v2 "pnpm seed:auth && pnpm test:e2e:editor-core-empty-browser"
+          pnpm exec firebase emulators:exec --only auth,firestore,functions --project demo-filmovy-kviz-v2 "pnpm seed:auth && pnpm seed:quizzes && pnpm test:e2e:editor-core-browser && node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/editor-outline-dnd.config.ts"
+
       - name: Live Auth, Firestore, and Functions emulator E2E
         run: >-
           pnpm exec firebase emulators:exec
@@ -124,9 +151,26 @@ jobs:
           --project demo-filmovy-kviz-v2
           "node tools/local-emulator-environment.mjs full tests/e2e/final-reveal-emulator.mjs && node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/final-reveal.config.ts"
 
+      - name: Historical completed results browser E2E (local emulators only)
+        run: >-
+          pnpm exec firebase emulators:exec
+          --only auth,firestore,functions
+          --project demo-filmovy-kviz-v2
+          "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/historical-results.config.ts"
+
       - name: Owned media Storage contracts and browser E2E (local emulators only)
         run: >-
           pnpm exec firebase emulators:exec
           --only auth,firestore,functions,storage
           --project demo-filmovy-kviz-v2
           "pnpm test:e2e:media && pnpm test:e2e:media-browser"
+
+      - name: Complete editor UI acceptance and private draft contracts (fresh local emulators)
+        run: >-
+          pnpm exec firebase emulators:exec --only auth,firestore,functions,storage --project demo-filmovy-kviz-v2
+          "pnpm test:e2e:complete-editor && node tools/local-emulator-environment.mjs full tests/e2e/complete-editor-boundaries.mjs && pnpm test:e2e:complete-editor-performance && node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/dark-theme.config.ts"
+
+      - name: Event management lifecycle, isolated deletion and normal browser UI
+        run: >-
+          pnpm exec firebase emulators:exec --only auth,firestore,functions,storage --project demo-filmovy-kviz-v2
+          "node tools/local-emulator-environment.mjs full tests/e2e/event-management-emulator.mjs && node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/event-management.config.ts"

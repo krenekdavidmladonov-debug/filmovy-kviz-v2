@@ -1,5 +1,7 @@
+import { eventSessions } from '../live/event-lifecycle.js';
 import { assertQuizAssets } from '../media/model.js';
-import { closeEventPresentation } from '../live/event-lifecycle.js';
+import { assertEventOperational } from './guards.js';
+export { cancelEvent, archiveEvent } from './management.js';
 import {
   mapEditorQuiz,
   mapEditorSlide,
@@ -14,12 +16,11 @@ import {
   type QueryDocumentSnapshot,
   type Transaction,
 } from 'firebase-admin/firestore';
-import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { accessActor, securedOnCall, runAccessTransaction, grantCreatedResource } from '../access/authorization.js';
 
 import {
   buildPublicEventProjection,
-  canArchiveEvent,
-  canCancelEvent,
   canLockQuiz,
   canMutateEvent,
   defaultScoringConfiguration,
@@ -55,6 +56,7 @@ const maximumSnapshotWrites = 475;
 interface AdminActor { readonly uid: string; readonly role: 'admin' }
 interface StoredEvent {
   readonly title: string;
+  readonly description: string;
   readonly startsAt: unknown;
   readonly timeZone: string;
   readonly venue: EventVenueInput;
@@ -74,11 +76,7 @@ interface StoredEvent {
 }
 
 export function authorizeEventAdmin(auth: CallableRequest<unknown>['auth']): AdminActor {
-  if (auth === undefined) throw new HttpsError('unauthenticated', 'Authentication is required.');
-  if (auth.token.role !== 'admin') {
-    throw new HttpsError('permission-denied', 'Only an administrator can change events.');
-  }
-  return { uid: auth.uid, role: 'admin' };
+  return accessActor(auth);
 }
 
 function snapshotData(snapshot: DocumentSnapshot, location: string): Record<string, unknown> {
@@ -104,6 +102,7 @@ function storedText(data: Record<string, unknown>, field: string, location: stri
 function storedEvent(snapshot: DocumentSnapshot): StoredEvent {
   if (!snapshot.exists) throw new HttpsError('not-found', 'Event was not found.');
   const data = snapshotData(snapshot, 'Event');
+  assertEventOperational(data);
   const venue = data.venue;
   const scoring = data.scoring;
   if (!isObject(venue) || !isObject(scoring)
@@ -118,6 +117,7 @@ function storedEvent(snapshot: DocumentSnapshot): StoredEvent {
   }
   return {
     title: storedText(data, 'title', 'Event'),
+    description: typeof data.description === 'string' ? data.description : '',
     startsAt: data.startsAt,
     timeZone: storedText(data, 'timeZone', 'Event'),
     venue: {
@@ -162,6 +162,7 @@ function publicProjection(
 
 function configurationFields(configuration: EventConfigurationInput): Record<string, unknown> {
   return {
+    description: configuration.description ?? '',
     title: configuration.title,
     startsAt: Timestamp.fromDate(configuration.startsAt),
     timeZone: configuration.timeZone,
@@ -187,7 +188,7 @@ function safePreflightIssues(issues: readonly PreflightIssue[]): readonly Record
   }));
 }
 
-export const createEvent = onCall(callableOptions, async (request): Promise<EventMutationResponse> => {
+export const createEvent = securedOnCall('createEvent', callableOptions, async (request): Promise<EventMutationResponse> => {
   const actor = authorizeEventAdmin(request.auth);
   const initialRevision = expectedRevision(request.data);
   if (initialRevision !== 0) throw new HttpsError('invalid-argument', 'A new event must use expectedRevision 0.');
@@ -215,10 +216,11 @@ export const createEvent = onCall(callableOptions, async (request): Promise<Even
     updatedAt: now,
     updatedBy: actor.uid,
   };
-  await db.runTransaction(async (transaction) => {
+  await runAccessTransaction(db, async (transaction) => {
     if ((await transaction.get(eventRef)).exists) {
       throw new HttpsError('already-exists', 'Event identifier collision. Try again.');
     }
+    grantCreatedResource(transaction, 'event', eventRef.id);
     transaction.create(eventRef, eventData);
     transaction.create(publicRef, publicProjection({
       title: configuration.title,
@@ -240,23 +242,26 @@ export const createEvent = onCall(callableOptions, async (request): Promise<Even
   return response(eventRef.id, 1, lifecycleStatus, registrationStatus);
 });
 
-export const updateEvent = onCall(callableOptions, async (request): Promise<EventMutationResponse> => {
+export const updateEvent = securedOnCall('updateEvent', callableOptions, async (request): Promise<EventMutationResponse> => {
   const actor = authorizeEventAdmin(request.auth);
   const eventId = requiredId(request.data, 'eventId');
   const requestedRevision = expectedRevision(request.data);
   const configuration = requestedEventConfiguration(request.data);
   const eventRef = db.collection('events').doc(eventId);
   const publicRef = db.collection('publicEvents').doc(eventId);
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const current = storedEvent(await transaction.get(eventRef));
     assertExpectedRevision(current, requestedRevision);
-    if (!canMutateEvent(current.lifecycleStatus)) {
+    if (!canMutateEvent(current.lifecycleStatus) && current.lifecycleStatus !== 'live') {
       throw new HttpsError('failed-precondition', 'This event can no longer be edited.');
     }
     if (configuration.teamCapacity < current.acceptedTeams
       || configuration.peopleCapacity < current.acceptedPeople) {
-      throw new HttpsError('failed-precondition', 'Capacity cannot be lower than accepted registrations.');
+      throw new HttpsError('failed-precondition', `Kapacitu nelze snížit pod ${current.acceptedTeams} přijatých týmů a ${current.acceptedPeople} účastníků.`);
     }
+    const sessions = await eventSessions(transaction, eventId);
+    const live = sessions.some(s => s.session.status !== 'ended');
+    if (live && (configuration.teamCapacity !== current.teamCapacity || configuration.peopleCapacity !== current.peopleCapacity || configuration.teamSizeMin !== current.teamSizeMin || configuration.teamSizeMax !== current.teamSizeMax)) throw new HttpsError('failed-precondition', 'Během živého běhu lze měnit jen název, termín, místo a popis.');
     const now = Timestamp.now();
     const revision = current.revision + 1;
     const fields = configurationFields(configuration);
@@ -277,55 +282,7 @@ export const updateEvent = onCall(callableOptions, async (request): Promise<Even
   });
 });
 
-export const cancelEvent = onCall(callableOptions, async (request): Promise<EventMutationResponse> => {
-  const actor = authorizeEventAdmin(request.auth);
-  const eventId = requiredId(request.data, 'eventId');
-  const requestedRevision = expectedRevision(request.data);
-  const eventRef = db.collection('events').doc(eventId);
-  const publicRef = db.collection('publicEvents').doc(eventId);
-  return db.runTransaction(async (transaction) => {
-    const current = storedEvent(await transaction.get(eventRef));
-    assertExpectedRevision(current, requestedRevision);
-    await closeEventPresentation(transaction, eventId, actor.uid);
-    if (!canCancelEvent(current.lifecycleStatus)) {
-      throw new HttpsError('failed-precondition', 'This event cannot be cancelled.');
-    }
-    const revision = current.revision + 1;
-    const now = Timestamp.now();
-    transaction.update(eventRef, {
-      lifecycleStatus: 'cancelled', registrationStatus: 'closed',
-      revision, updatedAt: now, updatedBy: actor.uid,
-    });
-    transaction.delete(publicRef);
-    return response(eventId, revision, 'cancelled', 'closed');
-  });
-});
-
-export const archiveEvent = onCall(callableOptions, async (request): Promise<EventMutationResponse> => {
-  const actor = authorizeEventAdmin(request.auth);
-  const eventId = requiredId(request.data, 'eventId');
-  const requestedRevision = expectedRevision(request.data);
-  const eventRef = db.collection('events').doc(eventId);
-  const publicRef = db.collection('publicEvents').doc(eventId);
-  return db.runTransaction(async (transaction) => {
-    const current = storedEvent(await transaction.get(eventRef));
-    assertExpectedRevision(current, requestedRevision);
-    await closeEventPresentation(transaction, eventId, actor.uid);
-    if (!canArchiveEvent(current.lifecycleStatus)) {
-      throw new HttpsError('failed-precondition', 'Only a cancelled or completed event can be archived.');
-    }
-    const revision = current.revision + 1;
-    const now = Timestamp.now();
-    transaction.update(eventRef, {
-      lifecycleStatus: 'archived', registrationStatus: 'closed',
-      revision, updatedAt: now, updatedBy: actor.uid,
-    });
-    transaction.delete(publicRef);
-    return response(eventId, revision, 'archived', 'closed');
-  });
-});
-
-export const lockEventQuiz = onCall(callableOptions, async (request): Promise<EventMutationResponse> => {
+export const lockEventQuiz = securedOnCall('lockEventQuiz', callableOptions, async (request): Promise<EventMutationResponse> => {
   const actor = authorizeEventAdmin(request.auth);
   const eventId = requiredId(request.data, 'eventId');
   const quizId = requiredId(request.data, 'quizId');
@@ -337,7 +294,7 @@ export const lockEventQuiz = onCall(callableOptions, async (request): Promise<Ev
   const quizRef = db.collection('quizzes').doc(quizId);
   const snapshotRef = db.collection('quizSnapshots').doc();
 
-  return db.runTransaction(async (transaction: Transaction) => {
+  return runAccessTransaction(db, async (transaction: Transaction) => {
     const eventSnapshot = await transaction.get(eventRef);
     const quizSnapshot = await transaction.get(quizRef);
     const slideSnapshot = await transaction.get(quizRef.collection('slides').orderBy('position'));
@@ -411,7 +368,7 @@ export const lockEventQuiz = onCall(callableOptions, async (request): Promise<Ev
       blockerCount: 0,
       warningCount: preflight.warningCount,
     } as const;
-    transaction.create(snapshotRef, buildQuizSnapshotMetadata(quiz, preflight, actor.uid, now));
+    transaction.create(snapshotRef, { ...buildQuizSnapshotMetadata(quiz, preflight, actor.uid, now), eventId });
     for (const slide of slideSnapshot.docs) {
       transaction.create(snapshotRef.collection('slides').doc(slide.id), slide.data());
     }

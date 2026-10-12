@@ -5,13 +5,16 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from './app/router';
 import { AuthProvider } from './auth/AuthProvider';
 import { productConfig } from './config/product';
+import { pageTitle } from './config/pageTitle';
 import './styles/global.css';
+import './styles/editor.css';
 
 const rootElement = document.getElementById('root');
 const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
 
-document.title = productConfig.adminLabel;
-description?.setAttribute('content', `${productConfig.adminLabel} pro přípravu a moderování kvízů.`);
+document.title = pageTitle(router.state.location.pathname);
+router.subscribe((state) => { document.title = pageTitle(state.location.pathname); });
+description?.setAttribute('content', productConfig.description);
 
 if (!rootElement) {
   throw new Error('Root element was not found.');

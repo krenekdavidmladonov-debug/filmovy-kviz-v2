@@ -1,3 +1,4 @@
+import { seedEmulatorMembership } from '../../functions/lib/dev/seed-membership.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { initializeApp, deleteApp } from 'firebase/app';
@@ -11,7 +12,7 @@ export async function leaderboardFixture(count = 4) {
     const adminSdk = require('firebase-admin/app'), a = adminSdk.initializeApp({ projectId: env.projectId }, 'leaderboard-' + randomUUID());
     const db = require('firebase-admin/firestore').getFirestore(a), authAdmin = require('firebase-admin/auth').getAuth(a), apps = [], users = [];
     function client() { const app = initializeApp({ apiKey: 'demo-api-key', projectId: env.projectId }, randomUUID()); apps.push(app); const auth = getAuth(app); connectAuthEmulator(auth, `http://${env.authEndpoint.host}:${env.authEndpoint.port}`, { disableWarnings: true }); const f = getFunctions(app, 'europe-west1'); connectFunctionsEmulator(f, env.functionsEndpoint.host, env.functionsEndpoint.port); const store = getFirestore(app); connectFirestoreEmulator(store, env.firestoreEndpoint.host, env.firestoreEndpoint.port); return { auth, store, call: async (name, data) => (await httpsCallable(f, name)(data)).data }; }
-    async function staff(role) { const c = client(), login = { email: randomUUID() + '@example.test', password: randomUUID() }; const u = await authAdmin.createUser(login); users.push(u.uid); await authAdmin.setCustomUserClaims(u.uid, { role }); await signInWithEmailAndPassword(c.auth, login.email, login.password); return { ...c, login, uid: u.uid }; }
+    async function staff(role) { const c = client(), login = { email: randomUUID() + '@example.test', password: randomUUID() }; const u = await authAdmin.createUser(login); users.push(u.uid); await authAdmin.setCustomUserClaims(u.uid, { role }); await seedEmulatorMembership(u.uid, role); await signInWithEmailAndPassword(c.auth, login.email, login.password); return { ...c, login, uid: u.uid }; }
     const admin = await staff('admin'), moderator = await staff('moderator'), anonymous = client();
     const created = await admin.call('createEvent', { expectedRevision: 0, event: { title: 'Synthetic interim results', startsAt: '2031-11-20T18:00:00Z', timeZone: 'Europe/Prague', venue: { name: 'Synthetic', publicLocation: 'Synthetic' }, teamCapacity: 100, peopleCapacity: 200, teamSizeMin: 2, teamSizeMax: 6 } });
     const eventId = created.eventId, snapshotId = 'leaderboard-snapshot-' + randomUUID(), roundIds = ['r1', 'r2', 'r3'];

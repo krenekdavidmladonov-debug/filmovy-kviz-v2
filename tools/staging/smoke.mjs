@@ -6,10 +6,12 @@ import { getFirestore, getDoc, getDocs, collection, doc, updateDoc } from 'fireb
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { assertStagingProject, STAGING_PROJECT, STAGING_URL } from './guard.mjs';
 import { stagingWebConfig } from './cloud.mjs';
+import { assertIsolatedQaManifest } from './qa-identity-guard.mjs';
 
 assertStagingProject(process.argv[2]);
 const seed = JSON.parse(readFileSync(new URL('../../.local-data/staging/seed.json', import.meta.url), 'utf8'));
 assertStagingProject(seed.project);
+assertIsolatedQaManifest(seed);
 assert.equal(seed.status, 'complete');
 const app = initializeApp(await stagingWebConfig(), 'staging-smoke');
 const auth = getAuth(app);

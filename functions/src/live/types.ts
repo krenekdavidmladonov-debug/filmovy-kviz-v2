@@ -50,6 +50,8 @@ export interface PrivateSlide {
   readonly backgroundImage?: unknown;
   readonly questionImage?: unknown;
   readonly answerImage?: unknown;
+  readonly imageLayout?: unknown;
+  readonly answerExplanation?: unknown;
   readonly mediaSource?: unknown;
   readonly backgroundOverlay?: unknown;
   readonly clipStartSeconds?: unknown;
@@ -102,6 +104,8 @@ export interface PublicLiveSession {
   readonly recapQuestionPosition?: number;
   readonly revealedAnswer?: string;
   readonly answerImage?: string;
+  readonly imageLayout?: string;
+  readonly answerExplanation?: string;
 }
 
 export type LiveSessionAction =

@@ -16,6 +16,9 @@ describe('PDF Print Center renderer', () => {
     expect(first.pageCount).toBeGreaterThanOrEqual(20);
     const pdf = await PDFDocument.load(first.bytes);
     expect(pdf.getPageCount()).toBe(first.pageCount);
+    expect(pdf.getTitle()).toBe('JustKvíz — tiskové centrum');
+    expect(pdf.getAuthor()).toBe('JustKvíz');
+    expect(pdf.getCreator()).toBe('JustKvíz');
     expect(pdf.getPages()[0]?.getWidth()).toBeCloseTo(595.28, 1);
     expect(first.bytes.byteLength).toBeLessThan(10 * 1024 * 1024);
   }, 20_000);

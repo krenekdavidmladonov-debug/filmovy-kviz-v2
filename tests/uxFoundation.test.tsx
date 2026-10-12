@@ -104,12 +104,12 @@ function documentFor(markup: string): Document {
 }
 
 describe('UX foundation contracts', () => {
-  test('brand configuration is neutral and projector rendering consumes it', () => {
-    expect(productConfig).toEqual({ name: 'QUIZ PLATFORM', shortName: 'QP', adminLabel: 'Kvízová platforma' });
+  test('brand configuration and projector rendering preserve the public name', () => {
+    expect(productConfig).toMatchObject({ name: 'JustKvíz', shortName: 'JK', adminLabel: 'JustKvíz' });
     const markup = renderToStaticMarkup(
       <SlideRenderer quizTitle="Syntetický kvíz" slide={{ kind: 'intro', title: 'Úvod', text: '', options: [], media: [] }} />,
     );
-    expect(markup).toContain(productConfig.name);
+    expect(markup.replace(/<[^>]+>/g, '')).toContain(productConfig.name);
     expect(markup).not.toContain('FILMOVÝ KVÍZ');
   });
 

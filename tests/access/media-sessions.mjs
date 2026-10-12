@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { ref, uploadBytes } from 'firebase/storage';
+import { signInWithEmailAndPassword, signOut, reauthenticateWithCredential, EmailAuthProvider, updatePassword, sendPasswordResetEmail, confirmPasswordReset } from 'firebase/auth';
+import { mediaFixture, syntheticImage } from '../e2e/media-fixture.mjs';
+import { requireFullEmulatorEnvironment } from '../../tools/local-emulator-environment.mjs';
+const env = requireFullEmulatorEnvironment(process.env, 'Media and session access contracts'), f = await mediaFixture();
+try {
+  const image = syntheticImage(), prompt = await f.upload('image', image, 'image/png'), answer = await f.upload('image', image, 'image/png');
+  await f.update('image', { questionImage: prompt.reference, answerImage: answer.reference });
+  const reader = await f.roleClient('moderator'), uid = reader.auth.currentUser.uid, memberRef = f.db.doc(`memberships/${uid}`);
+  const current = (await memberRef.get()).data();
+  await memberRef.update({ role: 'viewer', version: current.version + 1, permissions: ['quiz.read'], quizzes: { mode: 'selected', ids: [f.quizId] }, events: { mode: 'none', ids: [] } });
+  assert.equal((await f.read(prompt.reference, { who: reader })).status, 200);
+  assert.equal((await f.read(answer.reference, { who: reader })).status, 404);
+  await memberRef.update({ permissions: ['quiz.read', 'quiz.edit', 'quiz.media.attach'] });
+  const quiz = await reader.call('readAccessData', { operation: 'editor', quizId: f.quizId }), slide = quiz.slides.find(s => s.id === f.ids.image);
+  const keys = ['kind', 'title', 'text', 'moderatorNote', 'options', 'correctAnswer', 'media', 'presentation', 'backgroundImage', 'questionImage', 'answerImage', 'mediaSource', 'backgroundOverlay', 'clipStartSeconds', 'clipEndSeconds', 'authoringStatus', 'answerMode', 'imageLayout', 'answerExplanation'];
+  const input = Object.fromEntries(keys.filter(key => slide[key] !== undefined).map(key => [key, slide[key]]));
+  await assert.rejects(() => reader.call('updateQuizSlide', { quizId: f.quizId, slideId: slide.id, expectedRevision: quiz.revision, slide: { ...input, questionImage: answer.reference } }), e => e.code === 'functions/permission-denied');
+  const beforeToken = await reader.auth.currentUser.getIdToken();
+  await memberRef.update({ status: 'suspended', version: current.version + 2 });
+  assert.equal(await reader.auth.currentUser.getIdToken() === beforeToken, true);
+  assert.equal((await f.read(prompt.reference, { who: reader })).status, 404);
+  console.log('PASS prompt vs answer media bytes and old URL/token after suspension');
+
+  const uploader = await f.roleClient('admin'), uploadMember = f.db.doc(`memberships/${uploader.auth.currentUser.uid}`), old = (await uploadMember.get()).data();
+  const pending = await f.begin('image', image, 'image/png', uploader), uploaded = await f.begin('image', image, 'image/png', uploader);
+  await uploadBytes(ref(uploader.storage, uploaded.path), image, { contentType: 'image/png' });
+  await uploadMember.update({ version: old.version + 1 });
+  await assert.rejects(() => uploadBytes(ref(uploader.storage, pending.path), image, { contentType: 'image/png' }), e => e.code === 'storage/unauthorized');
+  await assert.rejects(() => uploader.call('finalizeQuizMediaUpload', { quizId: f.quizId, assetId: uploaded.assetId }), e => e.code === 'functions/permission-denied');
+  console.log('PASS old upload grant and delayed finalize after membership version change');
+
+  const user = f.admin.auth.currentUser, originalUid = user.uid, newPassword = randomUUID(), resetPassword = randomUUID();
+  const oldToken = await user.getIdToken();
+  await reauthenticateWithCredential(user, EmailAuthProvider.credential(f.loginEmail, f.loginPassword));
+  await updatePassword(user, newPassword);
+  await reauthenticateWithCredential(user, EmailAuthProvider.credential(f.loginEmail, newPassword));
+  await f.admin.call('revokeMySessions', {});
+  const endpoint = `http://${env.functionsEndpoint.host}:${env.functionsEndpoint.port}/${env.projectId}/europe-west1/readAccessData`;
+  const stale = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + oldToken }, body: JSON.stringify({ data: { operation: 'editor', quizId: f.quizId } }) });
+  assert.ok([401, 403].includes(stale.status));
+  await signOut(f.admin.auth);
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  await assert.rejects(() => signInWithEmailAndPassword(f.admin.auth, f.loginEmail, f.loginPassword));
+  await signInWithEmailAndPassword(f.admin.auth, f.loginEmail, newPassword);
+  assert.equal((await f.admin.call('readAccessData', { operation: 'editor', quizId: f.quizId })).id, f.quizId);
+  await sendPasswordResetEmail(f.admin.auth, f.loginEmail);
+  const oob = await fetch(`http://${env.authEndpoint.host}:${env.authEndpoint.port}/emulator/v1/projects/${env.projectId}/oobCodes`);
+  const code = (await oob.json()).oobCodes.filter(item => item.email === f.loginEmail && item.requestType === 'PASSWORD_RESET').at(-1)?.oobCode;
+  assert.equal(typeof code, 'string');
+  await confirmPasswordReset(f.admin.auth, code, resetPassword); await signOut(f.admin.auth);
+  await signInWithEmailAndPassword(f.admin.auth, f.loginEmail, resetPassword);
+  assert.equal(f.admin.auth.currentUser.uid, originalUid);
+  assert.equal((await f.admin.call('readAccessData', { operation: 'editor', quizId: f.quizId })).id, f.quizId);
+  console.log('PASS password change, all-session revocation, fresh login and Firebase recovery retain UID/content');
+} finally { await f.dispose(); }

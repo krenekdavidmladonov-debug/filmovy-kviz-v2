@@ -6,7 +6,7 @@ const denied=(promise,code)=>assert.rejects(promise,error=>error.code===code);
 try {
   f=await mediaFixture();const image=syntheticImage(),audio=syntheticAudio();const moderator=await f.roleClient('moderator');
   phase='upload rules';
-  await denied(f.begin('image',image,'image/png',f.anonymous),'functions/permission-denied');await denied(f.begin('image',image,'image/png',moderator),'functions/permission-denied');
+  await denied(f.begin('image',image,'image/png',f.anonymous),'functions/unauthenticated');await denied(f.begin('image',image,'image/png',moderator),'functions/permission-denied');
   const pending=await f.begin('image',image,'image/png');
   for(const who of [f.anonymous,moderator])await denied(uploadBytes(ref(who.storage,pending.path),image,{contentType:'image/png'}),'storage/unauthorized');
   await denied(uploadBytes(ref(f.admin.storage,pending.path),image,{contentType:'text/html'}),'storage/unauthorized');
@@ -26,12 +26,15 @@ try {
   await denied(f.update('image',{questionImage:sound.reference}),'functions/failed-precondition');
   const q=(await f.quizRef.get()).data();await denied(f.admin.call('updateQuizSlide',{quizId:f.quizId,slideId:f.ids.image,expectedRevision:q.revision,slide:mediaSlide('image',{questionImage:pending.reference.replace(f.quizId,'other-quiz')})}),'functions/invalid-argument');
   console.log('PASS: actual content signature, oversized declaration, audio upload, cross-quiz/type/conflicting slot denial');
-  phase='snapshot and reveal';const snapshotId=await f.lock();const replacement=await f.upload('image',image,'image/png');await f.update('image',{questionImage:replacement.reference});
+  phase='snapshot and reveal';const answer=await f.upload('image',image,'image/png'),background=await f.upload('image',image,'image/png'); await f.update('image',{questionImage:pending.reference,answerImage:answer.reference,backgroundImage:background.reference}); const snapshotId=await f.lock();const replacement=await f.upload('image',image,'image/png');await f.update('image',{questionImage:replacement.reference});
   assert.equal((await f.db.doc('quizSnapshots/'+snapshotId+'/slides/'+f.ids.image).get()).data().questionImage,pending.reference);
   const sessionId=await f.live();assert.equal((await f.read(pending.reference,{sessionId})).status,404);
   await f.navigate(sessionId,3);const shown=await f.read(pending.reference,{sessionId});assert.equal(shown.status,200);assert.equal(shown.headers.get('x-content-type-options'),'nosniff');assert.deepEqual(Buffer.from(await shown.arrayBuffer()),image);
+  assert.equal((await f.read(background.reference,{sessionId})).status,200); assert.equal((await f.read(answer.reference,{sessionId})).status,404);
+  const beforeReveal=(await f.db.doc('publicSessions/'+sessionId).get()).data(); assert.equal(JSON.stringify(beforeReveal).includes(answer.reference),false);
+  const active=(await f.db.doc('sessions/'+sessionId).get()).data(); await f.admin.call('revealAnswer',{sessionId,expectedRevision:active.revision}); assert.equal((await f.read(answer.reference,{sessionId})).status,200);
   assert.equal((await f.read(replacement.reference,{sessionId})).status,404);assert.equal((await f.read(sound.reference,{sessionId})).status,404);
-  await f.navigate(sessionId,4);assert.equal((await f.read(sound.reference,{sessionId,range:'bytes=0-15'})).status,404);
+  await f.navigate(sessionId,4); assert.equal((await f.read(answer.reference,{sessionId})).status,404); assert.equal((await f.read(background.reference,{sessionId})).status,404);assert.equal((await f.read(sound.reference,{sessionId,range:'bytes=0-15'})).status,404);
   const raw=(await f.db.doc('publicSessions/'+sessionId).get()).data();assert.equal(raw.mediaSource,undefined);assert.equal(JSON.stringify(raw).includes('Soukromá odpověď'),false);
   assert.equal((await f.read(sound.reference,{who:f.anonymous})).status,403);assert.equal((await f.read(sound.reference,{who:moderator})).status,200);
   await f.navigate(sessionId,5);const session=(await f.db.doc('sessions/'+sessionId).get()).data();await f.admin.call('selectRecapQuestion',{sessionId,expectedRevision:session.revision,position:4});

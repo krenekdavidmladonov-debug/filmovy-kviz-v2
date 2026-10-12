@@ -15,6 +15,8 @@ export interface PreviewSlide {
   readonly backgroundImage?: string;
   readonly questionImage?: string;
   readonly answerImage?: string;
+  readonly imageLayout?: string;
+  readonly answerExplanation?: string;
   readonly mediaSource?: string;
   readonly clipStartSeconds?: number | null;
   readonly clipEndSeconds?: number | null;

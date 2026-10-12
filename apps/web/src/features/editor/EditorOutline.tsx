@@ -1,10 +1,11 @@
+import { useRef, useState, type DragEvent } from 'react';
 import type { SemanticQuizModel, SemanticRound } from './semanticModel';
 import { questionSummary, questionTypeLabels, semanticQuestionType } from './semanticModel';
 import type { CreatableQuestionType, EditorSlide } from './types';
 import { validateQuestion } from './validation';
 
 const creationLabels: Record<CreatableQuestionType, string> = {
-  choice: 'Výběr z možností', free: 'Volná odpověď', image: 'Obrázek', audio: 'Audio', video: 'Video',
+  choice: 'ABCD', free: 'Volná odpověď', image: 'Obrázek', audio: 'Audio', video: 'Video',
 };
 
 export function EditorOutline({
@@ -18,6 +19,8 @@ export function EditorOutline({
   onClosePicker,
   onCreateQuestion,
   onAddRound,
+  onAddClosing,
+  onMove,
 }: {
   readonly model: SemanticQuizModel;
   readonly selectedKey: string;
@@ -29,15 +32,45 @@ export function EditorOutline({
   readonly onClosePicker: () => void;
   readonly onCreateQuestion: (round: SemanticRound, type: CreatableQuestionType) => void;
   readonly onAddRound: () => void;
+  readonly onAddClosing?: () => void;
+  readonly onMove: (id: string, roundId: string | undefined, beforeId?: string) => Promise<boolean>;
 }) {
+  const dragged = useRef<string | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [announcement, setAnnouncement] = useState('');
+  const locked = disabled || moving;
+  function clearDrag() { dragged.current = null; setDragging(null); setDropTarget(null); }
+  async function move(id: string, roundId: string | undefined, beforeId?: string) {
+    clearDrag();
+    if (locked || id === beforeId) return;
+    setMoving(true); setAnnouncement('Přesouvám otázku…');
+    try {
+      const success = await onMove(id, roundId, beforeId);
+      setAnnouncement(success ? 'Otázka přesunuta.' : 'Přesun se nezdařil.');
+      if (success) requestAnimationFrame(() => document.getElementById(`outline-${id}`)?.focus());
+    } finally { setMoving(false); }
+  }
+  function allowDrop(event: DragEvent, key: string) {
+    if (locked || dragged.current === null) return;
+    event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDropTarget(key);
+  }
   const selected = (key: string) => key === selectedKey ? 'selected' : '';
   const questionCount = model.rounds.reduce((total, round) => total + round.questions.length, 0);
   return (
-    <aside className="editor-outline editor-panel-structure" aria-label="Struktura kvízu">
+    <aside className={`editor-outline editor-panel-structure ${dragging ? 'is-dragging' : ''}`} aria-label="Struktura kvízu"
+      onDragOver={event => {
+        if (!dragged.current) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (event.clientY < bounds.top + 40) event.currentTarget.scrollTop -= 18;
+        if (event.clientY > bounds.bottom - 40) event.currentTarget.scrollTop += 18;
+      }}>
       <header className="outline-heading">
         <div><span>Struktura</span><strong>{model.rounds.length} kol · {questionCount} otázek</strong></div>
         <button type="button" className={`outline-root-button ${selected('quiz')}`} onClick={() => onSelect('quiz')}>Základní údaje</button>
       </header>
+      <span className="outline-move-status" role="status" aria-live="polite">{announcement}</span>
 
       <section className="outline-section">
         <h2>Úvod kvízu</h2>
@@ -49,22 +82,46 @@ export function EditorOutline({
       </section>
 
       <section className="outline-section outline-rounds">
-        <h2>Kola</h2>
+        <h2>Kola</h2><button type="button" className="secondary-button add-round-button" disabled={disabled} onClick={onAddRound}>+ Přidat kolo</button>
         {model.rounds.map((round) => (
-          <details key={round.id} open className="outline-round">
-            <summary><span>{round.position}. kolo</span><strong>{round.title}</strong><small>{round.questions.length} otázek</small></summary>
+          <details key={round.id} open className="outline-round" data-round-id={round.id}>
+            <summary onDragOver={event => {
+              if (round.id !== 'roundless') { allowDrop(event, `end:${round.id}`); event.currentTarget.parentElement?.setAttribute('open', ''); }
+            }} onDrop={event => { event.preventDefault(); if (dragged.current && round.id !== 'roundless') void move(dragged.current, round.id); }}><span>{round.position}. kolo</span><strong>{round.title}</strong><small>{round.questions.length} otázek</small></summary>
             <button type="button" className={`outline-system-item ${selected(`round:${round.id}`)}`} onClick={() => onSelect(`round:${round.id}`)}>Nastavení kola</button>
             <ol>
-              {round.questions.map((question) => {
+              {round.questions.map((question, index) => {
                 const key = `slide:${question.slide.id}`;
                 const displayedSlide = selectedKey === key && activeDraft?.id === question.slide.id ? activeDraft : question.slide;
                 const issues = validateQuestion(displayedSlide);
                 const issue = issues.find((item) => item.severity === 'error') ?? issues[0];
                 return (
-                  <li key={question.slide.id}>
-                    <button type="button" className={`outline-question ${selected(key)}`} onClick={() => onSelect(key)}>
+                  <li key={question.slide.id} data-question-id={question.slide.id}
+                    className={`${dragging === question.slide.id ? 'drag-source' : ''} ${dropTarget === `before:${question.slide.id}` ? 'drop-before' : ''} ${dropTarget === `after:${question.slide.id}` ? 'drop-after' : ''}`}
+                    draggable={!locked} onDragStart={event => {
+                      if (locked) { event.preventDefault(); return; }
+                      dragged.current = question.slide.id; setDragging(question.slide.id);
+                      event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', question.slide.id);
+                    }} onDragEnd={clearDrag}
+                    onDragOver={event => {
+                      if (dragged.current === question.slide.id) return;
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      allowDrop(event, `${event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'}:${question.slide.id}`);
+                    }} onDrop={event => {
+                      event.preventDefault();
+                      if (!dragged.current || dragged.current === question.slide.id) return;
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const before = event.clientY < rect.top + rect.height / 2 ? question.slide.id : round.questions[index + 1]?.slide.id;
+                      void move(dragged.current, question.slide.roundId, before);
+                    }}>
+                    <button id={`outline-${question.slide.id}`} type="button" className={`outline-question ${selected(key)}`} title="Přetažením změňte pořadí · Alt + ↑ / ↓" onClick={() => { if (!dragged.current) onSelect(key); }}
+                      onKeyDown={event => {
+                        if (locked || !event.altKey) return;
+                        if (event.key === 'ArrowUp' && index > 0) { event.preventDefault(); void move(question.slide.id, question.slide.roundId, round.questions[index - 1]?.slide.id); }
+                        if (event.key === 'ArrowDown' && index < round.questions.length - 1) { event.preventDefault(); void move(question.slide.id, question.slide.roundId, round.questions[index + 2]?.slide.id); }
+                      }}>
                       <span className="outline-question-number">{question.number}</span>
-                      <span><strong>{questionTypeLabels[question.type]}</strong><small>{questionSummary(displayedSlide)}</small></span>
+                      <span><strong>{questionSummary(displayedSlide) || 'Nová otázka'}</strong><small>{displayedSlide.authoringStatus === 'draft' ? 'Koncept · ' : ''}{questionTypeLabels[question.type]}</small></span>
                       {issue && <span className={`outline-issue ${issue.severity}`} title={issue.message} aria-label={issue.message}>!</span>}
                     </button>
                   </li>
@@ -78,13 +135,14 @@ export function EditorOutline({
                   <li>
                     <button type="button" className="outline-question selected" onClick={() => onSelect('draft')}>
                       <span className="outline-question-number">{activeDraft.questionNumber ?? round.questions.length + 1}</span>
-                      <span><strong>{questionTypeLabels[type]}</strong><small>{questionSummary(activeDraft)}</small></span>
+                      <span><strong>{questionSummary(activeDraft) || 'Nová otázka'}</strong><small>{questionTypeLabels[type]}</small></span>
                       {issue && <span className={`outline-issue ${issue.severity}`} title={issue.message} aria-label={issue.message}>!</span>}
                     </button>
                   </li>
                 );
               })()}
             </ol>
+            {round.id !== 'roundless' && <div className={`outline-drop-end ${dropTarget === `end:${round.id}` ? 'drop-active' : ''}`} onDragOver={event => allowDrop(event, `end:${round.id}`)} onDrop={event => { event.preventDefault(); if (dragged.current) void move(dragged.current, round.id); }}>{dragging ? 'Sem na konec kola' : ''}</div>}
             {round.recaps.map((recap) => (
               <button key={recap.id} type="button" className={`outline-system-item ${selected(`slide:${recap.id}`)}`} onClick={() => onSelect(`slide:${recap.id}`)}>Rekapitulace</button>
             ))}
@@ -105,9 +163,9 @@ export function EditorOutline({
             )}
           </details>
         ))}
-        <button type="button" className="secondary-button add-round-button" disabled={disabled} onClick={onAddRound}>+ Přidat kolo</button>
       </section>
 
+      {model.closing.length === 0 && onAddClosing && <button type="button" className="secondary-button" disabled={disabled} onClick={onAddClosing}>+ Závěrečná obrazovka</button>}
       {(model.closing.length > 0 || model.legacy.length > 0) && (
         <section className="outline-section">
           <h2>Závěr a starší obsah</h2>

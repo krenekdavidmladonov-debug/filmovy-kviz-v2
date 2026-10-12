@@ -1,3 +1,4 @@
+import { eventOperational } from '@filmovy-kviz/quiz-domain';
 import { randomUUID } from 'node:crypto';
 import { Timestamp, type DocumentReference, type Firestore } from 'firebase-admin/firestore';
 
@@ -41,9 +42,12 @@ export async function deliverRegistrationEmail(db: Firestore, ref: DocumentRefer
   if (!/^events\/[^/]+\/emailIntents\/[^/]+$/u.test(ref.path)) throw new Error('Invalid email intent path.');
   const leaseId = randomUUID();
   const claimed = await db.runTransaction(async (transaction) => {
+    const event = (await transaction.get(ref.parent.parent!)).data();
+    if (!event || !eventOperational(event)) return { result: 'unchanged' as const };
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) return { result: 'unchanged' as const };
     const intent = snapshot.data() as EmailIntent;
+    if ((event.capabilityVersion ?? 0) !== (intent.capabilityVersion ?? 0)) return { result: 'unchanged' as const };
     if (intent.status === 'sent' || intent.status === 'failed') return { result: 'unchanged' as const };
     const now = Timestamp.fromMillis(clock());
     if (intent.leaseUntil && intent.leaseUntil.toMillis() > now.toMillis()) return { result: 'busy' as const };
@@ -91,6 +95,8 @@ export async function deliverRegistrationEmail(db: Firestore, ref: DocumentRefer
       }
       body = registrationEmail(intent.type, intent.content, link);
     }
+    const currentEvent = (await ref.parent.parent!.get()).data();
+    if (!currentEvent || !eventOperational(currentEvent) || (currentEvent.capabilityVersion ?? 0) !== (intent.capabilityVersion ?? 0)) return 'unchanged';
     await selectedTransport.send({ idempotencyKey: ref.path, to: intent.recipient, createdAtMillis: intent.createdAt.toMillis(),
       ...body });
   } catch (error) {
@@ -99,9 +105,11 @@ export async function deliverRegistrationEmail(db: Firestore, ref: DocumentRefer
       && clock() - intent.createdAt.toMillis() < MAX_EMAIL_AGE_MS ? 'pending' : 'failed';
   }
   const recorded = await db.runTransaction(async (transaction) => {
+    const event = (await transaction.get(ref.parent.parent!)).data();
+    if (!event || !eventOperational(event)) return false;
     const current = await transaction.get(ref);
     const registration = registrationRef ? await transaction.get(registrationRef) : null;
-    if (current.data()?.leaseId !== leaseId) return false;
+    if (current.data()?.leaseId !== leaseId || (event.capabilityVersion ?? 0) !== (intent.capabilityVersion ?? 0)) return false;
     const now = Timestamp.fromMillis(clock());
     transaction.update(ref, { status, updatedAt: now, sentAt: status === 'sent' ? now : null, lastError,
       leaseId: null, leaseUntil: null, nextAttemptAt: status === 'pending' ? Timestamp.fromMillis(now.toMillis() + retryDelayMillis(intent.attempts + 1)) : null });

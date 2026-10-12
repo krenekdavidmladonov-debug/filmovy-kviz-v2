@@ -76,11 +76,32 @@ function boundedString(value: unknown, field: string, maximum: number, allowEmpt
   return value;
 }
 
-export function validateQuizMetadata(value: unknown): { readonly title: string; readonly description: string } {
+export function validateQuizMetadata(value: unknown): { readonly title: string; readonly description: string; readonly defaultAppearance?: { readonly backgroundImage: string; readonly backgroundOverlay: number; readonly imageLayout: 'split' | 'stacked' } } {
   if (!isObject(value)) throw new QuizEditorError('invalid-argument', 'Quiz metadata is required.');
+  let defaultAppearance;
+  if (value.defaultAppearance !== undefined) {
+    const appearance = value.defaultAppearance;
+    if (!isObject(appearance) || !['split','stacked'].includes(appearance.imageLayout as string)) throw new QuizEditorError('invalid-argument', 'Default appearance is invalid.');
+    const overlay = nullableNumber(appearance.backgroundOverlay,'default background overlay',100);
+    if (overlay === null) throw new QuizEditorError('invalid-argument', 'Default overlay is required.');
+    defaultAppearance = {backgroundImage:validateNormalizedImage(appearance.backgroundImage,'default background'),backgroundOverlay:overlay,imageLayout:appearance.imageLayout as 'split' | 'stacked'};
+  }
   return {
+    ...(defaultAppearance === undefined ? {} : {defaultAppearance}),
     title: boundedString(value.title, 'title', 300, false),
     description: boundedString(value.description, 'description', 5_000),
+  };
+}
+
+export function requestedQuizCreation(data: unknown): { readonly title: string; readonly requestId: string } {
+  if (!isObject(data)) throw new QuizEditorError('invalid-argument', 'Request data is required.');
+  const unknownField = Object.keys(data).find((field) => field !== 'title' && field !== 'requestId');
+  if (unknownField !== undefined) throw new QuizEditorError('invalid-argument', 'Quiz creation request is invalid.');
+  const requestId = requiredId(data, 'requestId');
+  if (requestId.length > 150) throw new QuizEditorError('invalid-argument', 'requestId is too long.');
+  return {
+    title: boundedString(data.title, 'title', 300, false).trim(),
+    requestId,
   };
 }
 
@@ -114,7 +135,7 @@ function validatePresentation(value: unknown): EditorPresentationInput {
 
 function validateNormalizedImage(value: unknown, field: string): string {
   const source = value === undefined ? '' : boundedString(value, field, 4_096);
-  if (source === '' || (field === 'questionImage' && parseQuizAsset(source))) return source;
+  if (source === '' || parseQuizAsset(source)) return source;
   let parsed: URL;
   try { parsed = new URL(source); }
   catch { throw new QuizEditorError('invalid-argument', `${field} must be an http(s) URL.`); }
@@ -204,7 +225,14 @@ export function validateSlideInput(value: unknown): EditorSlideInput {
   if (clipStartSeconds !== null && clipEndSeconds !== null && clipStartSeconds >= clipEndSeconds) {
     throw new QuizEditorError('invalid-argument', 'clipEndSeconds must be greater than clipStartSeconds.');
   }
+  for (const [field, allowed] of Object.entries({ authoringStatus: ['draft','ready'], answerMode: ['open','choice'], imageLayout: ['split','stacked'] })) {
+    if (value[field] !== undefined && !allowed.includes(value[field] as string)) throw new QuizEditorError('invalid-argument', field + ' is invalid.');
+  }
   return {
+    ...(value.authoringStatus === undefined ? {} : { authoringStatus: value.authoringStatus as 'draft' | 'ready' }),
+    ...(value.answerMode === undefined ? {} : { answerMode: value.answerMode as 'open' | 'choice' }),
+    ...(value.imageLayout === undefined ? {} : { imageLayout: value.imageLayout as 'split' | 'stacked' }),
+    ...(value.answerExplanation === undefined ? {} : { answerExplanation: boundedString(value.answerExplanation, 'answerExplanation', 5000) }),
     kind: value.kind as EditorSlideKind,
     title: boundedString(value.title, 'slide title', 500),
     text: boundedString(value.text, 'slide text', 20_000),

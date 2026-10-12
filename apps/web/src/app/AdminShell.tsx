@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
-import { useAuth, type StaffRole } from '../auth/AuthProvider';
+import { useAuth } from '../auth/AuthProvider';
+import { roleLabels } from '@filmovy-kviz/quiz-domain';
 import { productConfig } from '../config/product';
+import { Brand } from '../ui/Brand';
 
 const navigation = [
   { to: '/admin', label: 'Přehled', end: true },
@@ -10,30 +12,31 @@ const navigation = [
   { to: '/admin/events', label: 'Akce', end: false },
 ] as const;
 
-const roleLabels: Readonly<Record<StaffRole, string>> = {
-  admin: 'Administrátor',
-  moderator: 'Moderátor',
-};
-
 function AdminNavigation() {
+  const { can } = useAuth();
   return (
     <nav className="admin-navigation" aria-label="Administrace">
-      {navigation.map((item) => (
+      {navigation.filter(item => item.to === '/admin' || (item.to === '/admin/quizzes' ? can('quiz.read') : can('event.read'))).map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
           end={item.end}
+          data-area={item.to === '/admin/quizzes' ? 'quizzes' : item.to === '/admin/events' ? 'events' : 'overview'}
           className={({ isActive }) => (isActive ? 'admin-nav-link active' : 'admin-nav-link')}
         >
           {item.label}
         </NavLink>
       ))}
+      {can('users.manage') && <NavLink className="admin-nav-link" to="/admin/users">Uživatelé a přístupy</NavLink>}
+      <NavLink className="admin-nav-link" to="/account">Můj účet</NavLink>
     </nav>
   );
 }
 
 export function AdminShell() {
-  const { currentUser, role, signOut } = useAuth();
+  const { pathname } = useLocation();
+  const area = pathname.startsWith('/admin/quizzes') ? 'quizzes' : pathname.startsWith('/admin/events') ? 'events' : 'overview';
+  const { currentUser, membership, signOut } = useAuth();
   const [pending, setPending] = useState(false);
 
   async function handleSignOut() {
@@ -45,15 +48,18 @@ export function AdminShell() {
     }
   }
 
-  const accountLabel = role ? roleLabels[role] : 'Uživatel';
+  const accountLabel = membership ? roleLabels[membership.role] : 'Uživatel';
+  const isStaging = import.meta.env.VITE_APP_ENV === 'staging';
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell" data-area={area}>
       <aside className="admin-sidebar">
-        <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
-          <span className="brand-mark" aria-hidden="true">{productConfig.shortName}</span>
-          <span><strong>{productConfig.name}</strong><small>Administrace</small></span>
-        </NavLink>
+        <div className="admin-brand-group">
+          <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
+            <span><strong><Brand /></strong><small>Administrace</small></span>
+          </NavLink>
+          {isStaging && <span className="admin-environment-label">Testovací verze</span>}
+        </div>
         <AdminNavigation />
         <div className="admin-account">
           <span>{accountLabel}</span>
@@ -65,10 +71,12 @@ export function AdminShell() {
       </aside>
 
       <header className="admin-mobile-header">
-        <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
-          <span className="brand-mark" aria-hidden="true">{productConfig.shortName}</span>
-          <strong>{productConfig.name}</strong>
-        </NavLink>
+        <div className="admin-brand-group">
+          <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
+            <strong><Brand /></strong>
+          </NavLink>
+          {isStaging && <span className="admin-environment-label">Testovací verze</span>}
+        </div>
         <details className="admin-nav-disclosure">
           <summary aria-label="Otevřít navigaci administrace">Menu</summary>
           <div className="admin-mobile-menu">
@@ -85,8 +93,10 @@ export function AdminShell() {
       </header>
 
       <main className="admin-main" id="main-content">
-        {import.meta.env.VITE_APP_ENV === 'staging' && <div role="note" className="admin-content"><strong>STAGING — pouze syntetická testovací data</strong></div>}
-        <div className="admin-content"><Outlet /></div>
+        <div className="admin-content">
+          {isStaging && <p role="note" className="admin-environment-note">Pro zkoušení používejte pouze smyšlená data.</p>}
+          <Outlet />
+        </div>
       </main>
     </div>
   );

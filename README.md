@@ -1,8 +1,8 @@
-# Filmový Kvíz V2
+# JustKvíz
 
 [![CI](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/actions/workflows/ci.yml)
 
-Clean replacement for the Filmový Kvíz application. The current foundation includes a React web client, trusted Firebase Functions, emulator-only staff authentication, tested Firestore authorization rules, a live/projector foundation, and a lossless round-first quiz editor for migrated V1 content.
+JustKvíz is the existing V2 application for preparing and running quizzes, replacing the original Filmový Kvíz application. The current foundation includes a React web client, trusted Firebase Functions, emulator-only staff authentication, tested Firestore authorization rules, a live/projector foundation, and a lossless round-first quiz editor for migrated V1 content.
 
 ## RYCHLÉ SPUŠTĚNÍ PRO HUMAN QA
 
@@ -110,3 +110,5 @@ Start with [docs/README.md](docs/README.md). The round-first editor documentatio
 ## Important safety boundary
 
 Do not deploy or connect this repository to the existing production Firebase project without explicit authorization. Never add credentials or service-account keys to Git. See [docs/SECURITY.md](docs/SECURITY.md) and [AGENTS.md](AGENTS.md).
+
+Current public branding and release scope: [JustKvíz rebrand](docs/JUSTKVIZ_REBRAND.md). The existing staging URL and technical identifiers remain unchanged.

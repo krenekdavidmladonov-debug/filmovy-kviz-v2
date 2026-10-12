@@ -187,6 +187,7 @@ export function buildPublicSessionState(session: PrivateLiveSession, slide?: Pri
     media: sanitizedMedia(slide.media, allowAudioVideo),
     presentation: sanitizePresentation(slide.presentation),
     ...questionNumbers(slide),
+    ...(slide.imageLayout === 'split' || slide.imageLayout === 'stacked' ? { imageLayout: slide.imageLayout } : {}),
     ...(classified.backgroundImage === undefined ? {} : { backgroundImage: classified.backgroundImage }),
     ...(classified.questionImage === undefined ? {} : { questionImage: classified.questionImage }),
     ...(!allowAudioVideo || classified.mediaSource === undefined ? {} : { mediaSource: classified.mediaSource }),
@@ -204,6 +205,7 @@ export function buildPublicSessionState(session: PrivateLiveSession, slide?: Pri
     ...result,
     answerRevealed: true,
     revealedAnswer,
+    ...(publicText(slide.answerExplanation) === undefined ? {} : { answerExplanation: publicText(slide.answerExplanation) }),
     ...(classified.answerImage === undefined ? {} : { answerImage: classified.answerImage }),
   };
 }

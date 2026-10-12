@@ -1,3 +1,4 @@
+import { pragueInstant } from '@filmovy-kviz/quiz-domain';
 import { FunctionsError, httpsCallable } from 'firebase/functions';
 
 import { getFirebaseServices } from '../../services/firebase/client';
@@ -18,12 +19,14 @@ export function configureEventRegistration(
   registrationOpensAt: string,
   registrationClosesAt: string,
   published: boolean,
+  opensOffset?: string,
+  closesOffset?: string,
 ) {
   return invoke<{ eventId: string; revision: number; registrationStatus: string }>('configureEventRegistration', {
     eventId,
     expectedRevision,
-    registrationOpensAt: new Date(registrationOpensAt).toISOString(),
-    registrationClosesAt: new Date(registrationClosesAt).toISOString(),
+    registrationOpensAt: pragueInstant(registrationOpensAt, opensOffset),
+    registrationClosesAt: pragueInstant(registrationClosesAt, closesOffset),
     published,
   });
 }
@@ -61,6 +64,10 @@ export function adminUpdateEventTeam(eventId: string, registrationId: string, ex
   return invoke<{ registrationId: string; teamName: string }>('adminUpdateEventTeam', { eventId, registrationId, expectedRevision, ...values });
 }
 
+export function reissueRegistrationLink(eventId: string, registrationId: string, expectedRevision: number) {
+  return invoke<{ registrationId: string; managementToken: string | null }>('adminUpdateEventTeam', { eventId, registrationId, expectedRevision, action: 'reissueLink', requestId: crypto.randomUUID() });
+}
+
 export function registrationActionError(error: unknown): string {
   if (error instanceof FunctionsError) {
     if (error.code === 'functions/aborted') return 'Tým mezitím někdo změnil. Zavřete dialog a obnovte seznam před další úpravou.';
@@ -82,5 +89,6 @@ export function registrationActionError(error: unknown): string {
       return 'Tuto změnu teď nelze provést. Obnovte stránku a zkontrolujte stav registrace.';
     }
   }
+  if (error instanceof Error && !('code' in error)) return error.message;
   return 'Registraci se nepodařilo uložit. Zkuste to znovu.';
 }

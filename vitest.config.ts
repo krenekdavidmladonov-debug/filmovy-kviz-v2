@@ -4,7 +4,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: [
-      'tests/quizModel.test.ts', 'tests/mediaStorage.test.ts', 'tests/ownedMediaComponents.test.tsx',
+      'tests/editorWorkingCopy.test.ts', 'tests/outlineMoves.test.ts',
+      'tests/adminNavigation.test.tsx', 'tests/eventDetailLoading.test.tsx',
+      'tests/accessDeploymentManifest.test.ts', 'tests/accessPermissions.test.ts', 'tests/darkTheme.test.ts', 'tests/branding.test.tsx', 'tests/adminDashboard.test.tsx',
+      'tests/quizModel.test.ts', 'tests/mediaAuthoring.test.ts', 'tests/mediaStorage.test.ts', 'tests/ownedMediaComponents.test.tsx',
       'tests/liveSession.test.ts',
       'tests/liveRepository.test.ts',
       'tests/quizEditor.test.ts',
@@ -14,7 +17,9 @@ export default defineConfig({
       'tests/roundFirstEditor.test.tsx',
       'tests/quizPreflight.test.ts',
       'tests/quizRepair.test.ts',
-      'tests/events.test.ts',
+      'tests/events.test.ts', 'tests/eventManagement.test.ts',
+      'tests/eventsFormFixture.test.ts',
+      'tests/historicalResults.test.ts', 'tests/historicalResultsUi.test.tsx',
       'tests/printCenter.test.ts',
       'tests/printCenterSecurity.test.ts',
       'tests/registrations.test.ts',

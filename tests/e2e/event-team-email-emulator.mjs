@@ -16,11 +16,12 @@ try {
   const registrationSummary = (await eventRef.collection('registrations').doc(team.registrationId).get()).data().emailDelivery;
   phase = 'roles and input';
   const calls = [publicCall, await fixture.roleCall(null), await fixture.roleCall('moderator'), await fixture.roleCall('referee')];
-  for (const call of calls) {
-    await deny(call('previewEventTeamMessage', copy), 'permission-denied');
-    await deny(call('createEventTeamMessage', { ...copy, requestId: randomUUID(), previewFingerprint: 'a'.repeat(64), confirmed: true }), 'permission-denied');
-    await deny(call('listEventTeamMessages', { eventId }), 'permission-denied');
-    await deny(call('getEventTeamMessage', { eventId, campaignId: 'a'.repeat(64) }), 'permission-denied');
+  for (const [index, call] of calls.entries()) {
+    const code = index === 0 ? 'unauthenticated' : 'permission-denied';
+    await deny(call('previewEventTeamMessage', copy), code);
+    await deny(call('createEventTeamMessage', { ...copy, requestId: randomUUID(), previewFingerprint: 'a'.repeat(64), confirmed: true }), code);
+    await deny(call('listEventTeamMessages', { eventId }), code);
+    await deny(call('getEventTeamMessage', { eventId, campaignId: 'a'.repeat(64) }), code);
   }
   await fixture.setAdminRole('moderator'); await deny(adminCall('previewEventTeamMessage', copy), 'permission-denied'); await fixture.setAdminRole('admin');
   await deny(adminCall('previewEventTeamMessage', { ...copy, recipients: ['attack@example.test'] }), 'invalid-argument');
@@ -41,14 +42,17 @@ try {
   assert.equal(campaignIntents.length, 2);
   await eventRef.collection('registrations').doc(team.registrationId).update({ contactEmail: 'later@example.test', status: 'cancelled' });
   await eventRef.update({ lifecycleStatus: 'completed' });
-  assert.equal((await adminCall('createEventTeamMessage', request)).campaignId, first.campaignId);
+  await deny(adminCall('createEventTeamMessage', request), 'failed-precondition');
   await deny(adminCall('previewEventTeamMessage', copy), 'failed-precondition');
   const status = () => adminCall('getEventTeamMessage', { eventId, campaignId: first.campaignId });
   assert.equal((await status()).pending, 2);
-  console.log('PASS: concurrent confirmation has one receipt, changed payload denied, snapshot/replay survives roster and lifecycle changes');
+  console.log('PASS: concurrent confirmation has one receipt, changed payload denied, history survives lifecycle changes; terminal replay is denied');
   phase = 'shared worker';
   const unavailable = () => { throw new Error('No vault or public origin for organizational messages'); };
   const deliver = doc => processEmailTask({ eventId, intentId: doc.id }, { db: fixture.db, transport: capture, vault: unavailable, origin: unavailable, clock: fixture.clock });
+  await deliver(campaignIntents[0]);
+  assert.equal(capture.messages.size, 0, 'Closed event cannot run a delayed task');
+  await eventRef.update({ lifecycleStatus: 'draft' }); // Local fixture: exercise retry transport separately.
   await deliver(campaignIntents[0]);
   capture.nextFailure = 'rate-limit'; await assert.rejects(deliver(campaignIntents[1]));
   assert.equal((await status()).pending, 1); fixture.advance(); await deliver(campaignIntents[1]);

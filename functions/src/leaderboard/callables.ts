@@ -1,6 +1,6 @@
-import { getAuth } from 'firebase-admin/auth';
+import { accessActor, securedOnCall, runAccessTransaction } from '../access/authorization.js';
 import { getFirestore, Timestamp, type Transaction } from 'firebase-admin/firestore';
-import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { authorizeStaff, parseSession, loadSlide } from '../live/callables.js';
 import { buildPublicSessionState } from '../live/publication.js';
 import { applyLiveSessionAction } from '../live/session-machine.js';
@@ -24,12 +24,8 @@ export function revision(data: Record<string, unknown>): number {
         throw new HttpsError('invalid-argument', 'Neplatná revize.');
     return data.expectedRevision as number;
 }
-export async function staff(request: CallableRequest) {
-    const actor = authorizeStaff(request.auth);
-    const current = await getAuth().getUser(actor.uid).catch(() => null);
-    if (!current || current.disabled || !['admin', 'moderator'].includes(current.customClaims?.role as string))
-        throw new HttpsError('permission-denied', 'Aktuální staff oprávnění je nutné.');
-    return actor.uid;
+export function staff(request: CallableRequest) {
+    return Promise.resolve(accessActor(request.auth).uid);
 }
 async function eventIn(tx: Transaction, eventId: string) {
     const event = (await tx.get(db().doc('events/' + eventId))).data();
@@ -45,17 +41,17 @@ export async function bound(tx: Transaction, eventId: string, sessionId: string)
     return { event, session };
 }
 // One event-bound live session uses the existing presentation path and immutable source.
-export const createEventLiveSession = onCall(options, async (request) => {
+export const createEventLiveSession = securedOnCall('createEventLiveSession', options, async (request) => {
     const uid = authorizeStaff(request.auth).uid, data = object(request.data), eventId = id(data, 'eventId');
     const sessionRef = db().collection('sessions').doc();
-    return db().runTransaction(async (tx) => {
+    return runAccessTransaction(db(), async (tx) => {
         await staff(request);
         const event = await eventIn(tx, eventId);
         if (typeof event.liveSessionId === 'string') {
             const existing = parseSession(await tx.get(db().doc('sessions/' + event.liveSessionId)));
             if (existing.eventId !== eventId || existing.snapshotId !== object(event.quizAssignment).snapshotId)
                 throw new HttpsError('failed-precondition', 'Vazba moderování se změnila.');
-            return { sessionId: existing.sessionId };
+            if (existing.status !== 'ended') return { sessionId: existing.sessionId };
         }
         if (event.revision !== revision(data))
             throw new HttpsError('aborted', 'Akce se změnila.');
@@ -87,9 +83,9 @@ export async function previewIn(tx: Transaction, eventId: string, sessionId: str
     const result = throughRoundId === null ? calculateFinalResults(roundValues, teamValues, scoreValues) : calculateResults(roundValues, throughRoundId, teamValues, scoreValues);
     return { session, result: { ...result, sourceFingerprint: fingerprint([eventId, session.snapshotId, result.sourceFingerprint]) } };
 }
-export const previewInterimResults = onCall(options, async (request) => {
+export const previewInterimResults = securedOnCall('previewInterimResults', options, async (request) => {
     const data = object(request.data);
-    return db().runTransaction(async (tx) => {
+    return runAccessTransaction(db(), async (tx) => {
         await staff(request);
         const { session, result } = await previewIn(tx, id(data, 'eventId'), id(data, 'sessionId'), id(data, 'throughRoundId'));
         return { ...result, sessionRevision: session.revision, publishedVersionId: session.interimResults?.versionId ?? null };
@@ -100,7 +96,7 @@ function withoutResults(session: PrivateLiveSession): PrivateLiveSession {
     void interimResults;
     return clean;
 }
-export const controlInterimResults = onCall(options, async (request) => {
+export const controlInterimResults = securedOnCall('controlInterimResults', options, async (request) => {
     const uid = authorizeStaff(request.auth).uid, data = object(request.data);
     const eventId = id(data, 'eventId'), sessionId = id(data, 'sessionId'), requestId = id(data, 'requestId');
     const action = data.action;
@@ -111,7 +107,7 @@ export const controlInterimResults = onCall(options, async (request) => {
         throw new HttpsError('invalid-argument', 'Nepovolená pole.');
     const expected = revision(data), operationId = fingerprint([uid, sessionId, requestId]), commandFingerprint = fingerprint([eventId, sessionId, action, data.expectedRevision, data.throughRoundId ?? null, data.sourceFingerprint ?? null, data.page ?? null]);
     const sessionRef = db().doc('sessions/' + sessionId), receiptRef = sessionRef.collection('interimOperations').doc(operationId);
-    return db().runTransaction(async (tx) => {
+    return runAccessTransaction(db(), async (tx) => {
         await staff(request);
         const { session } = await bound(tx, eventId, sessionId);
         const receipt = (await tx.get(receiptRef)).data();

@@ -1,4 +1,27 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+
+const diagnostics = new WeakMap<Page, { pageErrors: string[]; blockedRequests: string[] }>();
+test.beforeEach(async ({ context, page }) => {
+  const evidence = { pageErrors: [] as string[], blockedRequests: [] as string[] };
+  diagnostics.set(page, evidence);
+  page.on('pageerror', error => evidence.pageErrors.push(error.stack ?? error.message));
+  // Only the existing local preview may serve this fixture; no Auth/API traffic escapes.
+  await context.route('**/*', async route => {
+    if (new URL(route.request().url()).origin === 'http://127.0.0.1:5188') await route.continue();
+    else { evidence.blockedRequests.push(route.request().url()); await route.abort('blockedbyclient'); }
+  });
+  await context.routeWebSocket('**/*', socket => {
+    if (new URL(socket.url()).origin === 'ws://127.0.0.1:5188') socket.connectToServer();
+    else { evidence.blockedRequests.push(socket.url()); void socket.close(); }
+  });
+});
+test.afterEach(async ({ page }, testInfo) => {
+  const evidence = diagnostics.get(page)!;
+  await testInfo.attach('runtime-and-network', { body: JSON.stringify({ ...evidence, viewport: page.viewportSize(), retry: testInfo.retry }, null, 2), contentType: 'application/json' });
+  if (testInfo.status !== testInfo.expectedStatus) await testInfo.attach('failure-screen', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
+  expect.soft(evidence.pageErrors, 'Unhandled browser errors').toEqual([]);
+  expect.soft(evidence.blockedRequests, 'Unexpected traffic outside the isolated preview').toEqual([]);
+});
 
 test('create and edit preserve the form contract and revision', async ({ page }) => {
   await page.goto('/admin/events/new');
@@ -10,14 +33,39 @@ test('create and edit preserve the form contract and revision', async ({ page })
   await expect(page.getByRole('button', { name: 'Vytvářím…' })).toBeDisabled();
   await expect(page).toHaveURL(/synthetic-event$/u);
   await expect(page.getByLabel('Název akce')).toHaveValue('Syntetická nová akce');
+  expect(await page.evaluate(() => window.uxEventReads)).toEqual([
+    expect.objectContaining({ id: 'synthetic-event', title: 'Syntetická nová akce', revision: 1 }),
+  ]);
   await page.getByLabel('Název akce').fill('Upravená akce');
   await page.getByRole('button', { name: 'Uložit změny' }).click();
   await expect(page.getByRole('status')).toHaveText('Změny akce byly uloženy.');
   const calls = await page.evaluate(() => window.uxCalls);
   expect(calls).toEqual([
     { operation: 'create', values: { title: 'Syntetická nová akce', startsAt: '2030-10-20T19:00', timeZone: 'Europe/Prague', venueName: 'Testovací sál', publicLocation: 'Testovací lokalita', teamCapacity: 20, peopleCapacity: 120, teamSizeMin: 2, teamSizeMax: 6 } },
-    expect.objectContaining({ operation: 'update', id: 'synthetic-event', revision: 3, values: expect.objectContaining({ title: 'Upravená akce', teamCapacity: 20, peopleCapacity: 120 }) }),
+    expect.objectContaining({ operation: 'update', id: 'synthetic-event', revision: 1, values: expect.objectContaining({ title: 'Upravená akce', teamCapacity: 20, peopleCapacity: 120 }) }),
   ]);
+  expect(await page.evaluate(() => window.uxMutationResults)).toEqual([
+    { operation: 'create', response: { eventId: 'synthetic-event', revision: 1, lifecycleStatus: 'scheduled', registrationStatus: 'scheduled' } },
+    { operation: 'update', response: { eventId: 'synthetic-event', revision: 2, lifecycleStatus: 'scheduled', registrationStatus: 'scheduled' } },
+  ]);
+  const savedRead = { id: 'synthetic-event', title: 'Upravená akce', revision: 2 };
+  expect(await page.evaluate(() => window.uxEventReads)).toEqual([
+    expect.objectContaining({ id: 'synthetic-event', title: 'Syntetická nová akce', revision: 1 }),
+    expect.objectContaining(savedRead),
+  ]);
+  // Remount the real detail route: its repository read must retain the successful update.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/admin\/events\/new$/u);
+  await expect(page.getByRole('heading', { name: 'Vytvořit akci', exact: true })).toBeVisible();
+  await page.goForward();
+  await expect(page).toHaveURL(/\/admin\/events\/synthetic-event$/u);
+  await expect(page.getByLabel('Název akce')).toHaveValue('Upravená akce');
+  expect(await page.evaluate(() => window.uxEventReads)).toEqual([
+    expect.objectContaining({ id: 'synthetic-event', title: 'Syntetická nová akce', revision: 1 }),
+    expect.objectContaining(savedRead),
+    expect.objectContaining(savedRead),
+  ]);
+  expect(await page.evaluate(() => window.uxCalls)).toEqual(calls);
 });
 
 test('save errors retain values and native constraints prevent invalid submissions', async ({ page }) => {
@@ -50,7 +98,10 @@ for (const [width, height] of [[1280, 720], [1024, 768], [390, 844]]) {
       await page.goto('/admin/events/' + route);
       const field = page.getByLabel('Název akce');
       await expect(field).toBeVisible();
-      await expect(page.getByText('STAGING — pouze syntetická testovací data')).toBeVisible();
+      await expect(page.getByText('Testovací verze', { exact: true }).filter({ visible: true })).toBeVisible();
+      const environmentNote = page.getByRole('main').getByRole('note');
+      await expect(environmentNote).toHaveText('Pro zkoušení používejte pouze smyšlená data.');
+      await expect(environmentNote).toBeVisible();
       const size = await field.boundingBox();
       expect(size!.height).toBe(46);
       expect(size!.width).toBeGreaterThan(width === 390 ? 250 : 600);

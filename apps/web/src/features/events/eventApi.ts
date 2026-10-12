@@ -1,3 +1,4 @@
+import { pragueInstant } from '@filmovy-kviz/quiz-domain';
 import { FunctionsError, httpsCallable } from 'firebase/functions';
 
 import { getFirebaseServices } from '../../services/firebase/client';
@@ -6,8 +7,9 @@ import type { EventFormValues, EventMutationResponse } from './types';
 function eventPayload(values: EventFormValues): Record<string, unknown> {
   return {
     title: values.title,
-    startsAt: new Date(values.startsAt).toISOString(),
-    timeZone: values.timeZone,
+    description: values.description ?? '',
+    startsAt: pragueInstant(values.startsAt, values.utcOffset),
+    timeZone: 'Europe/Prague',
     venue: { name: values.venueName, publicLocation: values.publicLocation },
     teamCapacity: values.teamCapacity,
     peopleCapacity: values.peopleCapacity,
@@ -62,7 +64,8 @@ export function eventActionError(error: unknown): string {
   if (error instanceof FunctionsError) {
     if (error.code === 'functions/aborted') return 'Data se mezitím změnila. Načtěte stránku znovu.';
     if (error.code === 'functions/permission-denied') return 'K této změně nemáte oprávnění.';
-    if (error.code === 'functions/failed-precondition') return error.message;
+    if (['functions/failed-precondition', 'functions/invalid-argument', 'functions/unauthenticated'].includes(error.code)) return error.message;
   }
+  if (error instanceof Error && !('code' in error)) return error.message;
   return 'Akci se nepodařilo uložit. Zkuste to prosím znovu.';
 }

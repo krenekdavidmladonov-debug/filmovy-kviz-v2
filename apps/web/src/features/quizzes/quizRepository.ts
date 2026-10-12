@@ -1,46 +1,14 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  orderBy,
-  query,
-} from 'firebase/firestore';
-
-import { getFirebaseFirestore } from '../../services/firebase/firestore';
+import { privateRead, type PrivateDocument } from '../access/api';
 import { mapQuizQuestion, mapQuizRound, mapQuizSummary } from './quizMappers';
-import type { QuizDetail, QuizRound, QuizSummary } from './types';
+import type { QuizDetail, QuizSummary } from './types';
 
 export async function listQuizzes(): Promise<readonly QuizSummary[]> {
-  const db = getFirebaseFirestore();
-  const snapshot = await getDocs(query(collection(db, 'quizzes'), orderBy('updatedAt', 'desc')));
-  return snapshot.docs.map((quizDocument) => mapQuizSummary(quizDocument.id, quizDocument.data()));
+  const result = await privateRead<PrivateDocument[]>('quizzes');
+  return result.map(item => mapQuizSummary(item.id, item.data)).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
 
 export async function getQuizDetail(quizId: string): Promise<QuizDetail | null> {
-  const db = getFirebaseFirestore();
-  const quizRef = doc(db, 'quizzes', quizId);
-  const quizSnapshot = await getDoc(quizRef);
-
-  if (!quizSnapshot.exists()) {
-    return null;
-  }
-
-  const roundSnapshots = await getDocs(query(collection(quizRef, 'rounds'), orderBy('position')));
-  const rounds: QuizRound[] = await Promise.all(roundSnapshots.docs.map(async (roundDocument) => {
-    const roundData = roundDocument.data();
-    const questionSnapshots = await getDocs(
-      query(collection(roundDocument.ref, 'questions'), orderBy('position')),
-    );
-
-    return mapQuizRound(
-      roundDocument.id,
-      roundData,
-      questionSnapshots.docs.map((questionDocument) => (
-        mapQuizQuestion(questionDocument.id, questionDocument.data())
-      )),
-    );
-  }));
-
-  return { ...mapQuizSummary(quizSnapshot.id, quizSnapshot.data()), rounds };
+  const result = await privateRead<PrivateDocument & { rounds: (PrivateDocument & { questions: PrivateDocument[] })[] }>('quiz', { quizId });
+  const rounds = result.rounds.map(round => mapQuizRound(round.id, round.data, round.questions.map(question => mapQuizQuestion(question.id, question.data))));
+  return { ...mapQuizSummary(result.id, result.data), rounds };
 }

@@ -4,6 +4,7 @@ import { FirebaseError } from 'firebase/app';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
+import { SnapshotMediaContext } from '../../features/media/SnapshotMediaContext';
 import {
   endLiveSession,
   nextSlide,
@@ -70,25 +71,37 @@ export function LiveControlPage() {
   const operationIdRef = useRef(0);
   const confirmedRevisionRef = useRef(-1);
   const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const accessGenerationRef = useRef(0);
 
   useEffect(() => {
+    const generation = ++accessGenerationRef.current;
+    const invalidate = () => {
+      accessGenerationRef.current++; operationIdRef.current++; sessionRef.current = null;
+      confirmedRevisionRef.current = -1; mutationQueueRef.current = Promise.resolve();
+    };
     confirmedRevisionRef.current = -1;
     mutationQueueRef.current = Promise.resolve();
-  }, [sessionId]);
-
-  useEffect(() => {
+    sessionRef.current = null; setSession(null); setSlides([]); setPendingAction(null); setError(null); setLoading(true);
     if (!sessionId) { setLoading(false); return; }
-    return subscribeLiveControl(sessionId, (value) => {
+    const unsubscribe = subscribeLiveControl(sessionId, (value) => {
+      if (generation !== accessGenerationRef.current) return;
       sessionRef.current = value;
       if (value) confirmedRevisionRef.current = Math.max(confirmedRevisionRef.current, value.revision);
+      else { invalidate(); setSlides([]); setPendingAction(null); }
       setSession(value);
       setLoading(false);
-    }, () => { setError(loadingError('session')); setLoading(false); });
+    }, () => {
+      if (generation !== accessGenerationRef.current) return;
+      invalidate(); setSession(null); setSlides([]); setPendingAction(null);
+      setError(loadingError('session')); setLoading(false);
+    });
+    return () => { invalidate(); unsubscribe(); };
   }, [sessionId]);
 
   useEffect(() => {
+    setSlides([]);
     if (!session?.quizId) return;
-    return subscribeLiveControlSlides(session.quizId, setSlides, () => setError(loadingError('slides')), session.snapshotId);
+    return subscribeLiveControlSlides(session.quizId, setSlides, () => { setSlides([]); setError(loadingError('slides')); }, session.snapshotId);
   }, [session?.quizId, session?.snapshotId]);
 
   useEffect(() => {
@@ -138,11 +151,13 @@ export function LiveControlPage() {
   function enqueueMutation(
     action: (current: LiveControlState) => Promise<LiveActionResponse | undefined>,
   ): Promise<void> {
+    const generation = accessGenerationRef.current;
     const execute = mutationQueueRef.current.catch(() => undefined).then(async () => {
+      if (generation !== accessGenerationRef.current) return;
       const current = sessionRef.current;
       if (!current) return;
       const result = await action(current);
-      if (result) confirmedRevisionRef.current = Math.max(confirmedRevisionRef.current, result.revision);
+      if (result && generation === accessGenerationRef.current) confirmedRevisionRef.current = Math.max(confirmedRevisionRef.current, result.revision);
     });
     mutationQueueRef.current = execute.catch(() => undefined);
     return execute;
@@ -213,7 +228,7 @@ export function LiveControlPage() {
   }
 
   return (
-    <>
+    <SnapshotMediaContext.Provider value={session.snapshotId}>
     {session.eventId && session.snapshotId && <InterimResultsPanel key={session.sessionId} session={session} />}
     {session.eventId && session.snapshotId && <FinalRevealPanel key={session.sessionId} session={session} ending={pendingAction === 'end'} />}
     <LiveModeratorView
@@ -238,6 +253,6 @@ export function LiveControlPage() {
       onMediaError={(generation) => void reportPlayback(generation, 'error')}
       onMediaPlayback={(generation, playbackState) => void reportPlayback(generation, playbackState)}
     />
-    </>
+    </SnapshotMediaContext.Provider>
   );
 }
