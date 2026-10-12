@@ -1,5 +1,7 @@
 # Restart: lokální akceptace a schvalované vydání V2 staging
 
+**Aktuální nástupce — 2026-10-12:** `ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac` přidává čtyři ověřené opravy registrací, zkoušky, ruční agendy a lokální obnovy. Přesné testy, offline artefakt, runtime a další návrh aktualizace stávajícího PR #39 jsou v [COMPLETION_VALIDATION.md](COMPLETION_VALIDATION.md). Rozsah 70 Functions → Firestore Rules → Hosting níže zůstává stejný. Starší `aafeaa9` artefakt/CI níže je historický a nenahrazuje nové vzdálené CI; kód nástupce dosud publikován ani nasazen nebyl. Návrat na starší artefakt by obnovil opravené vady, proto preferovat cílený forward fix se zachovanými guards.
+
 Tento plán sám nepovoluje nasazení. Vlastník dne 2026-10-12 schválil sladění `AGENTS.md` a čtecí kontrolu V2 stagingu; její výsledky jsou v [RESTART_PREFLIGHT.md](RESTART_PREFLIGHT.md). Ověřený aplikační základ na `codex/restart-integration` je `8b6245608850c9cad959fb14ab6a754f485e1dad`; navazující změny doplňují dokumentaci a přípravu artefaktu. Přesná lokální evidence a omezení jsou v [RESTART_VALIDATION.md](RESTART_VALIDATION.md). V1 a produkční Firebase zůstávají mimo rozsah.
 
 ## Sjednocený rozsah
