@@ -6,6 +6,9 @@ This directory indexes JustKvíz V2 product, architecture, security, migration, 
 
 - [COMPLETION_MATRIX.md](COMPLETION_MATRIX.md) — existing product completion conditions, concrete evidence, active gaps and external acceptance gates.
 - [COMPLETION_VALIDATION.md](COMPLETION_VALIDATION.md) — successor `ddb862f`, four reviewed fixes, exact-SHA tests, offline artifact/runtime verification and the next concrete release boundary.
+- [OPERATOR_PREPARATION_VALIDATION.md](OPERATOR_PREPARATION_VALIDATION.md) — locally reviewed CAS/deployment tools, 23 targeted tests, actual emulator and fresh read-only staging evidence.
+- [STAGING_ROLLOUT_DDB862F.md](STAGING_ROLLOUT_DDB862F.md) — executable staging rollout proposal, exact artifact, operator inputs, phase gates and recovery limits.
+- [STAGING_ACCEPTANCE_DDB862F.md](STAGING_ACCEPTANCE_DDB862F.md) — separate synthetic identity/resource/cleanup proposal and remaining online acceptance prerequisites.
 - [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) — dated restart/integration evidence, validation results, remaining work and the 2026-10-12 owner approval aligning [AGENTS.md](../AGENTS.md) with active server-managed membership, concrete permissions and resource scope.
 - [RESTART_VALIDATION.md](RESTART_VALIDATION.md) — tested commits, pinned runtime, local receipt/log paths, resolved test failures and remaining verification limits.
 - [RESTART_PREFLIGHT.md](RESTART_PREFLIGHT.md) — approved read-only V2 staging inventory, current invitation state, cloud differences and remaining release prerequisites.
