@@ -143,6 +143,13 @@ export function QuizEditorPage() {
   const readOnly = !can('quiz.edit');
   const [quiz, setQuiz] = useState<EditorQuiz | null>(null);
   const [practicing, setPracticing] = useState(false);
+  const practiceButtonRef = useRef<HTMLButtonElement>(null), restorePracticeFocus = useRef(false);
+  useEffect(() => {
+    if (!practicing && restorePracticeFocus.current && practiceButtonRef.current) {
+      restorePracticeFocus.current = false;
+      practiceButtonRef.current.focus({ preventScroll: true });
+    }
+  }, [practicing]);
   const [selectedKey, setSelectedKey] = useState('quiz');
   const [draft, setDraft] = useState<EditorSlide | null>(null);
   const [title, setTitle] = useState('');
@@ -499,7 +506,7 @@ export function QuizEditorPage() {
   if (loading && quiz === null) return <QuizLoading label="Načítám editor kvízu…" />;
   if (quiz === null || semantic === null) return <QuizErrorState message={error ?? 'Kvíz se nepodařilo otevřít.'} onRetry={() => void reload()} />;
 
-  if (practicing) return <QuizPractice quiz={quiz} onClose={() => setPracticing(false)} />;
+  if (practicing) return <QuizPractice quiz={quiz} onClose={() => { restorePracticeFocus.current = true; setPracticing(false); }} />;
 
   const selectedRound = roundForSelection(selectedKey, semantic)
     ?? (selectedKey === 'draft' ? semantic.rounds.find((round) => round.id === draft?.roundId) : undefined);
@@ -563,7 +570,7 @@ export function QuizEditorPage() {
           {readOnly && <span className="read-only-badge">Pouze pro čtení</span>}
           <span className={`save-state ${dirty ? 'dirty' : ''} ${saveFailed ? 'failed' : ''}`} role="status" aria-live="polite">{saveLabel}</span>
           {dirty && <span className="working-copy-count">Rozpracované položky: {new Set([...Object.keys(parked), ...(dirtySlide || dirtyRound ? [selectedKey] : []), ...(dirtyQuiz ? ['quiz'] : [])]).size}</span>}
-          <button type="button" className="secondary-button preflight-header-button" onClick={() => setPreflightOpen((value) => !value)}>Zkontrolovat kvíz</button><button type="button" className="secondary-button practice-button" disabled={dirty || saving || uploading || (preflightResult?.blockerCount ?? 1) > 0} onClick={() => setPracticing(true)}>Soukromá zkouška</button>
+          <button type="button" className="secondary-button preflight-header-button" onClick={() => setPreflightOpen((value) => !value)}>Zkontrolovat kvíz</button><button type="button" ref={practiceButtonRef} className="secondary-button practice-button" disabled={dirty || saving || uploading || (preflightResult?.blockerCount ?? 1) > 0} onClick={() => setPracticing(true)}>Soukromá zkouška</button>
           <button type="button" className="primary-button" disabled={readOnly || saving || uploading || !dirty} onClick={() => void saveAll()}>Uložit vše</button>
           {dirty && <button type="button" className="text-button" disabled={saving || uploading} onClick={() => setPendingSelection(selectedKey)}>Zahodit změny…</button>}
           {draft?.isQuestion && <button type="button" className="secondary-button draft-save-button" disabled={readOnly || saving || uploading} onClick={() => void saveAll(selectedKey, 'draft')}>Uložit koncept</button>}

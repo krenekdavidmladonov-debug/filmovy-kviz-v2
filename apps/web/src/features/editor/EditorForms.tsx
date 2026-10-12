@@ -86,12 +86,13 @@ export function SystemSectionForm({
 }) {
   const set = <K extends keyof EditorSlide>(field: K, value: EditorSlide[K]) => onChange({ ...slide, [field]: value });
   if (section.key === 'agenda') {
-    const items = generatedAgendaOptions(model.rounds);
+    const automatic = slide.automaticAgenda === true;
+    const items = automatic ? generatedAgendaOptions(model.rounds) : slide.options;
     return (
       <section className="editor-form-stack" data-preflight-field="agenda">
-        <header className="content-form-heading"><span>Úvod kvízu</span><h2>Harmonogram</h2><p>Automaticky podle pořadí a názvů kol</p></header>
+        <header className="content-form-heading"><span>Úvod kvízu</span><h2>Harmonogram</h2><p>{automatic ? 'Automaticky podle pořadí a názvů kol' : 'Uložený ruční harmonogram'}</p></header>
         <ol className="generated-agenda">{items.map((item) => <li key={item}>{item}</li>)}</ol>
-        <p className="field-help">Harmonogram je odvozený. Nevytváříte ani neřadíte technický slide.</p>
+        <p className="field-help">{automatic ? 'Harmonogram je odvozený. Nevytváříte ani neřadíte technický slide.' : 'Původní obsah je zachovaný. Změna názvů nebo pořadí kol tento harmonogram nepřepisuje.'}</p>
       </section>
     );
   }

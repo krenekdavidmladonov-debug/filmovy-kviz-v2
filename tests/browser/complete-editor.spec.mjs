@@ -1,9 +1,11 @@
 /* global window, document */
 import { test, expect } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { editorIdentity } from '../e2e/editor-identity.mjs';
 import { syntheticImage, syntheticAudio } from '../e2e/media-fixture.mjs';
 const dir='.local-data/complete-editor';
+const { FieldValue } = createRequire(new URL('../../functions/package.json', import.meta.url))('firebase-admin/firestore');
 const prompt=p=>p.getByLabel('Otázka *',{exact:true});
 const save=async p=>{await p.getByRole('button',{name:'Uložit vše',exact:true}).click();await expect(p.locator('.save-state')).toHaveText('Uloženo');};
 const round=(p,n)=>p.locator('.outline-round').nth(n);
@@ -120,6 +122,18 @@ test('minimal quiz authored through UI rehearses exactly the persisted live stre
     await page.getByRole('button', { name: '+ Přidat kolo', exact: true }).click();
     await page.getByLabel('Název kola *').fill('Jediné kolo');
     await save(page);
+    const agendaDto = async () => (await identity.call('readAccessData', { operation: 'editor', quizId })).slides.find(slide => slide.kind === 'agenda');
+    expect((await agendaDto()).automaticAgenda).toBe(true);
+    await page.getByRole('button', { name: /^Harmonogram/ }).click();
+    const agendaForm = page.locator('[data-preflight-field="agenda"]');
+    await expect(agendaForm).toContainText('Automaticky podle pořadí a názvů kol');
+    await expect(agendaForm.locator('ol')).toContainText('Jediné kolo');
+    await round(page, 0).getByRole('button', { name: 'Nastavení kola', exact: true }).click();
+    await page.getByLabel('Název kola *').fill('Přejmenované jediné kolo');
+    await save(page);
+    const automaticAgenda = await agendaDto();
+    expect(automaticAgenda.automaticAgenda).toBe(true);
+    expect(automaticAgenda.options.join(' ')).toContain('Přejmenované jediné kolo');
     await round(page, 0).getByRole('button', { name: '+ Přidat otázku', exact: true }).click();
     await page.getByRole('dialog', { name: /Typ otázky/ }).getByRole('button', { name: 'Volná odpověď', exact: true }).click();
     await prompt(page).fill('Jediná syntetická otázka');
@@ -130,6 +144,33 @@ test('minimal quiz authored through UI rehearses exactly the persisted live stre
     expect(stored.map(s => s.kind)).toEqual(['agenda', 'round', 'free', 'recap']);
     await page.getByRole('button', { name: 'Soukromá zkouška', exact: true }).click();
     const practice = page.getByRole('dialog', { name: 'Soukromá zkouška kvízu' });
+    await expect(practice.getByRole('button', { name: 'Zavřít zkoušku' })).toBeFocused();
+    // Native modal navigation must skip disabled Previous and keep shell links inert.
+    const firstControl = practice.getByRole('button', { name: 'Zvětšit', exact: true });
+    const lastControl = practice.getByRole('button', { name: 'Další', exact: true });
+    await expect(practice.getByRole('button', { name: 'Předchozí', exact: true })).toBeDisabled();
+    await lastControl.focus();
+    await page.keyboard.press('Tab');
+    await expect(firstControl).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(lastControl).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(practice).toHaveCount(0);
+    const practiceButton = page.getByRole('button', { name: 'Soukromá zkouška', exact: true });
+    await expect(practiceButton).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(practice.getByRole('button', { name: 'Zavřít zkoušku' })).toBeFocused();
+    await firstControl.click();
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement?.className)).toBe('practice-content');
+    await page.screenshot({ path: dir + '/minimal-practice-fullscreen.png' });
+    await practice.getByRole('button', { name: 'Zavřít zkoušku' }).click();
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+    await expect(practiceButton).toBeFocused();
+    await page.keyboard.press('Enter');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: dir + '/minimal-practice-narrow.png' });
+    expect(await practice.evaluate(dialog => dialog.scrollWidth <= dialog.clientWidth + 1)).toBe(true);
+    await page.setViewportSize({ width: 1366, height: 768 });
     const visited = [];
     for (let i = 0; i < stored.length; i++) {
       await expect(practice.locator('.practice-stage')).toHaveAttribute('data-slide-id', stored[i].id);
@@ -140,7 +181,36 @@ test('minimal quiz authored through UI rehearses exactly the persisted live stre
     await expect(practice.locator('header strong')).toHaveText('Soukromá zkouška · 4 / 4');
     await page.screenshot({ path: dir + '/minimal-practice.png' });
     await practice.getByRole('button', { name: 'Zavřít zkoušku' }).click();
+    await expect(practiceButton).toBeFocused();
     expect((await identity.db.collection('publicSessions').get()).size).toBe(0);
+    // Separate technical legacy fixture: mutate only this UI-created quiz's own agenda.
+    // No content in the authored journey above was seeded through the database.
+    const manualOptions = ['Původní ruční syntetický program'];
+    const agendaRef = identity.db.doc('quizzes/' + quizId + '/slides/' + automaticAgenda.id);
+    await agendaRef.update({ automaticAgenda: FieldValue.delete(), options: manualOptions });
+    await page.reload();
+    const manualDto = await agendaDto();
+    expect(manualDto).not.toHaveProperty('automaticAgenda');
+    expect(manualDto.options).toEqual(manualOptions);
+    await page.getByRole('button', { name: /^Harmonogram/ }).click();
+    await expect(agendaForm).toContainText('Uložený ruční harmonogram');
+    await expect(agendaForm.locator('ol')).toHaveText(manualOptions[0]);
+    await round(page, 0).getByRole('button', { name: 'Nastavení kola', exact: true }).click();
+    await page.getByLabel('Název kola *').fill('Nový název při ruční agendě');
+    await save(page);
+    const preservedAgenda = (await agendaRef.get()).data();
+    expect(preservedAgenda).not.toHaveProperty('automaticAgenda');
+    expect(preservedAgenda.options).toEqual(manualOptions);
+    const preservedDto = await agendaDto();
+    expect(preservedDto).not.toHaveProperty('automaticAgenda');
+    expect(preservedDto.options).toEqual(manualOptions);
+    await page.getByRole('button', { name: /^Harmonogram/ }).click();
+    await expect(agendaForm.locator('ol')).toHaveText(manualOptions[0]);
+    await practiceButton.click();
+    await expect(practice.locator('.practice-stage')).toHaveAttribute('data-slide-id', automaticAgenda.id);
+    await expect(practice.locator('.agenda-items')).toHaveText(manualOptions[0]);
+    await practice.getByRole('button', { name: 'Zavřít zkoušku' }).click();
+    await expect(practiceButton).toBeFocused();
     // Separate technical comparison; the quiz content above was authored only in UI.
     sessionId = (await identity.call('createLiveSession', { quizId })).sessionId;
     for (const slide of stored) {
@@ -152,7 +222,7 @@ test('minimal quiz authored through UI rehearses exactly the persisted live stre
       expect(published.slideKind).toBe(slide.kind);
     }
     expect(errors).toEqual([]);
-    await writeFile(dir + '/minimal-practice.json', JSON.stringify({ quizCreatedThroughUI: true, storedKinds: stored.map(s => s.kind), storedIds: stored.map(s => s.id), practiceIds: visited, technicalLiveComparison: true, pageErrors: errors }, null, 2));
+    await writeFile(dir + '/minimal-practice.json', JSON.stringify({ quizCreatedThroughUI: true, storedKinds: stored.map(s => s.kind), storedIds: stored.map(s => s.id), practiceIds: visited, technicalLiveComparison: true, automaticAgendaDtoVerified: true, separateTechnicalLegacyAgendaFixture: true, manualAgendaPreservedAcrossRoundSaveAndRehearsal: true, pageErrors: errors }, null, 2));
   } finally {
     if (sessionId) { await identity.db.doc('sessions/' + sessionId).delete(); await identity.db.doc('publicSessions/' + sessionId).delete(); }
     if (quizId) await identity.db.recursiveDelete(identity.db.doc('quizzes/' + quizId));

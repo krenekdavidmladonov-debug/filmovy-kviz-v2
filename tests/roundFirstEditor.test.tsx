@@ -2,7 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test, vi } from 'vitest';
 
-import { EditorPreview, QuestionForm } from '../apps/web/src/features/editor/EditorForms';
+import { EditorPreview, QuestionForm, SystemSectionForm } from '../apps/web/src/features/editor/EditorForms';
 import { practiceSlides } from '../apps/web/src/features/editor/QuizPractice';
 import {
   buildSemanticQuizModel,
@@ -74,6 +74,25 @@ test('private rehearsal preserves persisted legacy order and manual agenda witho
 });
 
 describe('round-first semantic editor model', () => {
+  test('agenda form preserves manual options and generates only automatic agendas', () => {
+    const quiz = quizFixture(), model = buildSemanticQuizModel(quiz);
+    const section = model.introduction.find(item => item.key === 'agenda')!;
+    const manual = slide({ kind: 'agenda', isQuestion: false, options: ['Původní ruční položka'] });
+    const onChange = vi.fn();
+    const render = (agenda: EditorSlide) => renderToStaticMarkup(<SystemSectionForm section={section} slide={agenda} model={model} disabled={false} onChange={onChange} />);
+    for (const automaticAgenda of [undefined, false]) {
+      const html = render({ ...manual, automaticAgenda });
+      expect(html).toContain('Uložený ruční harmonogram');
+      expect(html).toContain('Původní ruční položka');
+      expect(html).not.toContain('První kolo');
+    }
+    const automatic = render({ ...manual, automaticAgenda: true });
+    expect(automatic).toContain('Automaticky podle pořadí a názvů kol');
+    expect(automatic).toContain('První kolo');
+    expect(automatic).not.toContain('Původní ruční položka');
+    expect(manual.options).toEqual(['Původní ruční položka']);
+    expect(onChange).not.toHaveBeenCalled();
+  });
   test('builds intro system sections, rounds, round-local questions, and generated recap nodes', () => {
     const quiz = quizFixture();
     const model = buildSemanticQuizModel(quiz);

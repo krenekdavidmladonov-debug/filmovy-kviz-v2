@@ -25,6 +25,7 @@ export interface EditorPresentation {
 }
 
 export interface EditorSlide {
+  readonly automaticAgenda?: boolean;
   readonly authoringStatus?: 'draft' | 'ready';
   readonly answerMode?: 'open' | 'choice';
   readonly imageLayout?: 'split' | 'stacked';
