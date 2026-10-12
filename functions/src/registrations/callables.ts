@@ -330,11 +330,16 @@ export const updateEventRegistration = onCall(callableOptions, async (request) =
     const capacity = capacityAfter(event.capacity, 0, peopleDelta);
     const next = { ...event, capacity };
     const registrationStatus = statusAt(next, now);
+    const revision = current.revision === undefined ? 0 : current.revision;
+    if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0 || revision === Number.MAX_SAFE_INTEGER) {
+      throw new HttpsError('failed-precondition', 'Registration revision is malformed.');
+    }
     transaction.update(registrationRef, {
       teamName: input.teamName,
       normalizedTeamName: input.normalizedTeamName,
       memberCount: input.memberCount,
       contactEmail: input.contactEmail,
+      revision: revision + 1,
       updatedAt: now,
     });
     enqueueRegistrationEmail(transaction, eventRef, registrationRef, intentId, 'registration-updated', event.data, { ...current, ...input }, now);

@@ -33,6 +33,69 @@ async function event(teams = 3, people = 12) {
 }
 const managed = (id, registration) => ({ eventId: id, registrationId: registration.registrationId, token: registration.managementToken });
 const denied = (promise, code) => assert.rejects(promise, (error) => error.code === `functions/${code}`);
+const registrationState = async (id, registrationId) => (await getDoc(doc(admin.db, 'events', id, 'registrations', registrationId))).data();
+const reissue = (id, registrationId, expectedRevision, requestId) => admin.call('adminUpdateEventTeam', {
+  eventId: id, registrationId, expectedRevision, requestId, action: 'reissueLink',
+});
+async function revisionBoundaries() {
+  const id = await event(1, 6);
+  const original = form('Revizní tým', 3);
+  const team = await user.call('createEventRegistration', { eventId: id, ...original });
+  const initial = await registrationState(id, team.registrationId);
+  assert.equal(initial.revision, undefined, 'The existing online create shape covers legacy missing revision');
+  const credential = managed(id, team);
+  await user.call('updateEventRegistration', { ...credential, ...original, requestId: 'revision-initial-noop' });
+  assert.equal((await registrationState(id, team.registrationId)).revision, undefined, 'A legacy no-op must not manufacture a revision');
+  const changed = { ...original, contactEmail: 'changed@example.test' };
+  const request = { ...credential, ...changed, requestId: 'revision-contact-change' };
+  const response = await user.call('updateEventRegistration', request);
+  assert.equal(response.contactEmail, changed.contactEmail);
+  assert(!Object.hasOwn(response, 'revision') && !Object.hasOwn(response, 'managementTokenHash'), 'Public DTO remains unchanged');
+  const current = await registrationState(id, team.registrationId);
+  assert.equal(current.revision, 1);
+  assert.equal(current.managementTokenHash, initial.managementTokenHash, 'An edit must preserve the bearer capability');
+  await denied(reissue(id, team.registrationId, 0, 'revision-stale-reissue'), 'aborted');
+  await user.call('updateEventRegistration', request);
+  await user.call('updateEventRegistration', { ...credential, ...changed, requestId: 'revision-current-noop' });
+  assert.equal((await registrationState(id, team.registrationId)).revision, 1, 'Replay and no-op do not advance the revision');
+  await user.call('updateEventRegistration', { ...credential, ...changed, memberCount: 2, requestId: 'revision-second-change' });
+  const delayed = await user.call('updateEventRegistration', request);
+  assert.equal(delayed.memberCount, 2, 'Delayed replay returns the current registration without reverting it');
+  assert.equal((await registrationState(id, team.registrationId)).revision, 2);
+  const rotated = await reissue(id, team.registrationId, 2, 'revision-current-reissue');
+  assert.equal(typeof rotated.managementToken, 'string');
+  assert.equal((await registrationState(id, team.registrationId)).revision, 3);
+  await denied(user.call('getEventRegistration', credential), 'not-found');
+  await denied(user.call('updateEventRegistration', { ...credential, ...changed }), 'not-found');
+  await denied(user.call('cancelEventRegistration', credential), 'not-found');
+  const fresh = { ...credential, token: rotated.managementToken };
+  assert.equal((await user.call('getEventRegistration', fresh)).memberCount, 2);
+  await user.call('updateEventRegistration', { ...fresh, ...changed, memberCount: 2, requestId: 'revision-rotated-noop' });
+  assert.equal((await registrationState(id, team.registrationId)).revision, 3, 'A no-op after rotation keeps its revision');
+
+  const raceId = await event(1, 6);
+  const raceTeam = await user.call('createEventRegistration', { eventId: raceId, ...form('Souběžná revize', 3) });
+  const raceCredential = managed(raceId, raceTeam);
+  const raceForm = { ...form('Souběžná revize', 3), contactEmail: 'race-change@example.test' };
+  const results = await Promise.allSettled([
+    user.call('updateEventRegistration', { ...raceCredential, ...raceForm, requestId: 'revision-race-update' }),
+    reissue(raceId, raceTeam.registrationId, 0, 'revision-race-reissue'),
+  ]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1, 'Edit and stale rotation cannot both succeed');
+  const failed = results.find(result => result.status === 'rejected');
+  assert(['functions/aborted', 'functions/not-found'].includes(failed.reason.code));
+  const raceState = await registrationState(raceId, raceTeam.registrationId);
+  assert.equal(raceState.revision, 1);
+  const updateWon = results[0].status === 'fulfilled';
+  assert.equal(raceState.contactEmail, updateWon ? raceForm.contactEmail : 'synthetic@example.test');
+  const raceToken = updateWon
+    ? (await reissue(raceId, raceTeam.registrationId, 1, 'revision-race-after-update')).managementToken
+    : results[1].value.managementToken;
+  await denied(user.call('getEventRegistration', raceCredential), 'not-found');
+  assert.equal((await user.call('getEventRegistration', { ...raceCredential, token: raceToken })).contactEmail, raceState.contactEmail);
+  assert.equal((await state(raceId)).acceptedTeams, 1);
+  assert.equal((await state(raceId)).acceptedPeople, 3);
+}
 async function run() {
   await login(admin, 'admin');
   const id = await event();
@@ -51,6 +114,7 @@ async function run() {
   }
   await user.call('cancelEventRegistration', managed(id, own));
   await signOut(user.auth);
+  await revisionBoundaries();
   const full = await event(1, 6);
   const fullTeam = await user.call('createEventRegistration', { eventId: full, ...form('Plný tým', 6) });
   await denied(user.call('createEventRegistration', { eventId: full, ...form('Další tým', 2) }), 'failed-precondition');
@@ -83,6 +147,6 @@ async function run() {
   assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
   const final = await state(race);
   assert.ok(final.acceptedTeams <= final.teamCapacity && final.acceptedPeople <= final.peopleCapacity);
-  console.log('PASS: full versus closed, capacity shrink including race, token management across anonymous/user/moderator and negative authorization');
+  console.log('PASS: full versus closed, capacity shrink, registration revision/reissue races, token rotation and negative authorization');
 }
 try { await run(); } finally { await Promise.all([deleteApp(admin.app), deleteApp(user.app)]); }
