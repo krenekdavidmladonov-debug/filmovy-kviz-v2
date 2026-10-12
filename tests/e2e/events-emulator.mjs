@@ -1,4 +1,9 @@
 import { strict as assert } from 'node:assert';
+import { createRequire } from 'node:module';
+
+const require = createRequire(new URL('../../functions/package.json', import.meta.url));
+const { initializeApp: initializeAdminApp, deleteApp: deleteAdminApp } = require('firebase-admin/app');
+const { getFirestore: getAdminFirestore } = require('firebase-admin/firestore');
 
 import { deleteApp, initializeApp } from 'firebase/app';
 import { connectAuthEmulator, getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -7,6 +12,7 @@ import {
   connectFirestoreEmulator,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
   getFirestore,
   updateDoc,
@@ -19,6 +25,9 @@ const { projectId, authEndpoint, firestoreEndpoint, functionsEndpoint } = requir
   globalThis.process.env,
   'Events E2E',
 );
+// Only the validated local emulator inspector may read superseded immutable snapshots.
+const adminApp = initializeAdminApp({ projectId }, 'events-snapshot-inspector-e2e');
+const adminDb = getAdminFirestore(adminApp);
 const app = initializeApp({
   apiKey: 'demo-api-key', authDomain: `${projectId}.firebaseapp.com`, projectId,
   appId: '1:123:web:events-e2e',
@@ -50,6 +59,18 @@ async function expectFunctionError(action, code, reason) {
     assert.equal(error.code, code);
     if (reason !== undefined) assert.equal(error.details?.reason, reason);
   }
+}
+
+async function inspectSnapshot(snapshotId) {
+  const ref = adminDb.doc(`quizSnapshots/${snapshotId}`);
+  const [root, slides, rounds] = await Promise.all([
+    ref.get(), ref.collection('slides').get(), ref.collection('rounds').get(),
+  ]);
+  return {
+    root: root.data(),
+    slides: slides.docs.map(item => ({ id: item.id, data: item.data() })),
+    rounds: rounds.docs.map(item => ({ id: item.id, data: item.data() })),
+  };
 }
 
 async function run() {
@@ -130,6 +151,7 @@ async function run() {
   assert.equal(firstSnapshot.quizRevision, 0);
   assert.equal((await getDoc(doc(db, 'quizSnapshots', firstSnapshotId, 'slides', 'slide-002'))).data().correctAnswer, 'Syntetická odpověď');
   await assert.rejects(updateDoc(firstSnapshotRef, { quizRevision: 999 }), /permission-denied/u);
+  const firstSnapshotContents = await inspectSnapshot(firstSnapshotId);
 
   const relocked = await invoke('lockEventQuiz', {
     eventId: created.eventId, expectedRevision: 3, quizId: 'preflight-ready-e2e',
@@ -137,7 +159,16 @@ async function run() {
   });
   assert.equal(relocked.revision, 4);
   assert.notEqual(relocked.snapshotId, firstSnapshotId);
-  assert.equal((await getDoc(firstSnapshotRef)).data().quizRevision, 0);
+  await assert.rejects(getDocFromServer(firstSnapshotRef), /permission-denied/u);
+  await assert.rejects(getDocFromServer(doc(db, 'quizSnapshots', firstSnapshotId, 'slides', 'slide-002')), /permission-denied/u);
+  await assert.rejects(getDocs(collection(db, 'quizSnapshots', firstSnapshotId, 'slides')), /permission-denied/u);
+  const preservedSnapshot = await inspectSnapshot(firstSnapshotId);
+  assert.equal(preservedSnapshot.root.quizRevision, 0);
+  assert.deepEqual(preservedSnapshot, firstSnapshotContents);
+  const currentSnapshot = await getDocFromServer(doc(db, 'quizSnapshots', relocked.snapshotId));
+  assert.equal(currentSnapshot.data().quizId, 'preflight-ready-e2e');
+  assert.equal(currentSnapshot.data().quizRevision, 0);
+  assert.equal((await getDocFromServer(doc(db, 'quizSnapshots', relocked.snapshotId, 'slides', 'slide-002'))).data().correctAnswer, 'Syntetická odpověď');
 
   const warningLocked = await invoke('lockEventQuiz', {
     eventId: created.eventId, expectedRevision: 4, quizId: 'preflight-warning-e2e',
@@ -182,9 +213,10 @@ async function run() {
   globalThis.console.log(JSON.stringify({
     status: 'PASS', adminCrud: true, moderatorReadOnly: true, publicProjectionSanitized: true,
     directWritesDenied: true, blockerDenied: true, warningAcknowledgementRequired: true,
-    immutableSnapshots: true, relockBeforeScoring: true, staleQuizRevisionDenied: true,
+    immutableSnapshots: true, supersededSnapshotReadsDenied: true, currentSnapshotReadsAllowed: true,
+    relockBeforeScoring: true, staleQuizRevisionDenied: true,
   }, null, 2));
 }
 
 try { await run(); }
-finally { await deleteApp(app); }
+finally { await Promise.all([deleteApp(app), deleteAdminApp(adminApp)]); }
