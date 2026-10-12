@@ -19,7 +19,7 @@ Evidence is retained locally in ignored `.local-data/restart-preflight-20261012/
 | Hosting | Latest returned release: `sites/filmovy-kviz-v2-staging/releases/1789655741188000`, version `752720637f78079b`, FINALIZED, released `2026-09-17T14:35:41.188Z`. | Historical deployed version; not proof of candidate Hosting assets or online acceptance. |
 | Auth and membership | Three Auth accounts and two memberships inspected; owner and moderator memberships were active with verified accounts. Owner lacks `event.delete`. | No raw identities are reproduced; no grants or accounts were changed. The missing permission was not automatically granted. |
 | Collaboration control | Collaboration enabled, revision 18. | Any future pause requires separately approved compare-and-set against the then-current revision. No pause write occurred. |
-| GitHub | Connected repository lookup and authenticated CLI repository lookup both returned 404; CLI identity matched the expected owner. Git remote HEAD read succeeded at `0d452d8`. | Git transport access does not establish GitHub API access, review approval or CI status. CI remains unverified. |
+| GitHub | Initial 2026-10-12 connector/CLI reads failed. Later at 19:13 Europe/Prague, outside-sandbox CLI auth, user and private repository reads succeeded with the existing keyring account and admin/push/pull permissions; connector remains 404 with no manageable installations. | CLI access is available; sandbox invalid-token output was misleading. Frozen-source CI remains unverified. No credential repair or token transfer is needed. |
 
 ## Corrected inspection attempts
 
@@ -39,7 +39,9 @@ The first builder attempt at `a08771c` stopped before receipt because an obsolet
 
 ## Remaining work and boundaries
 
-Local packaging is complete. The concrete [release proposal](RESTART_RELEASE_PLAN.md) covers the deployed Firestore Rules gap, audited collaboration pause, precise deployment targets, separate synthetic online QA, and compatible rollback. Remote CI for the frozen SHA is still blocked by unavailable GitHub repository API access. Restore repository access for the connected/CLI GitHub identity before arranging exact-SHA CI; do not substitute unverified results or bypass the existing credentials.
+Local packaging is complete. The concrete [release proposal](RESTART_RELEASE_PLAN.md) covers the deployed Firestore Rules gap, audited collaboration pause, precise deployment targets, separate synthetic online QA, and compatible rollback. Outside-sandbox CLI repository access works with scopes `repo`, `workflow`, `read:org`, `gist`; connector access is not required to continue. Remote `main` is still `0d452d8`, an ancestor of frozen `aafeaa9`, and existing open PRs do not contain this restart. Historical green `8106c4a` CI is not frozen-source CI.
+
+The attempted frozen-SHA push to new `codex/restart-release-aafeaa9` and draft PR against `main` was rejected by automatic approval review before execution: explicit approval of the exact repository and payload is required. No push/PR was created; the owner approval question is pending. Prepared body: `.local-data/restart-preflight-20261012/ci-pr-body.md`. After approval, use the working CLI to publish that exact frozen source and draft PR, verify the head SHA and actual CI checkout tree against frozen tree `967d2a1d78a01288200211bd34a7b0cf14fddda4` (PR CI normally uses a synthetic merge). No account/credential changes or token transfer are needed; deployment approval remains separate.
 
 The approved inspection read no quiz or team-contact content, media objects or data exports. It sent no email, deployed nothing, and changed no cloud resources, accounts, permissions or collaboration settings. Production remains outside scope.
 
