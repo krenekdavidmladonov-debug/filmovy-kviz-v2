@@ -22,6 +22,7 @@ function Get-EventNightPaths {
     SnapshotDirectory = Join-Path $dataDirectory 'emulator-data'
     ExportStaging = Join-Path $dataDirectory 'export-staging'
     BackupDirectory = Join-Path $dataDirectory 'backups'
+    PromotionJournal = Join-Path $dataDirectory 'promotion-pending.json'
     StatePath = Join-Path $dataDirectory 'run-state.json'
     BuildManifest = Join-Path $dataDirectory 'build-manifest.json'
     HealthPath = Join-Path $dataDirectory 'health.json'
@@ -50,10 +51,34 @@ function Assert-EventNightPath {
     [Parameter(Mandatory = $true)][string]$Path
   )
 
-  $localRoot = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot '.local-data\event-night'))
+  $localRoot = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot '.local-data/event-night'))
   $resolved = [System.IO.Path]::GetFullPath($Path)
-  if (-not $resolved.StartsWith($localRoot + [System.IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+  $comparison = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+  if ($Path -match '(^|[\\/])\.\.([\\/]|$)' -or
+      (-not $resolved.Equals($localRoot, $comparison) -and -not $resolved.StartsWith($localRoot + [System.IO.Path]::DirectorySeparatorChar, $comparison))) {
     Throw-QaError "Event-night cesta opustila povolený lokální adresář: $resolved" 'Nepokračujte a požádejte vývojáře o kontrolu launcheru.'
+  }
+  Assert-EventNightNoReparse $resolved
+}
+
+function Assert-EventNightNoReparse {
+  param([Parameter(Mandatory = $true)][string]$Path, [switch]$Recurse)
+
+  $current = [System.IO.Path]::GetFullPath($Path)
+  while ($null -ne $current) {
+    $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+    if ($null -ne $item) {
+      if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        Throw-QaError 'Event-night cesta obsahuje junction nebo symbolický odkaz.' 'Nepokračujte; ponechte data beze změny.'
+      }
+    }
+    $current = [System.IO.Path]::GetDirectoryName($current)
+    if ([string]::IsNullOrEmpty($current)) { break }
+  }
+  if ($Recurse -and (Test-Path -LiteralPath $Path -PathType Container)) {
+    foreach ($child in Get-ChildItem -LiteralPath $Path -Force) {
+      Assert-EventNightNoReparse $child.FullName -Recurse
+    }
   }
 }
 
@@ -64,6 +89,7 @@ function Get-EventNightFileRecords {
   )
 
   if (-not (Test-Path -LiteralPath $Root -PathType Container)) { return @() }
+  Assert-EventNightNoReparse $Root -Recurse
   $normalizedRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd(
     [System.IO.Path]::DirectorySeparatorChar,
     [System.IO.Path]::AltDirectorySeparatorChar
@@ -169,6 +195,7 @@ function Assert-EventNightBuildManifest {
 function Get-EventNightCandidate {
   param([Parameter(Mandatory = $true)][psobject]$Paths)
 
+  Assert-EventNightNoReparse $Paths.CandidateManifest
   if (-not (Test-Path -LiteralPath $Paths.CandidateManifest -PathType Leaf)) {
     Throw-QaError 'Chybí lokální manifest vybraného kvízu.' 'Nejdřív spusťte PREPARE_EVENT_NIGHT.cmd.'
   }
@@ -216,6 +243,7 @@ function Assert-EventNightSnapshot {
   )
 
   $manifestPath = Join-Path $SnapshotDirectory '.event-night-manifest.json'
+  Assert-EventNightNoReparse $SnapshotDirectory -Recurse
   if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
     Throw-QaError 'Persistentní snapshot nemá event-night manifest.' 'Nejdřív spusťte PREPARE_EVENT_NIGHT.cmd.'
   }
@@ -239,6 +267,7 @@ function Backup-EventNightSnapshot {
   )
 
   Assert-EventNightSnapshot $Paths.SnapshotDirectory $Paths | Out-Null
+  Assert-EventNightPath $RepoRoot $Paths.BackupDirectory
   New-Item -ItemType Directory -Path $Paths.BackupDirectory -Force | Out-Null
   $stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')
   $target = Join-Path $Paths.BackupDirectory "$stamp-$Reason"
@@ -382,11 +411,14 @@ function Export-EventNightSnapshot {
     [Parameter(Mandatory = $true)][string]$RepoRoot,
     [Parameter(Mandatory = $true)][psobject]$PnpmTool,
     [Parameter(Mandatory = $true)][psobject]$Paths,
-    [switch]$Promote
+    [switch]$Promote,
+    [switch]$Initial
   )
 
+  Assert-EventNightPromotionClear $RepoRoot $Paths
   Assert-EventNightPath $RepoRoot $Paths.ExportStaging
   if (Test-Path -LiteralPath $Paths.ExportStaging) {
+    Assert-EventNightNoReparse $Paths.ExportStaging -Recurse
     Remove-Item -LiteralPath $Paths.ExportStaging -Recurse -Force
   }
   $exportExit = Invoke-PnpmTool $PnpmTool @('event-night:export')
@@ -397,24 +429,103 @@ function Export-EventNightSnapshot {
   Assert-EventNightSnapshot $Paths.ExportStaging $Paths | Out-Null
   if (-not $Promote) { return $Paths.ExportStaging }
 
-  New-Item -ItemType Directory -Path $Paths.BackupDirectory -Force | Out-Null
-  $previous = $null
-  if (Test-Path -LiteralPath $Paths.SnapshotDirectory) {
-    Assert-EventNightSnapshot $Paths.SnapshotDirectory $Paths | Out-Null
-    $stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')
-    $previous = Join-Path $Paths.BackupDirectory "$stamp-before-export"
-    Assert-EventNightPath $RepoRoot $previous
-    Move-Item -LiteralPath $Paths.SnapshotDirectory -Destination $previous
+  Promote-EventNightSnapshot $RepoRoot $Paths -Initial:$Initial | Out-Null
+  return $Paths.SnapshotDirectory
+}
+
+function Assert-EventNightPromotionClear {
+  param([Parameter(Mandatory = $true)][string]$RepoRoot, [Parameter(Mandatory = $true)][psobject]$Paths)
+  foreach ($target in @($Paths.PromotionJournal, $Paths.SnapshotDirectory, $Paths.ExportStaging, $Paths.BackupDirectory)) {
+    Assert-EventNightPath $RepoRoot $target
   }
-  try {
+  if (Test-Path -LiteralPath $Paths.PromotionJournal) {
+    Throw-QaError 'Nedokončená promotion snapshotu; další export ani FIRST PREPARE nejsou povolené.' 'Spusťte START_EVENT_NIGHT.cmd pro ověřenou obnovu, nikoli nový seed.'
+  }
+}
+
+function Get-EventNightPromotionJournal {
+  param([Parameter(Mandatory = $true)][string]$RepoRoot, [Parameter(Mandatory = $true)][psobject]$Paths)
+  Assert-EventNightPath $RepoRoot $Paths.PromotionJournal
+  if (-not (Test-Path -LiteralPath $Paths.PromotionJournal -PathType Leaf) -or (Get-Item -LiteralPath $Paths.PromotionJournal).Length -gt 2048) {
+    Throw-QaError 'Recovery journal chybí nebo není platný soubor.' 'Ponechte všechny snapshoty beze změny.'
+  }
+  $journal = Get-Content -LiteralPath $Paths.PromotionJournal -Raw -Encoding UTF8 | ConvertFrom-Json
+  $fields = @($journal.PSObject.Properties.Name | Sort-Object)
+  if ([string]::Join(',', $fields) -ne 'previousBackup,previousManifestSha256,projectId,schemaVersion' -or
+      [int]$journal.schemaVersion -ne 1 -or [string]$journal.projectId -ne $script:EventNightProjectId -or
+      [string]$journal.previousBackup -cnotmatch '^\d{8}T\d{9}Z-before-export-[a-f0-9]{32}$' -or
+      [string]$journal.previousManifestSha256 -cnotmatch '^[a-f0-9]{64}$') {
+    Throw-QaError 'Recovery journal nemá bezpečný demo formát nebo přesný backup.' 'Ponechte všechny snapshoty beze změny.'
+  }
+  Assert-EventNightPath $RepoRoot (Join-Path $Paths.BackupDirectory $journal.previousBackup)
+  return $journal
+}
+
+function Promote-EventNightSnapshot {
+  param([Parameter(Mandatory = $true)][string]$RepoRoot, [Parameter(Mandatory = $true)][psobject]$Paths, [switch]$Initial)
+  Assert-EventNightPromotionClear $RepoRoot $Paths
+  Assert-EventNightSnapshot $Paths.ExportStaging $Paths | Out-Null
+  if (-not (Test-Path -LiteralPath $Paths.SnapshotDirectory)) {
+    if (-not $Initial) { Throw-QaError 'Chybí canonical snapshot; export jej nesmí nově založit.' 'Použijte ověřenou recovery, nikdy nový seed.' }
     Move-Item -LiteralPath $Paths.ExportStaging -Destination $Paths.SnapshotDirectory
     Assert-EventNightSnapshot $Paths.SnapshotDirectory $Paths | Out-Null
-  } catch {
-    if ($null -ne $previous -and -not (Test-Path -LiteralPath $Paths.SnapshotDirectory)) {
-      Move-Item -LiteralPath $previous -Destination $Paths.SnapshotDirectory
-    }
-    throw
+    return $Paths.SnapshotDirectory
   }
+  if ($Initial) { Throw-QaError 'FIRST PREPARE nesmí přepsat existující snapshot.' 'Použijte běžný start.' }
+  Assert-EventNightSnapshot $Paths.SnapshotDirectory $Paths | Out-Null
+  $name = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') + '-before-export-' + [Guid]::NewGuid().ToString('N')
+  $previous = Join-Path $Paths.BackupDirectory $name
+  $temporaryJournal = Join-Path $Paths.DataDirectory ('promotion-journal-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+  Assert-EventNightPath $RepoRoot $previous
+  Assert-EventNightPath $RepoRoot $temporaryJournal
+  if (Test-Path -LiteralPath $previous) { Throw-QaError 'Backup target už existuje.' 'Ponechte snapshoty beze změny.' }
+  $journal = [ordered]@{ schemaVersion = 1; projectId = $script:EventNightProjectId; previousBackup = $name;
+    previousManifestSha256 = (Get-FileHash -LiteralPath (Join-Path $Paths.SnapshotDirectory '.event-night-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant() }
+  New-Item -ItemType Directory -Path $Paths.BackupDirectory -Force | Out-Null
+  $encoding = New-Object System.Text.UTF8Encoding($true)
+  $bytes = $encoding.GetPreamble() + $encoding.GetBytes(($journal | ConvertTo-Json -Depth 3))
+  $stream = [System.IO.File]::Open($temporaryJournal, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+  try { $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
+  Move-Item -LiteralPath $temporaryJournal -Destination $Paths.PromotionJournal
+  # The journal is durable before either rename. An interruption leaves recovery evidence.
+  Move-Item -LiteralPath $Paths.SnapshotDirectory -Destination $previous
+  Move-Item -LiteralPath $Paths.ExportStaging -Destination $Paths.SnapshotDirectory
+  Assert-EventNightSnapshot $Paths.SnapshotDirectory $Paths | Out-Null
+  Remove-Item -LiteralPath $Paths.PromotionJournal
+  return $Paths.SnapshotDirectory
+}
+
+function Restore-EventNightSnapshot {
+  param([Parameter(Mandatory = $true)][string]$RepoRoot, [Parameter(Mandatory = $true)][psobject]$Paths)
+  foreach ($target in @($Paths.SnapshotDirectory, $Paths.PromotionJournal, $Paths.BackupDirectory)) { Assert-EventNightPath $RepoRoot $target }
+  $canonicalExists = Test-Path -LiteralPath $Paths.SnapshotDirectory
+  if ($canonicalExists) { Assert-EventNightSnapshot $Paths.SnapshotDirectory $Paths | Out-Null }
+  if (-not (Test-Path -LiteralPath $Paths.PromotionJournal)) {
+    if (-not $canonicalExists) { Throw-QaError 'Chybí snapshot i přesný recovery journal.' 'Ponechte zálohy beze změny; nelze vybírat nejnovější ani seedovat.' }
+    return $Paths.SnapshotDirectory
+  }
+  $journal = Get-EventNightPromotionJournal $RepoRoot $Paths
+  $previous = Join-Path $Paths.BackupDirectory $journal.previousBackup
+  if (Test-Path -LiteralPath $previous) {
+    Assert-EventNightSnapshot $previous $Paths | Out-Null
+    $priorHash = (Get-FileHash -LiteralPath (Join-Path $previous '.event-night-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($priorHash -ne $journal.previousManifestSha256) { Throw-QaError 'Backup manifest nesouhlasí s recovery journalem.' 'Ponechte snapshoty beze změny.' }
+  } elseif ($canonicalExists -and
+      (Get-FileHash -LiteralPath (Join-Path $Paths.SnapshotDirectory '.event-night-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant() -eq $journal.previousManifestSha256) {
+    # Interrupted before the first rename: the exact prior is still canonical.
+  } else { Throw-QaError 'Přesný backup z recovery journalu chybí.' 'Ponechte snapshoty beze změny.' }
+  if (-not $canonicalExists) {
+    $temporary = Join-Path $Paths.DataDirectory ('recovery-' + [Guid]::NewGuid().ToString('N'))
+    Assert-EventNightPath $RepoRoot $temporary
+    if (Test-Path -LiteralPath $temporary) { Throw-QaError 'Recovery target už existuje.' 'Ponechte snapshoty beze změny.' }
+    Copy-Item -LiteralPath $previous -Destination $temporary -Recurse
+    Assert-EventNightSnapshot $temporary $Paths | Out-Null
+    Assert-EventNightPath $RepoRoot $Paths.SnapshotDirectory
+    if (Test-Path -LiteralPath $Paths.SnapshotDirectory) { Throw-QaError 'Canonical snapshot vznikl během recovery.' 'Nepřepisujte jej; zopakujte bezpečný start.' }
+    Move-Item -LiteralPath $temporary -Destination $Paths.SnapshotDirectory
+    Assert-EventNightSnapshot $Paths.SnapshotDirectory $Paths | Out-Null
+  }
+  Remove-Item -LiteralPath $Paths.PromotionJournal
   return $Paths.SnapshotDirectory
 }
 

@@ -40,6 +40,7 @@ try {
   Set-SafeChildEnvironment $repoRoot $nodeTool $pnpmTool $javaTool $ProjectId
   Set-EventNightEmulatorEnvironment $ProjectId
   $paths = Get-EventNightPaths $repoRoot
+  Assert-EventNightPromotionClear $repoRoot $paths
   New-Item -ItemType Directory -Path $paths.DataDirectory -Force | Out-Null
   if (Test-Path -LiteralPath $paths.SnapshotDirectory) {
     Throw-QaError 'Event-night snapshot už existuje; FIRST PREPARE jej nepřepíše.' 'Použijte START_EVENT_NIGHT.cmd. Reset musí být samostatné vědomé development rozhodnutí.'
@@ -102,7 +103,7 @@ try {
 
   Write-QaInfo 'Ověřuji admin login, candidate dokument a reálný preflight přes production Hosting Emulator...'
   $health = Invoke-EventNightHealth $repoRoot $nodeTool $paths
-  Export-EventNightSnapshot $repoRoot $pnpmTool $paths -Promote | Out-Null
+  Export-EventNightSnapshot $repoRoot $pnpmTool $paths -Promote -Initial | Out-Null
   Assert-EventNightSnapshot $paths.SnapshotDirectory $paths | Out-Null
   Write-QaSuccess 'První persistentní snapshot byl vytvořen a ověřen SHA-256 manifestem.'
 

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
@@ -45,6 +46,7 @@ describe('event-night launcher safety contract', () => {
       'tools/event-night/Prepare-EventNight.ps1',
       'tools/event-night/Start-EventNight.ps1',
       'tools/event-night/Stop-EventNight.ps1',
+      'tests/fixtures/event-night-recovery.ps1',
     ]) {
       expect(hasUtf8Bom(file), file).toBe(true);
     }
@@ -70,6 +72,8 @@ describe('event-night launcher safety contract', () => {
     expect(prepare).toContain("@('migration:v1:emulator')");
     expect(start).not.toMatch(/seed:|migration:v1:emulator/iu);
     expect(start).toContain("Start-EventNightWorker -Mode 'Import'");
+    expect(start).toContain('Restore-EventNightSnapshot');
+    expect(prepare.indexOf('Assert-EventNightPromotionClear')).toBeLessThan(prepare.indexOf("@('seed:auth')"));
     expect(worker).toContain("'event-night:emulators'");
     expect(worker).toContain("'event-night:emulators:fresh'");
     expect(worker).toContain('$eventArguments = @(if (');
@@ -86,4 +90,14 @@ describe('event-night launcher safety contract', () => {
     expect(common).not.toMatch(/taskkill(?:\.exe)?\s+\/IM/iu);
     expect(common).not.toContain('[System.IO.Path]::GetRelativePath');
   });
+
+  test('recovers interrupted promotion using real isolated PowerShell snapshots', () => {
+    const script = fileURLToPath(new URL('./fixtures/event-night-recovery.ps1', import.meta.url));
+    const commonPath = fileURLToPath(new URL('../tools/event-night/EventNight.Common.ps1', import.meta.url));
+    const output = execFileSync(process.platform === 'win32' ? 'powershell.exe' : 'pwsh', [
+      '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+      '-File', script, '-CommonPath', commonPath,
+    ], { cwd: root, encoding: 'utf8', timeout: 25_000, windowsHide: true });
+    expect(output).toContain('PASS: event-night recovery');
+  }, 30_000);
 });
