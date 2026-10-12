@@ -67,8 +67,8 @@ jobs:
       - name: Typecheck, lint, and production build
         run: pnpm check
 
-      - name: Staging target and configuration guards (no cloud access)
-        run: node --test tests/staging-guard.test.mjs
+      - name: Staging guards and unified release inventory (no cloud access)
+        run: node --test tests/staging-guard.test.mjs tests/restart-release-manifest.test.mjs
 
       - name: Unit and synthetic migration regression tests
         run: pnpm test:unit
@@ -157,6 +157,11 @@ jobs:
           --only auth,firestore,functions
           --project demo-filmovy-kviz-v2
           "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/historical-results.config.ts"
+
+      - name: One authored event from quiz creation through final reveal and history
+        run: >-
+          pnpm exec firebase emulators:exec --only auth,firestore,functions --project demo-filmovy-kviz-v2
+          "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/restart-event-acceptance.config.ts"
 
       - name: Owned media Storage contracts and browser E2E (local emulators only)
         run: >-
