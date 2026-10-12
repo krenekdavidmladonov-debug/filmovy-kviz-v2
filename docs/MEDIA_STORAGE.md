@@ -10,18 +10,20 @@ Files use quiz-assets/{quizId}/{assetId}/source. Once created they cannot be ove
 
 ## Upload boundary
 
-1. beginQuizMediaUpload requires an admin token plus a fresh, enabled admin account and an existing quiz. It creates a 30-minute upload grant for one exact actor, path, MIME and size; request-ID reuse with different declared metadata is rejected.
-2. Storage Rules permit only create under that grant, with matching admin identity, quiz, expiry, size and supported MIME. They deny all direct get/list/update/delete, including staff.
-3. finalizeQuizMediaUpload checks the fresh admin, actual object size and content type, and a matching file signature from its first 4096 bytes. It removes Firebase download tokens and records the object's generation.
+1. beginQuizMediaUpload requires a fresh enabled, verified Auth account, an active membership with `quiz.media.upload`, scope for the existing quiz, and a valid session cutoff. The same content transaction rereads membership and scope, then creates a 30-minute upload grant bound to that membership version and one exact actor, quiz, asset, path, MIME and size; request-ID reuse with different declared metadata is rejected.
+2. Storage Rules permit only create under that server-issued grant. They read exactly two distinct Firestore documents: the current membership and the upload grant. They retain verified-token, active UID, session cutoff, current upload permission/version, actor/quiz/asset, uploading status, expiry, size and supported MIME checks. The grant is proof of the transaction's scope authorization; an additional quiz-root read for `own` scope would exceed Storage's two-document cross-service limit. Scope/permission changes through the membership boundary increment version and revoke pending grants. All direct get/list/update/delete remain denied, including staff.
+3. finalizeQuizMediaUpload reauthorizes current membership, upload permission and quiz scope, checks actual object size and content type, and a matching file signature from its first 4096 bytes. It removes Firebase download tokens and records the object's generation.
 4. Editor create/update and event locking verify every owned reference is ready, belongs to that quiz and has the correct kind. Conflicting roles, arbitrary paths and use in unsupported fields are rejected.
 
 Supported images: PNG/JPEG/WebP, at most 10 MiB. Audio: MP3/WAV, at most 25 MiB. SVG, HTML and video uploads are rejected. Signature checks detect a simple mislabeled file; they are not full codec decoding, malware scanning or a guarantee that every browser can decode a corrupt file. Unsupported/corrupt media fails visibly in the player. No transcoding service is introduced.
+
+There is currently no application API for transferring quiz-root ownership or physically deleting a quiz root. The two-read grant boundary assumes that invariant. Any future authorized ownership-transfer/root-deletion operation must invalidate pending media grants in the same transaction before it becomes available. Out-of-band privileged root changes are not detected by this Storage create condition; finalization and the read gateway still reauthorize current quiz scope. This is a bounded pending-upload capability, not authority to read, attach or publish media.
 
 The editor prevents save, keyboard save, selection and structural mutations while upload is pending. After successful preparation it updates the local draft; explicit Save commits the binding. Abandoning a draft never physically deletes its uploaded object.
 
 ## Reads and reveal
 
-readQuizMedia serves only GET, with nosniff/no-store and bounded single-byte Range support. Staff reads require a verified token and a fresh enabled admin/moderator role. A public request includes sessionId; the server authorizes the exact reference against the current active publicSessions projection and checks its actual asset kind. It repeats that authorization after Storage IO. An unrelated reveal revision does not revoke a still-visible image; navigation, results presentation and session ending do.
+readQuizMedia serves only GET, with nosniff/no-store and bounded single-byte Range support. Staff reads require a verified token, a fresh enabled Auth account, and current membership permissions and quiz/event scope for the requested media role. A public request includes sessionId; the server authorizes the exact reference against the current active publicSessions projection and checks its actual asset kind. It repeats that authorization after Storage IO. An unrelated reveal revision does not revoke a still-visible image; navigation, results presentation and session ending do.
 
 Ordinary AUDIO is absent from the public payload and cannot be downloaded through the public endpoint. The moderator device fetches it with staff authentication. A specifically selected recap exposes that audio to the existing public projector. No public client lists Storage or reads private quiz metadata. A displayed public asset can of course be copied by a viewer; this is reveal timing/access control, not DRM.
 
@@ -41,6 +43,8 @@ Use only a demo-* project and local Auth/Firestore/Functions/Storage emulators. 
 - firebase emulators:exec --only auth,firestore,functions,storage --project demo-filmovy-kviz-v2 "pnpm test:e2e:media && pnpm test:e2e:media-browser"
 
 CI includes these Storage contracts and a synthetic browser upload/editor/projector flow. Existing browser groups remain enabled. The tests do not require cloud Storage, a Gmail account or real credentials.
+
+The media emulator contract also evaluates the actual Storage Rules with the cached Rules runtime and synthetic cross-service documents, records the distinct requested paths, and imposes the cloud two-document budget in its adapter. A reconstructed prior `own`-scope condition must request three documents and fail that budget; current own/all/selected grant paths must permit with two. This is a source-bound regression for the documented budget, not a claim that the emulator itself reproduces every cloud quota or IAM/CORS behavior.
 
 ## Later authorized staging work
 
