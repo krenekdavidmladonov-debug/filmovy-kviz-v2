@@ -68,7 +68,7 @@ jobs:
         run: pnpm check
 
       - name: Staging guards and unified release inventory (no cloud access)
-        run: node --test tests/staging-guard.test.mjs tests/restart-release-manifest.test.mjs
+        run: node --test tests/staging-guard.test.mjs tests/restart-release-manifest.test.mjs tests/restart-build.test.mjs
 
       - name: Unit and synthetic migration regression tests
         run: pnpm test:unit
