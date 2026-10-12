@@ -414,6 +414,22 @@ export function QuizEditorPage() {
     setError(null);
   }
 
+  async function discardAndReload() {
+    if (uploadPending.current || savePending.current) return;
+    if (!window.confirm('Zahodit všechny zbývající rozepsané změny a načíst aktuální verzi kvízu?')) return;
+    savePending.current = true;
+    setSaving(true);
+    try {
+      if (await reload() === null) setSaveFailed(true);
+    } catch (loadError) {
+      setSaveFailed(true);
+      setError(safeErrorMessage(loadError));
+    } finally {
+      savePending.current = false;
+      setSaving(false);
+    }
+  }
+
   function select(key: string) {
     if (key === selectedKey || uploadPending.current || savePending.current) return;
     setPickerRoundId(null);
@@ -556,9 +572,7 @@ export function QuizEditorPage() {
       </header>
 
       {error && <div ref={errorRef} tabIndex={-1} className="round-editor-error"><HumanError error={{ title: 'Změnu nelze dokončit', message: error, technicalCode: saveFailed ? 'EDITOR_SAVE_FAILED' : 'EDITOR_ACTION_FAILED' }} onRetry={saveFailed ? () => void saveAll() : undefined} /></div>}
-      {saveFailed && <button type="button" className="secondary-button" disabled={saving || uploading} onClick={() => {
-        if (window.confirm('Zahodit všechny zbývající rozepsané změny a načíst aktuální verzi kvízu?')) void reload();
-      }}>Zahodit rozepsané změny a načíst aktuální verzi</button>}
+      {saveFailed && <button type="button" className="secondary-button" disabled={saving || uploading} onClick={() => void discardAndReload()}>Zahodit rozepsané změny a načíst aktuální verzi</button>}
 
       {preflightOpen && preflightResult !== null && (
         <div className="editor-preflight-shell">

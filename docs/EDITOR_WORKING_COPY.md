@@ -8,6 +8,8 @@ The working copy exists only in memory inside the current authorization context.
 
 The client calls the existing authenticated, revision-checked mutations sequentially. This is not one atomic transaction: acknowledged changes remain saved if a later operation fails. The editor retains only unacknowledged work and retries it from the last acknowledged revision. Metadata is saved last. A lost response preserves the previous revision, so retrying cannot silently overwrite a newer revision or duplicate a creation. On conflict, remaining local changes stay visible; discarding and reloading requires an explicit confirmation.
 
+After confirming discard and reload, editing, saving and selection remain locked until the authoritative read finishes. A failed read preserves the working copy and releases the lock for retry; a delayed response cannot silently replace work entered during the reload.
+
 No collections, Security Rules, authorization boundaries, event snapshots or public answer projection change. Draft content is not written to browser persistence.
 
 ## Validation

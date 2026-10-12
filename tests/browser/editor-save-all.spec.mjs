@@ -83,6 +83,48 @@ test('lost response leaves the draft and cannot overwrite a newer revision on re
   } finally { await f.identity.dispose(); }
 });
 
+test('confirmed conflict reload locks editing, saving and selection until authoritative data arrives', async ({ page }) => {
+  const f = await fixture(page);
+  let releaseReload;
+  const held = new Promise(resolve => { releaseReload = resolve; });
+  let responseReady = false;
+  try {
+    await select(page, 0); await prompt(page).fill('Local work to discard');
+    const batch = f.identity.db.batch();
+    batch.update(f.root, { revision: 1, title: 'Authoritative quiz' });
+    batch.update(f.root.collection('slides').doc('a'), { text: 'Authoritative question' });
+    await batch.commit();
+    await save(page); await expect(page.locator('.save-state')).toHaveText('Uložení se nezdařilo');
+    await expect(page.locator('.round-editor-error')).toContainText('Kvíz mezitím upravil někdo jiný');
+    await page.route('**/readAccessData', async route => {
+      if (route.request().method() !== 'POST' || route.request().postDataJSON().data.operation !== 'editor') return route.continue();
+      const response = await route.fetch();
+      responseReady = true;
+      await held;
+      await route.fulfill({ response });
+    });
+    const reloadButton = page.getByRole('button', { name: 'Zahodit rozepsané změny a načíst aktuální verzi', exact: true });
+    page.once('dialog', dialog => dialog.accept());
+    await reloadButton.click();
+    await expect.poll(() => responseReady).toBe(true);
+    await expect(prompt(page)).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Uložit vše', exact: true })).toBeDisabled();
+    await expect(reloadButton).toBeDisabled();
+    await select(page, 1);
+    await expect(prompt(page)).toHaveValue('Local work to discard');
+    releaseReload();
+    await expect(page.getByLabel('Název kvízu *', { exact: true })).toHaveValue('Authoritative quiz');
+    await expect(page.locator('.save-state')).toHaveText('Uloženo');
+    await select(page, 0);
+    await expect(prompt(page)).toBeEnabled();
+    await expect(prompt(page)).toHaveValue('Authoritative question');
+    await prompt(page).fill('New work after reload');
+    await save(page); await expect(page.locator('.save-state')).toHaveText('Uloženo');
+    expect((await f.root.collection('slides').doc('a').get()).data().text).toBe('New work after reload');
+    expect((await f.root.get()).data().revision).toBe(2);
+  } finally { releaseReload(); await f.identity.dispose(); }
+});
+
 test('quiz metadata and round title survive selection, and invalid inactive content prevents all writes', async ({ page }) => {
   const f = await fixture(page);
   try {
