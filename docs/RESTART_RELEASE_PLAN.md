@@ -1,6 +1,6 @@
 # Restart: lokální akceptace a schvalované vydání V2 staging
 
-Tento plán nepovoluje cloudový přístup ani nasazení. Práce nyní probíhá lokálně na `codex/restart-integration`; přesné kandidátní SHA, výsledky a případné CI odkazy doplní koordinátor až podle skutečných záznamů. Lokální vývoj a testy používají pouze emulátory a `demo-*` projekt. V1 a produkční Firebase zůstávají mimo rozsah.
+Tento plán nepovoluje cloudový přístup ani nasazení. Lokálně integrovaný kandidát na `codex/restart-integration` je `8b6245608850c9cad959fb14ab6a754f485e1dad`; pozdější dokumentační commit pouze zapisuje výsledky. Přesná lokální evidence a omezení jsou v [RESTART_VALIDATION.md](RESTART_VALIDATION.md). Lokální vývoj a testy používají pouze emulátory a `demo-*` projekt. V1 a produkční Firebase zůstávají mimo rozsah.
 
 ## Sjednocený rozsah
 
@@ -61,4 +61,4 @@ Nikdy nevracet claim-only backend nad aktivní restricted memberships ani pre-di
 
 [STAGING.md](STAGING.md) popisuje bootstrap ze září, staré claim roles a tehdy chybějící application Storage. Complete-editor/access/event runbooky zachycují další odlišné cloud inventáře, handoff stavy a prerequisites. Jsou podklady a historické receipts, nikoli dnešní cloud validace ani oprávnění pro nové akce.
 
-Tento plán vznikl čtením lokálních zdrojů a manifestů; žádná nová cloud kontrola ani deploy zde neproběhly. Nově potvrzený stav musí mít vlastní čas, schválení, SHA a evidence. Do jejich doplnění jsou aktuální cloud stav, finální runtime/CI výsledky a online akceptace **nepotvrzené**.
+Tento plán vznikl čtením lokálních zdrojů a manifestů; žádná nová cloud kontrola ani deploy zde neproběhly. Lokální výsledky mají samostatnou [evidenci](RESTART_VALIDATION.md). Nově potvrzený cloudový stav musí mít vlastní čas, schválení, SHA a evidence. Aktuální cloud stav, vzdálené CI a online akceptace zůstávají **nepotvrzené**.
