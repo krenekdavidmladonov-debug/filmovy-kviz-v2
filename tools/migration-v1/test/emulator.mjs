@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { assertSafeEmulatorEnvironment, writeToFirestoreEmulator } from '../lib/write.js';
@@ -26,11 +28,17 @@ function artifact(id, count = 3) {
 }
 try {
   await check('original emulator write and independent verifier', async () => {
+    const localData = fileURLToPath(new URL('../../../.local-data/', import.meta.url));
+    await mkdir(localData, { recursive: true });
+    // Each run owns its fixture directory; retain it for audit without touching real exports.
+    const sandbox = await mkdtemp(join(localData, 'migration-emulator-'));
+    const fixtureDirectory = join(sandbox, '.local-data', 'v1-export');
     const input = JSON.parse(await readFile(new URL('./fixtures/library.json', import.meta.url), 'utf8'));
-    await mkdir('.local-data/v1-export', { recursive: true });
-    await writeFile('.local-data/v1-export/library.json', JSON.stringify(input), { flag: 'wx' });
+    await mkdir(fixtureDirectory, { recursive: true });
+    await writeFile(join(fixtureDirectory, 'library.json'), JSON.stringify(input), { flag: 'wx' });
     await writeToFirestoreEmulator(transformLibrary(normalizeV1Library(input)));
-    const result = spawnSync(process.execPath, ['tools/migration-v1/lib/verify-emulator.js'], { env: process.env, encoding: 'utf8' });
+    const verifier = fileURLToPath(new URL('../lib/verify-emulator.js', import.meta.url));
+    const result = spawnSync(process.execPath, [verifier], { cwd: sandbox, env: process.env, encoding: 'utf8' });
     assert.equal(result.status, 0, 'Independent synthetic emulator readback failed');
   });
   const store = targetStore(db);
