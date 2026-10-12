@@ -2,6 +2,8 @@
 
 The locally integrated successor is **`ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac`**, tree `63e2dda958f2faf6ade85e780c9bdd28ad4bd52a`, on `codex/restart-integration`. It fast-forwards the existing accepted base through `codex/completion-hardening`; existing worktrees, frozen `aafeaa9` artifact and draft PR #39 are preserved. Later documentation commits do not change this frozen release source.
 
+Following the owner's explicit approval, this same artifact was deployed to **V2 staging** on 2026-10-12: 70 Functions, exact Firestore Rules and Hosting version `5d6d0e6b0f400501`. The [execution record](STAGING_EXECUTION_DDB862F.md) contains independent metadata/hash verification and public static HTTP checks. The local/CI evidence below remains valid; deployment does not replace separate online user-journey acceptance. PR #39 remains draft and unmerged.
+
 ## Accepted fixes
 
 | Commit | Behavior / review |

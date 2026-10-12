@@ -2,7 +2,9 @@
 
 Stav online QA: **NÁVRH, NEPOVOLENO, NESPÚŠTĚNO**. Aplikační zdroj `ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac`, tree `63e2dda958f2faf6ade85e780c9bdd28ad4bd52a`; následné dokumentační HEAD není jiný aplikační kandidát. Jeho samostatně schválené nasazení je již [dokončené a ověřené](STAGING_EXECUTION_DDB862F.md). Následující QA přidává nové identity, granty a syntetický obsah, které nebyly součástí konkrétního souhlasu s deploymentem.
 
-Jediný cíl: `filmovy-kviz-v2-staging`, `europe-west1`, `https://filmovy-kviz-v2-staging.web.app`. Žádný V1/production, skutečné kontakty, email delivery, import či změna existující identity. Současné výsledky jsou lokální: [COMPLETION_VALIDATION.md](COMPLETION_VALIDATION.md). Nasazení a jeho čerstvý preflight mají vlastní [RESTART_RELEASE_PLAN.md](RESTART_RELEASE_PLAN.md).
+Jediný cíl: `filmovy-kviz-v2-staging`, `europe-west1`, `https://filmovy-kviz-v2-staging.web.app`. Žádný V1/production, skutečné kontakty, email delivery, import či změna existující identity. Lokální a CI výsledky jsou v [COMPLETION_VALIDATION.md](COMPLETION_VALIDATION.md), dokončené nasazení má vlastní [záznam](STAGING_EXECUTION_DDB862F.md).
+
+Souhlas s celou zde navrženou **retenční online QA** zahrnuje přesně dvě identity a uvedené granty, přihlášení oddělenými testovacími kontexty, níže vymezený vlastní syntetický obsah a UI/endpoint kontroly, pozdější viewer scope jen na zachycené vlastní IDs a jedinou popsanou legacy-agenda fixture s CAS. Lead připraví konkrétní requesty nad skutečnými IDs a nechá je nezávisle přezkoumat; toto technické dopracování samo nevyžaduje nový lidský souhlas ve stejném rozsahu. Zahrnuje ponechání zachycených QA dat/účtů ve stagingu do samostatného úklidu. Nezahrnuje event delete, cleanup/disable, existujícího ownera, unpause ani reálný email.
 
 ## Konkrétní namespace a žádost o rozsah
 
@@ -44,6 +46,8 @@ Spustit až po doloženém deployi frozen kandidáta, úspěšné read-only kont
 9. **Čtvrtá oprava — recovery:** `tools/event-night/*` je výhradně lokální demo snapshot workflow. Online analog neexistuje; staging data/export ani cloud restart nepoužívat k jeho ověření. Evidence je již frozen lokální fault-injection test v [COMPLETION_VALIDATION.md](COMPLETION_VALIDATION.md); tento online plán jej znovu nespouští.
 
 ## Přesný cleanup a audit
+
+Tento oddíl je budoucí možnost vyžadující samostatný souhlas. V doporučeném retenčním běhu se cleanup neprovádí; po skončení vlastní session se pouze zaznamenají všechny ponechané IDs a jejich stav.
 
 Po akceptaci/selhání zastavit QA contexts; skončit vlastní live session. S approved event cleanup aktérem trash → konkrétní delete plan → confirm `deleteEvent`; uchovat plan hash, expected revision, retained snapshot IDs a deletion/tombstone/audit receipts. Nesmazat sdílený snapshot jen kvůli názvu QA.
 
