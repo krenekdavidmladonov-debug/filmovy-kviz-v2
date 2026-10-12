@@ -30,7 +30,7 @@ Limited clients use bounded server views; hidden answers, answer media, notes, r
 
 Direct snapshot reads additionally require the snapshot to be the owning event's current `quizAssignment.snapshotId`. Relocking an event revokes direct get/list access to its previous snapshot; a retained `snapshot.eventId` does not preserve access. Historical final results use their separate confirmed-results records rather than this private source exception.
 
-Invitation and membership changes serialize on accessControl/state, validate permission dependencies and delegation bounds, prohibit self changes and protect the last owner. Only owners manage managers. Audit entries contain safe before/after grants, never passwords, tokens or quiz answers. New Auth identities without membership have no private access. Browser caches and drafts are cleared on identity or membership-version transitions.
+Invitation and membership changes serialize on accessControl/state, validate permission dependencies and delegation bounds, prohibit self changes and protect the last owner. Accepting an invitation also rechecks the issuer's current Auth identity on each transaction attempt: a missing, disabled or unverified issuer cannot activate a membership. Auth and Firestore are separate services; this check does not make their state changes atomic. Only owners manage managers. Audit entries contain safe before/after grants, never passwords, tokens or quiz answers. New Auth identities without membership have no private access. Browser caches and drafts are cleared on identity or membership-version transitions.
 
 ## Public registration
 

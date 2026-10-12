@@ -128,9 +128,12 @@ export const acceptAccessInvitation = onCall(options, async request => {
       || typeof invitation.tokenHash !== 'string' || invitation.tokenHash.length !== digest.length
       || !timingSafeEqual(Buffer.from(invitation.tokenHash), Buffer.from(digest))) throw deny();
     if (current.exists) throw new HttpsError('failed-precondition', 'Účet už má členství. Správce musí upravit stávající přístup.');
-    const issuer = (await tx.get(db().doc(`memberships/${id(invitation.createdBy)}`))).data() as Membership | undefined;
+    const issuerUid = id(invitation.createdBy);
+    const issuer = (await tx.get(db().doc(`memberships/${issuerUid}`))).data() as Membership | undefined;
     const grant = parseAccessGrant(invitation.grant);
     if (!issuer) throw deny(); await delegate(tx, issuer, grant);
+    const issuerIdentity = await getAuth().getUser(issuerUid).catch(() => null);
+    if (!issuerIdentity || issuerIdentity.disabled || !issuerIdentity.emailVerified) throw deny();
     const commit = await serializeChanges(tx, true);
     const member: Membership = { ...grant, uid: user.uid, email: user.email!, displayName: user.displayName ?? '', status: 'active', version: 1, sessionValidAfter: 0 };
     tx.create(memberRef, { ...member, createdAt: Timestamp.now(), createdBy: issuer.uid });

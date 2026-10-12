@@ -241,6 +241,24 @@ try {
     await db.doc(`accessInvites/${invite.inviteId}`).update({ expiresAt: Date.now() - 1 });
     await denied(() => wrong.call('acceptAccessInvitation', { inviteId: invite.inviteId, token: next.token }));
   });
+  for (const state of ['disabled', 'deleted', 'unverified']) {
+    await test(`invitation acceptance rejects a ${state} issuer Auth identity despite active membership`, async () => {
+      const issuer = await account(`invite-issuer-${state}`, { role: 'manager', permissions, quizzes: selected([quizA]), events: selected([eventA]) });
+      const recipient = await account(`invite-recipient-${state}`, null);
+      documents.push(`memberships/${recipient.uid}`);
+      const invite = await issuer.call('createAccessInvitation', { email: recipient.email, grant });
+      const inviteRef = db.doc(`accessInvites/${invite.inviteId}`), issuerRef = db.doc(`memberships/${issuer.uid}`);
+      documents.push(inviteRef.path);
+      const invitationBefore = (await inviteRef.get()).data(), issuerBefore = (await issuerRef.get()).data();
+      if (state === 'deleted') await auth.deleteUser(issuer.uid);
+      else await auth.updateUser(issuer.uid, state === 'disabled' ? { disabled: true } : { emailVerified: false });
+      await denied(() => recipient.call('acceptAccessInvitation', { inviteId: invite.inviteId, token: invite.token }));
+      assert.equal((await db.doc(`memberships/${recipient.uid}`).get()).exists, false);
+      assert.deepEqual((await inviteRef.get()).data(), invitationBefore);
+      assert.deepEqual((await issuerRef.get()).data(), issuerBefore);
+      assert.equal(issuerBefore.status, 'active');
+    });
+  }
   await test('invitation activation gate and current issuer revocation are enforced transactionally', async () => {
     const recipient = await account('paused-invite', null);
     const invite = await manager.call('createAccessInvitation', { email: recipient.email, grant }); documents.push(`accessInvites/${invite.inviteId}`);
