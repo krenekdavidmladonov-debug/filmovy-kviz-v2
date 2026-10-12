@@ -32,9 +32,14 @@ service cloud.firestore {
     function fullEventRead(eventId) {
       return permitted('event.read') && permitted('event.contacts') && permitted('event.answers.read') && permitted('event.notes.read') && eventScope(eventId) && eventVisible(eventId);
     }
+    function assignedSnapshot(eventId, snapshotId) {
+      let event = get(/databases/$(database)/documents/events/$(eventId)).data;
+      return 'quizAssignment' in event && event.quizAssignment is map
+        && 'snapshotId' in event.quizAssignment && event.quizAssignment.snapshotId == snapshotId;
+    }
     function fullSnapshotRead(snapshotId) {
       let snapshot = get(/databases/$(database)/documents/quizSnapshots/$(snapshotId)).data;
-      return 'eventId' in snapshot && fullEventRead(snapshot.eventId);
+      return 'eventId' in snapshot && fullEventRead(snapshot.eventId) && assignedSnapshot(snapshot.eventId, snapshotId);
     }
     match /memberships/{uid} { allow get: if request.auth != null && request.auth.uid == uid; allow list, write: if false; }
     match /quizzes/{quizId}/{document=**} {

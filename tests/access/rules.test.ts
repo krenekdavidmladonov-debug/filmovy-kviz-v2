@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, Timestamp, query, where, documentId } from 'firebase/firestore';
 import { ref, uploadBytes, getBytes } from 'firebase/storage';
-import { beforeAll, afterAll, beforeEach, test } from 'vitest';
+import { beforeAll, afterAll, beforeEach, expect, test } from 'vitest';
 import { permissions, rolePresets, type Membership } from '../../packages/quiz-domain/src/access.js';
 
 let env: RulesTestEnvironment;
@@ -94,6 +94,8 @@ test('legacy snapshots require mediated reads; owned snapshots respect trash and
   for (const path of ['events/event-a', 'events/event-a/registrations/team']) await assertSucceeds(getDoc(doc(ownerDb, path)));
   await assertFails(getDoc(doc(ownerDb, 'quizSnapshots/snapshot/slides/question')));
   await env.withSecurityRulesDisabled(context => updateDoc(doc(context.firestore(), 'quizSnapshots/snapshot'), { eventId: 'event-a' }));
+  await assertFails(getDoc(doc(ownerDb, 'quizSnapshots/snapshot/slides/question')));
+  await env.withSecurityRulesDisabled(context => updateDoc(doc(context.firestore(), 'events/event-a'), { quizAssignment: { snapshotId: 'snapshot' } }));
   await assertSucceeds(getDoc(doc(ownerDb, 'quizSnapshots/snapshot/slides/question')));
   await env.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'memberships/moderator'), member('moderator', { role: 'moderator', permissions: [...rolePresets.moderator], quizzes: { mode: 'none', ids: [] } })));
   const moderatorDb = client('moderator').firestore();
@@ -101,6 +103,44 @@ test('legacy snapshots require mediated reads; owned snapshots respect trash and
   for (const path of ['quizzes/a', 'quizSnapshots/snapshot/slides/question', 'events/event-a/registrations/team']) await assertFails(getDoc(doc(moderatorDb, path)));
   await env.withSecurityRulesDisabled(context => updateDoc(doc(context.firestore(), 'events/event-a'), { disposition: 'trash' }));
   for (const path of ['events/event-a','events/event-a/registrations/team','events/event-a/scores/pair','sessions/session-a','quizSnapshots/snapshot/slides/question']) await assertFails(getDoc(doc(ownerDb, path)));
+});
+test('relocking revokes direct historical snapshot get and list without granting source or other event access', async () => {
+  await env.withSecurityRulesDisabled(async context => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'memberships/event-reader'), member('event-reader', {
+      role: 'viewer', permissions: ['event.read', 'event.contacts', 'event.answers.read', 'event.notes.read'],
+      quizzes: { mode: 'none', ids: [] },
+    }));
+    for (const [snapshotId, eventId] of [['s1', 'event-a'], ['s2', 'event-a'], ['other', 'event-b']]) {
+      await setDoc(doc(db, `quizSnapshots/${snapshotId}`), { eventId, quizId: 'a' });
+      await setDoc(doc(db, `quizSnapshots/${snapshotId}/slides/question`), {
+        correctAnswer: `PRIVATE-${snapshotId}`, moderatorNote: 'NOTE', legacy: { raw: 'RAW' },
+      });
+      await setDoc(doc(db, `quizSnapshots/${snapshotId}/rounds/round`), { title: 'Round' });
+    }
+    await updateDoc(doc(db, 'events/event-a'), { quizAssignment: { snapshotId: 's1' } });
+    await updateDoc(doc(db, 'events/event-b'), { quizAssignment: { snapshotId: 'other' } });
+  });
+  const db = client('event-reader').firestore();
+  await assertFails(getDoc(doc(db, 'quizzes/a/slides/question')));
+  const original = await assertSucceeds(getDoc(doc(db, 'quizSnapshots/s1/slides/question')));
+  expect(original.get('correctAnswer')).toBe('PRIVATE-s1');
+  await assertSucceeds(getDocs(collection(db, 'quizSnapshots/s1/slides')));
+  await env.withSecurityRulesDisabled(context => updateDoc(doc(context.firestore(), 'events/event-a'), { quizAssignment: { snapshotId: 's2' } }));
+  for (const suffix of ['', '/slides/question', '/rounds/round']) await assertSucceeds(getDoc(doc(db, `quizSnapshots/s2${suffix}`)));
+  const current = await assertSucceeds(getDocs(collection(db, 'quizSnapshots/s2/slides')));
+  expect(current.docs[0]?.get('correctAnswer')).toBe('PRIVATE-s2');
+  await assertSucceeds(getDocs(collection(db, 'quizSnapshots/s2/rounds')));
+  for (const snapshotId of ['s1', 'other']) {
+    for (const suffix of ['', '/slides/question', '/rounds/round']) await assertFails(getDoc(doc(db, `quizSnapshots/${snapshotId}${suffix}`)));
+    for (const child of ['slides', 'rounds']) await assertFails(getDocs(collection(db, `quizSnapshots/${snapshotId}/${child}`)));
+  }
+  for (const assignment of [{}, { quizAssignment: null }, { quizAssignment: {} }]) {
+    await env.withSecurityRulesDisabled(context => setDoc(doc(context.firestore(), 'events/event-a'), { createdBy: 'owner', ...assignment }));
+    await assertFails(getDoc(doc(db, 'quizSnapshots/s2')));
+    await assertFails(getDoc(doc(db, 'quizSnapshots/s2/slides/question')));
+    await assertFails(getDocs(collection(db, 'quizSnapshots/s2/slides')));
+  }
 });
 test('anonymous projector and public events remain available with private writes denied', async () => {
   const db = env.unauthenticatedContext().firestore();

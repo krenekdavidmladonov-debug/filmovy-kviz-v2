@@ -28,6 +28,8 @@ Every legacy staff callable uses the explicit fail-closed policy wrapper. Permis
 
 Limited clients use bounded server views; hidden answers, answer media, notes, raw legacy records and contacts are removed before transport. Saving redacted content preserves the authoritative protected fields. Raw Firestore reads require every sensitive permission contained in that document and its resource scope. Public projections remain explicit allowlists. Full inventories, invite activation gate, owner bootstrap and rollback are documented in PERSONAL_ACCESS.md.
 
+Direct snapshot reads additionally require the snapshot to be the owning event's current `quizAssignment.snapshotId`. Relocking an event revokes direct get/list access to its previous snapshot; a retained `snapshot.eventId` does not preserve access. Historical final results use their separate confirmed-results records rather than this private source exception.
+
 Invitation and membership changes serialize on accessControl/state, validate permission dependencies and delegation bounds, prohibit self changes and protect the last owner. Only owners manage managers. Audit entries contain safe before/after grants, never passwords, tokens or quiz answers. New Auth identities without membership have no private access. Browser caches and drafts are cleared on identity or membership-version transitions.
 
 ## Public registration
