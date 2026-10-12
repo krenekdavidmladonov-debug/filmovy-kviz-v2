@@ -50,6 +50,8 @@ test('explicit scoring, reload, reason, two views, history, lost response and na
   await page.getByRole('button', { name: 'Zkontrolovat a připravit', exact: true }).click();
   await expect(page.getByText('Kvíz byl zkontrolován a připraven.')).toBeVisible();
   await page.getByRole('link', { name: 'Otevřít bodování' }).click();
+  await expect(page).toHaveURL(/\/admin\/events\/[^/]+\/scoring$/u);
+  await expect(page.getByRole('heading', { name: 'Bodování', exact: true })).toBeVisible();
   const url = page.url();
   const row = page.getByRole('region', { name: 'Bodovací tým', exact: true });
   const points = page.getByLabel('Body — Bodovací tým', { exact: true });
@@ -68,7 +70,10 @@ test('explicit scoring, reload, reason, two views, history, lost response and na
   await row.getByRole('button', { name: 'Uložit', exact: true }).click();
   await expect(row).toContainText('revize 2');
   const second = await context.newPage(); await second.goto(url);
+  await expect(second).toHaveURL(url);
+  await expect(second.getByRole('heading', { name: 'Bodování', exact: true })).toBeVisible();
   const secondRow = second.getByRole('region', { name: 'Bodovací tým', exact: true });
+  await expect(secondRow).toContainText('revize 2');
   await second.getByLabel('Body — Bodovací tým', { exact: true }).fill('5');
   await points.fill('4');
   await page.getByLabel('Důvod opravy — Bodovací tým').fill('Druhý přepočet');
