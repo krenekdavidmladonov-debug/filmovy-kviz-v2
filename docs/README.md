@@ -9,7 +9,8 @@ This directory is the source of truth for Filmovy Kviz V2 product, architecture,
 - [STAGING.md](STAGING.md) — isolated HTTPS V2 staging, guarded deployment and synthetic-only bootstrap.
 
 - [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md) — canonical branch roles, test levels, reasoning policy, and worktree convention.
-- [ROADMAP_V03.md](ROADMAP_V03.md) — implemented baseline, ordered next work, and explicitly deferred scope.
+- [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) — dated return-to-development assessment (2026-10-12), main baseline, and newer candidate work outside main.
+- [ROADMAP_V03.md](ROADMAP_V03.md) — historical 2026-09-03 planning baseline and ordered next work; not a current implementation inventory.
 
 ### Core, security, and V1 migration
 
@@ -35,6 +36,7 @@ Managed exports and extracted documents are local-only under Git-ignored `.local
 - [LIVE_SESSION.md](LIVE_SESSION.md) — trusted live-session lifecycle.
 - [PROJECTOR_ARCHITECTURE.md](PROJECTOR_ARCHITECTURE.md) — projector renderer, recap, and public-state authority.
 - [MEDIA_ARCHITECTURE.md](MEDIA_ARCHITECTURE.md) — audio/video commands and player lifecycle.
+- [MEDIA_STORAGE.md](MEDIA_STORAGE.md) — implemented quiz-owned image/audio uploads, immutable asset references, protected reads, and deployment prerequisites.
 
 ### Preflight and guided repair
 
@@ -51,14 +53,25 @@ Managed exports and extracted documents are local-only under Git-ignored `.local
 - [EVENT_TEAM_TOOLS.md](EVENT_TEAM_TOOLS.md) — admin-only manual teams, canonical PDF roster and public registration link/QR.
 - [REGISTRATION_SECURITY.md](REGISTRATION_SECURITY.md) — transaction, token, privacy, and Rules invariants.
 
-Scoring remains deliberately absent.
+### Scoring, referee access, and results
+
+- [EVENT_SCORING.md](EVENT_SCORING.md) — internal round scoring, stable registration/team binding, half-points, revisions, and score history.
+- [REFEREE_ACCESS.md](REFEREE_ACCESS.md) — event-scoped referee capabilities, minimal read models, revocation, and scoring authorization.
+- [INTERIM_RESULTS.md](INTERIM_RESULTS.md) — moderator-reviewed interim ranking and explicit sanitized projector publication.
+- [FINAL_REVEAL.md](FINAL_REVEAL.md) — confirmed final ranking, staged placement reveal, and manual session end.
+
+### Email
+
+- [TRANSACTIONAL_EMAIL.md](TRANSACTIONAL_EMAIL.md) — durable registration email intents, templates, replay handling, and organizer status.
+- [GMAIL_DELIVERY.md](GMAIL_DELIVERY.md) — implemented delivery worker, fake local transport, and prerequisites for real cloud delivery.
+- [EVENT_TEAM_EMAIL.md](EVENT_TEAM_EMAIL.md) — admin-confirmed organizational messages, recipient snapshots, and delivery history.
 
 ### PDF Print Center
 
 - [PRINT_CENTER.md](PRINT_CENTER.md) — immutable-snapshot print flow, deterministic engine, layouts, and limits.
 - [PDF_SECURITY.md](PDF_SECURITY.md) — authorization matrix, request allowlist, privacy, logging, and abuse controls.
 
-Persisted registration/team binding and automatic scoring remain deliberately absent.
+Print rosters use the accepted registrations and manual teams documented in [REGISTRATIONS.md](REGISTRATIONS.md) and [EVENT_TEAM_TOOLS.md](EVENT_TEAM_TOOLS.md). Internal scoring uses those same stable team IDs; publication follows the separate results contracts above.
 
 ### Local QA and event-night tooling
 
@@ -69,14 +82,7 @@ Persisted registration/team binding and automatic scoring remain deliberately ab
 
 ## RESEARCH — NOT IMPLEMENTED
 
-The following areas are discovery work only and must not be treated as shipped behavior or an authorization contract:
-
-- registration, capacity enforcement for teams/people, and transactional signup;
-- scoring, referee workflow, half-points, dense ranking, leaderboard, and announcement;
-- persisted event-team binding and automatic population of print documents from registrations;
-- emailing;
-- offline operation;
-- Storage and media ownership/lifecycle.
+The discovery documents below remain research rather than shipped behavior or authorization contracts. Registration, team binding, scoring, referee access, results, email, and owned media now have implemented contracts linked above. Remaining research includes offline operation and media retention/cleanup; implemented email and media code still has explicit cloud setup prerequisites.
 
 Supporting product and UX discovery documents:
 

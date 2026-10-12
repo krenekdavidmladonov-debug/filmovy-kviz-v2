@@ -83,7 +83,7 @@ pnpm lint
 pnpm build
 pnpm test:rules
 pnpm test:unit
-# or all checks:
+# Typecheck, lint, and build together (tests run separately):
 pnpm check
 ```
 
