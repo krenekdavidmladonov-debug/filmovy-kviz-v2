@@ -2,6 +2,21 @@
 
 This is the dated coordination record for resuming Filmový Kvíz V2 / JustKvíz. It supplements the development workflow; it is not release approval or evidence of the current cloud environment. Historical roadmaps and audits must be checked against an exact commit before assigning implementation work.
 
+## Current continuation — completion hardening, 2026-10-12
+
+The owner requested continued autonomous development toward the existing project's completion. Work resumes on `codex/completion-hardening` from clean `2076c290867896b89e197b52faf75769d33605f8`. Remote main remains `0d452d8`; frozen PR #39 remains draft at `aafeaa9` with its own successful CI. New changes require fresh evidence; the previous artifact is preserved. The [completion matrix](COMPLETION_MATRIX.md) separates implemented capabilities, current gaps and external acceptance.
+
+| Assignment / owner | Owned scope | Acceptance / current state |
+| --- | --- | --- |
+| Registration revision / GPT-6.1 Sol HIGH; MEDIUM + lead review | Registration callable and team-tools regression | `5be1f7e`: public edits invalidate stale staff reissue; no-op/replay unchanged; token rotation/race and complete boundary/team-tools suites PASS. |
+| Private rehearsal and manual agenda / GPT-6.1 Sol MEDIUM; lead review | Three editor components, private domain mapper/type and targeted tests | `9493aca`: keyboard focus/close/return and fullscreen browser PASS; manual options survive actual private DTO, round save and rehearsal. |
+| Completion/recovery audit / GPT-6.1 Sol LOW | Completion matrix only; read-only review | Found interrupted snapshot promotion gap; current evidence reconciled. |
+| Event-night recovery / GPT-6.1 Sol HIGH; MEDIUM + LOW + lead review | Event-night promotion/start/prepare and synthetic fault test | `8efcb05`: recover recorded validated previous checkpoint after interrupted promotion, preserve backups, fail closed on invalid state. Real filesystem harness 130 assertions PASS on Windows PowerShell 5 and pwsh 7. |
+
+The lead serializes emulator runs, integrates and independently reviews worker changes; workers have no remote-write or cloud authority. The existing heartbeat `samostatn-dokon-en-justkv-z` was updated and confirmed **ACTIVE**, every 30 minutes, using this current queue rather than redoing the earlier `8106c4a` integration. It pauses after all demonstrated locally actionable gaps are closed and a concrete next candidate/approval boundary is recorded, or on an owner stop request. Historical completion/paused statements below refer to the previous phase.
+
+All four demonstrated gaps are locally fixed and reviewed. Final working-tree checks passed on the code now committed through `8efcb05`: check; 448 unit tests / 48 files; 50 Rules; 19 offline guards; registration boundaries and team tools; the extended minimal editor browser journey. Demo-only logs are under `.local-data/completion-hardening/`. First registration runner lacked the pre-existing synthetic quiz fixture; rerunning with both auth and quiz seed passed. The first keyboard browser regression exposed native-dialog Tab escape, resolved with explicit boundary wrapping; the unchanged strict assertions then passed. Desktop/fullscreen and 390 px screenshots were visually reviewed. No actual event data was used. Next: freeze the integrated successor, verify its source/packaging and record the exact remaining publication/deployment/QA scope. The old `aafeaa9` artifact/CI is not evidence for new code.
+
 ## Verified Git baseline
 
 `git fetch origin --no-tags` completed on 2026-10-12. The initial checkout was clean.
