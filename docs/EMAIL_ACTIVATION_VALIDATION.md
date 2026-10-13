@@ -1,6 +1,6 @@
 # Registration email activation preparation — 2026-10-13
 
-Local candidate on `codex/email-activation-preparation`, based on `ef43eb1f1bee517b70cf86b6e4ce95029c8d7aff`. The owner supplied a replacement Gmail sender/test recipient in ignored private selection. No address or credential was added to committed files. This is local implementation and preparation evidence; deployed staging remains email-disabled.
+Committed local candidate **`10db080d9d044881078d06afc2a68e4b2576b9dc`** on `codex/email-activation-preparation`, based on `ef43eb1f1bee517b70cf86b6e4ce95029c8d7aff`. The owner supplied a replacement Gmail sender/test recipient in ignored private selection. No address or credential was added to committed files. This is local implementation and preparation evidence; deployed staging remains email-disabled.
 
 ## Implemented boundary and review
 
@@ -33,5 +33,7 @@ The first check found a new test accessing SDK metadata omitted from the SDK's T
 After all checks passed, receipt finalization stopped because silent successful ESLint produced no log file. A bounded finalizer verified existing results, source hashes and closed ports and recorded the observed silent exit separately; it did not repeat successful suites. Original failures remain in the ignored evidence directories. No application or cloud failure is inferred from these test/orchestration stops.
 
 ## Remaining execution
+
+After committing, the lead verified a clean worktree and exact equality of all 15 tested source hashes, then ran the actual offline planner against that HEAD and the explicit existing owner selection. `commit-binding.json` in the verification directory binds source/tree, test receipt and generated plan; SHA-256 `ad059153a1fb8cafe1e974f14d68c0739b2df87a20d532c576f230e328737206`. The public plan is `.local-data/email-activation/plan-10db080-Ke3vgp/output/activation-plan.json`, SHA-256 `2bedb6037fca547f067957b2a2c2e307f8b399f26523957e1eb2ead2adbff50c`. Its private selection has a bound hash and contains the selected addresses only in ignored storage. LOW independently verified the commit/tree/source and public-plan bindings, checking only the private file hash without reading its contents. Cutoff remains unset until a real execution window is planned. The plan correctly retains unverified cloud/artifact/authorization prerequisites; local verification does not silently rewrite those flags into deployment approval.
 
 [EMAIL_ACTIVATION_PLAN.md](EMAIL_ACTIVATION_PLAN.md) defines the exact five functions, private queue/secret prerequisites, rollout, off/paused-queue containment and bounded smoke. The selected addresses are already supplied; the actual Google `gmail.send` OAuth consent, credential provisioning and queue/configuration verification remain missing. The offline planner does not certify cloud readiness or execution authorization. No push, remote CI, OAuth, deployment or real send occurred in this phase. Production/V1, existing retained QA and expired IAM permissions were not accessed or changed.
