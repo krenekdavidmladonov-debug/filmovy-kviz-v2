@@ -2,7 +2,19 @@
 
 This is the dated coordination record for resuming Filmový Kvíz V2 / JustKvíz. It supplements the development workflow; it is not release approval or evidence of the current cloud environment. Historical roadmaps and audits must be checked against an exact commit before assigning implementation work.
 
-## Current email activation preparation — 2026-10-13
+## Current Gmail OAuth connection — 2026-10-13
+
+Continued from clean `108f3deb9b4132f8de860b61dcb6ed2159e4f391` on `codex/gmail-oauth-connection`. HIGH owned only the one-shot OAuth helper/tests; MEDIUM independently reviewed; LOW wrote the operator guide; the lead owned approved Google Cloud UI actions, integration and verification. Existing worktrees were preserved. [Connection record](GMAIL_OAUTH_CONNECTION.md) describes the exact interface and remaining boundary.
+
+The owner explicitly approved staging OAuth app/policy setup, Gmail API, one Web client, one loopback redirect and send-only access with Windows-encrypted storage. After the owner manually completed the policy step, the app and client were created; Gmail API is Enabled, External/Testing has one chosen test user and only `gmail.send` is saved. The exact new download was encrypted under DPAPI CurrentUser, protected by owner-only ACL and read back. Its plaintext task-created download was removed only after verifying the protected copy decodes to identical bytes. Actual local `--prepare` PASS; no credential/address values were committed.
+
+HIGH's 21 synthetic tests PASS (console evidence), independent MEDIUM/lead source review PASS, lead `pnpm check` and 50 isolated demo Rules tests PASS (retained logs). The callback race found during review was fixed and covered by an actual delayed localhost handoff test; duplicate requests cannot cancel/replay the in-flight exchange. The frozen runtime candidate remains `10db080`; this phase adds operator tooling only and performs no application deployment or send.
+
+**Current blocker:** the owner completed account consent, but Chrome reports `ERR_BLOCKED_BY_CLIENT` on the approved local callback, including after the owner's manual reload. No callback exchange/result or local refresh grant was obtained. The lead stopped exactly its own listener and did not bypass the block or extract/replay the code. The next step is normal browser access to that approved callback, then a fresh single consent attempt with the retained encrypted client. The old callback is stale. The existing heartbeat remains confirmed PAUSED; no automatic repeated attempts. After a real grant, continue the existing activation plan with fresh bounded inventory and exact provisioning/deployment/send scope. This is not full-project completion.
+
+Locally integrated helper commit: **`585fcbd80e2f7c881c10feac268a18693feff5f7`**. All five recorded source files match the committed tree. LOW independently verified source/log/prepare/screenshot hashes and truthful limitations; [connection evidence](GMAIL_OAUTH_CONNECTION.md) records the exact receipt and commit-binding digests. No push or remote CI was performed.
+
+## Previous email activation preparation — 2026-10-13
 
 The owner supplied a replacement Gmail address and explicitly resumed work. Its sender/test-recipient selection remains in the ignored `.local-data/email-activation/owner-selection.json`. Work starts from clean `ef43eb1f1bee517b70cf86b6e4ce95029c8d7aff` on dedicated branch `codex/email-activation-preparation`. The prior completion/paused statements below describe the previous phase.
 

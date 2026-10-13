@@ -1,0 +1,38 @@
+# Gmail OAuth connection — local operator helper
+
+Integrated helper commit: **`585fcbd80e2f7c881c10feac268a18693feff5f7`**. Evidence receipt `.local-data/email-activation/oauth-verification-20261013/verification.json` SHA-256 `cab6a8c626b758e0e1832c327ed7fe590b35ef5697d37c6bb5b63f0ee154e356`; `commit-binding.json` SHA-256 `2b8658742942ead70a1690e3f6711ef885a2e88b9a2a292ce45ea12f3353879d`. All five recorded source files match this commit after Git line-ending normalization. LOW independently rehashed the five sources, two logs, two prepare receipts and five screenshots without opening credential inputs or screenshot contents.
+
+Source baseline: `108f3deb9b4132f8de860b61dcb6ed2159e4f391`, branch `codex/gmail-oauth-connection`. [oauth-connect.mjs](../tools/email/oauth-connect.mjs) prepares or performs one operator consent exchange; it does not send mail, read an inbox, provision secrets or deploy. Continue under the concrete scope in [EMAIL_ACTIVATION_PLAN.md](EMAIL_ACTIVATION_PLAN.md).
+
+## Current handoff — 2026-10-13
+
+After explicit owner policy approval and manual handoff, the OAuth app **JustKvíz staging** was created, Gmail API enabled, and the Web client **JustKvíz staging – Gmail** created with the sole redirect `http://127.0.0.1:53682/oauth/callback`. External/Testing has one selected test user and only `gmail.send`; the console confirmed the saved scope. The client JSON was captured from the exact user-supplied download, validated, stored under Windows DPAPI CurrentUser with owner-only ACL and successfully read back. After byte-for-byte digest verification of the decrypted copy, the task-created plaintext download was removed. No credentials are committed.
+
+The actual `--prepare` passed. The owner completed Google's account consent, but Chrome blocked the loopback callback with `ERR_BLOCKED_BY_CLIENT`; the owner confirmed that a manual reload remained blocked. The lead did not bypass the browser, extract/replay the code, broaden scopes or retry consent. The exact owned listener was stopped. There is **no local refresh-token grant/result**, no sender-identity proof, no secret provisioning, deployment or real send. The stale callback URL must not be reused. Resume with a new bounded attempt only after the browser permits the approved callback through its normal supported configuration; preserve the encrypted client and existing evidence.
+
+The author reports 21/21 synthetic helper tests PASS, including actual Windows DPAPI/ACL and localhost callback regressions; these results are retained in the agent's console output, not an independent log file. MEDIUM and lead reviewed the frozen source. Lead `pnpm check` and all 50 Rules tests passed, with logs in `.local-data/email-activation/oauth-verification-20261013`. Rules used only isolated `demo-filmovy-kviz-v2` Firestore with empty CLI configuration. Synthetic exchange/storage tests are not real OAuth or sender-identity proof.
+
+## Exact interface
+
+Run with pinned Node 22 on Windows. Both modes require explicit existing ignored inputs and a **new** ignored output directory whose parent already exists; links/path escapes and existing outputs fail closed. Replace the placeholder basenames below with the operator's actual protected inputs; no addresses, client IDs or secret values belong in commands/reports committed to Git.
+
+```powershell
+.tools/node22/node.exe tools/email/oauth-connect.mjs --prepare --client .local-data/oauth-client.current-user.dpapi --owner-selection .local-data/oauth-owner-selection.json --out .local-data/oauth-prepare-new
+.tools/node22/node.exe tools/email/oauth-connect.mjs --connect --client .local-data/oauth-client.current-user.dpapi --owner-selection .local-data/oauth-owner-selection.json --out .local-data/oauth-connect-new
+```
+
+`--client` is Windows DPAPI CurrentUser-protected bytes containing the exact staging Web-client JSON, not plaintext JSON. `--owner-selection` is the already supplied private selection accepted by the activation planner. Do not rediscover/copy accounts or print either input. `--prepare` decrypts/validates inputs in memory and writes only `prepare.json`; it does not start consent or make a token request. Use a different new output for `--connect`.
+
+Output creation removes inherited broad ACL access and verifies owner-only protection. Successful connection stores `grant.current-user.dpapi` protected for the current Windows user, plus safe receipts with input/helper/ciphertext hashes. The plaintext buffer used for encryption is cleared; this is not a promise that JavaScript strings or all process memory are erasable. Preserve the encrypted input/grant and receipts without exposing their contents.
+
+## One-shot consent contract
+
+`--connect` listens only on `127.0.0.1:53682` and writes the private `authorization-url.txt` after the listener is ready. The operator opens that URL and explicitly selects the intended sender account. The authorization request uses only `gmail.send`, offline access, consent/account selection, random state and PKCE S256. `login_hint` is a convenience, not account identity verification.
+
+The callback enforces exact host/path, allowed nonduplicate fields, timing-safe state equality and exact optional scope. Consent is consumed once; there is no automatic exchange retry. The maximum wait is 10 minutes; the exchange/body parsing timeout is 15 seconds. Returned tokens require exact `gmail.send` scope and a refresh token; wider/missing scope or malformed output stops. Errors use generic stage diagnostics rather than provider/token payloads.
+
+Success is `OAUTH_REFRESH_TOKEN_STORED` with `senderIdentityVerified:false`, sends 0 and deployments 0. It proves protected local storage of a returned grant, not that the selected account matches the sender, that secrets are deployed, or that a message was delivered. A stopped attempt does not authorize automatic retries or broader scopes.
+
+External OAuth apps in Testing have seven-day refresh-token expiry for Gmail scope; consent status and renewed authorization must be planned before relying on ongoing delivery. See [Google OAuth web-server flow](https://developers.google.com/identity/protocols/oauth2/web-server) and [OAuth overview](https://developers.google.com/identity/protocols/oauth2). This helper performs no consent-policy change.
+
+Further steps require the existing reviewed activation plan: establish the authorized sender/grant binding, protected provisioning, exact candidate/runtime/queue evidence and explicit deployment/bounded-send authorization. No inbox/profile query, SMTP fallback, backfill, team email, production/V1 access or real send is added by this helper.
