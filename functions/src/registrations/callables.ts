@@ -222,8 +222,12 @@ export const createEventRegistration = onCall(callableOptions, async (request) =
       if (vault) {
         const savedIntentRef = eventRef.collection('emailIntents').doc(receipt.intentId as string);
         const protectedLink = await transaction.get(eventRef.collection('emailSecrets').doc(savedIntentRef.id));
-        const savedEnvelope = record(protectedLink.data()).envelope as TokenEnvelope;
-        recovered = vault.open(savedEnvelope, savedIntentRef.path);
+        // Pre-activation receipts have no envelope. Their verified requestKey still
+        // derives the original token; an existing malformed envelope must fail closed.
+        if (protectedLink.exists) {
+          const savedEnvelope = record(protectedLink.data()).envelope as TokenEnvelope;
+          recovered = vault.open(savedEnvelope, savedIntentRef.path);
+        }
       }
       verifyToken(record(saved.data()).managementTokenHash, recovered);
       return safeResponse(saved.id, record(saved.data()), recovered);
