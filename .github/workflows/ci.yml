@@ -194,6 +194,7 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
+          package-manager-cache: false
 
       # Built-in Node modules only; no credentials, cloud services or dependency install.
       # Exercise actual Windows ACL/DPAPI and child environment isolation.
