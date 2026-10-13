@@ -62,9 +62,17 @@ export function freshOutput(repository, candidate) {
   return absolute;
 }
 
-export function compilerEnvironment(environment, temporaryDirectory) {
+export function compilerEnvironment(environment, temporaryDirectory, platform = process.platform) {
   const safe = Object.fromEntries(Object.entries(environment).filter(([key]) => /^(?:SystemRoot|WINDIR)$/iu.test(key)));
-  return { ...safe, TEMP: temporaryDirectory, TMP: temporaryDirectory, HOME: temporaryDirectory, USERPROFILE: temporaryDirectory };
+  const result = { ...safe, TEMP: temporaryDirectory, TMP: temporaryDirectory, HOME: temporaryDirectory, USERPROFILE: temporaryDirectory };
+  if (platform === 'win32') {
+    // libuv fills missing Windows bootstrap keys from the parent: set every known key.
+    const temporary = path.win32.normalize(temporaryDirectory);
+    assert.match(temporary, /^[A-Za-z]:\\/u, 'Absolute drive-qualified Windows temporary directory required');
+    Object.assign(result, { PATH: temporaryDirectory, HOMEDRIVE: temporary.slice(0, 2), HOMEPATH: temporary.slice(2), SYSTEMDRIVE: temporary.slice(0, 2),
+      USERNAME: 'LOCAL_SYNTHETIC', USERDOMAIN: 'LOCAL_SYNTHETIC', LOGONSERVER: '\\\\LOCAL_SYNTHETIC' });
+  }
+  return result;
 }
 
 export function emailEntry(source) {

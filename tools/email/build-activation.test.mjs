@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -55,9 +56,33 @@ test('closure fails closed on escape, excluded modules, dev helpers, missing fil
   assert.throws(() => emailClosure("import './missing.js';", () => undefined, packages));
 });
 
-test('compiler receives no ambient credentials, runtime values, shell PATH or Node preload', () => {
-  const environment = compilerEnvironment({ SystemRoot: 'synthetic-os-root', WINDIR: 'synthetic-os-root', PATH: 'synthetic', GOOGLE_APPLICATION_CREDENTIALS: 'synthetic.json', NODE_OPTIONS: '--require=synthetic', FIREBASE_TOKEN: 'synthetic', REGISTRATION_EMAIL_MODE: 'staging', GMAIL_OAUTH_REFRESH_TOKEN: 'synthetic', HOME: 'synthetic-owner-home' }, '/synthetic-temp');
+test('compiler receives no ambient credentials, runtime values, parent PATH or Node preload', () => {
+  const environment = compilerEnvironment({ SystemRoot: 'synthetic-os-root', WINDIR: 'synthetic-os-root', PATH: 'synthetic', GOOGLE_APPLICATION_CREDENTIALS: 'synthetic.json', NODE_OPTIONS: '--require=synthetic', FIREBASE_TOKEN: 'synthetic', REGISTRATION_EMAIL_MODE: 'staging', GMAIL_OAUTH_REFRESH_TOKEN: 'synthetic', HOME: 'synthetic-owner-home' }, '/synthetic-temp', 'linux');
   assert.deepEqual(environment, { SystemRoot: 'synthetic-os-root', WINDIR: 'synthetic-os-root', TEMP: '/synthetic-temp', TMP: '/synthetic-temp', HOME: '/synthetic-temp', USERPROFILE: '/synthetic-temp' });
+  const windows = compilerEnvironment({ PATH: 'parent-path', USERNAME: 'parent-user', USERDOMAIN: 'parent-domain', LOGONSERVER: 'parent-server', HOMEDRIVE: 'Z:', HOMEPATH: '\\parent-home', SYSTEMDRIVE: 'Z:' }, 'C:\\synthetic\\temp', 'win32');
+  assert.deepEqual(windows, { TEMP: 'C:\\synthetic\\temp', TMP: 'C:\\synthetic\\temp', HOME: 'C:\\synthetic\\temp', USERPROFILE: 'C:\\synthetic\\temp', PATH: 'C:\\synthetic\\temp',
+    HOMEDRIVE: 'C:', HOMEPATH: '\\synthetic\\temp', SYSTEMDRIVE: 'C:', USERNAME: 'LOCAL_SYNTHETIC', USERDOMAIN: 'LOCAL_SYNTHETIC', LOGONSERVER: '\\\\LOCAL_SYNTHETIC' });
+  assert.throws(() => compilerEnvironment({}, 'relative-temp', 'win32'));
+});
+
+test('real no-import Node child has exact closed environment despite synthetic parent values', () => {
+  const temporary = path.join(fixture, 'child-environment-temp'); mkdirSync(temporary);
+  const fakeParent = { PATH: 'PARENT_SYNTHETIC_PATH', USERNAME: 'PARENT_SYNTHETIC_USER', USERDOMAIN: 'PARENT_SYNTHETIC_DOMAIN', LOGONSERVER: 'PARENT_SYNTHETIC_SERVER',
+    HOMEDRIVE: 'Z:', HOMEPATH: '\\PARENT_SYNTHETIC_HOME', SYSTEMDRIVE: 'Z:', HOME: 'PARENT_SYNTHETIC_HOME', USERPROFILE: 'PARENT_SYNTHETIC_PROFILE',
+    GOOGLE_APPLICATION_CREDENTIALS: 'PARENT_SYNTHETIC_CREDENTIAL.json', GMAIL_OAUTH_REFRESH_TOKEN: 'PARENT_SYNTHETIC_TOKEN', FIREBASE_TOKEN: 'PARENT_SYNTHETIC_TOKEN', NODE_OPTIONS: '--require=PARENT_SYNTHETIC_PRELOAD_MUST_NOT_RUN' };
+  const original = Object.fromEntries(Object.keys(fakeParent).map(key => [key, process.env[key]]));
+  try {
+    Object.assign(process.env, fakeParent);
+    const environment = compilerEnvironment(process.env, temporary);
+    // No imports, SDK, file access or network: compare in child and emit only booleans.
+    const code = `const canonical = environment => Object.fromEntries(Object.entries(environment).map(([key,value]) => [process.platform === 'win32' ? key.toUpperCase() : key,value]).sort(([a],[b]) => a.localeCompare(b))); const expected = canonical(JSON.parse(process.argv[1])); const actual = canonical(process.env); const passed = JSON.stringify(actual) === JSON.stringify(expected); process.stdout.write(JSON.stringify({passed, applicationImported:false, credentialsRead:false})); if (!passed) process.exitCode = 1;`;
+    const result = spawnSync(process.execPath, ['--eval', code, JSON.stringify(environment)], { cwd: temporary, env: environment, windowsHide: true, encoding: 'utf8', timeout: 10_000 });
+    assert.equal(result.error?.code, undefined, 'Synthetic no-import child must spawn');
+    assert.equal(result.status, 0, 'Synthetic no-import child must match the closed environment');
+    assert.deepEqual(JSON.parse(result.stdout), { passed: true, applicationImported: false, credentialsRead: false });
+  } finally {
+    for (const [key, value] of Object.entries(original)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
 });
 
 test('fresh output is ignored, immutable and scoped away from sensitive paths', () => {
