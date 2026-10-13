@@ -2,7 +2,22 @@
 
 This is the dated coordination record for resuming Filmový Kvíz V2 / JustKvíz. It supplements the development workflow; it is not release approval or evidence of the current cloud environment. Historical roadmaps and audits must be checked against an exact commit before assigning implementation work.
 
-## Current delegated OAuth and release follow-up — 2026-10-13
+## Current three-worker continuation — 2026-10-13
+
+The owner explicitly resumed work with all three workers. The lead reused the existing agents and clean `e418eab0b774027e866f4989c9929c0cb787aa9e`, created `codex/activation-execution-readiness`, and preserved all prior worktrees, retained QA and frozen deployment. No duplicate OAuth setup or successful full test suite was assigned.
+
+| Owner | Disjoint assignment | Result / acceptance |
+| --- | --- | --- |
+| GPT-6.1 Sol HIGH / `email_package` | `docs/EMAIL_ACTIVATION_EXECUTION.md` | Concrete five-target/API/queue/secret/IAM diff specification, minimum bounded metadata reads, containment and one planned-message smoke limits. MEDIUM and lead review PASS. Identifies the missing narrowly scoped execution guard and actual pinned CLI queue/IAM side effects; no runtime or cloud mutation. |
+| GPT-6.1 Sol MEDIUM / `oauth_ci` | `.github/workflows/ci.yml`, `docs/SUCCESSOR_PUBLICATION.md`; independent execution-specification review | Added exactly five previously uninvoked synthetic suites to the existing Ubuntu guard command. Node 22.23.2: 70 PASS, zero skips. YAML/structure checks PASS; prepared normal fast-forward of existing draft PR #39 and its final reviewer text. |
+| GPT-6.1 Sol LOW / `final_evidence` | `docs/V2_PILOT_RUNBOOK.md`; independent CI/evidence review | Practical first-pilot proposal with existing authorized operator, separate staging/local routes, event lifecycle and physical acceptance. Verified all 17 local links, five-suite CI wiring, 17 source and two log bindings, and actual 70 PASS / zero skipped log. |
+| Lead | Source review, status, serial integration and existing-PR reconciliation | Current GitHub read confirms OPEN/DRAFT PR #39, head `ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac`, base `main` at `0d452d8efe4cce9eb003fcce713d3b63c15bb0a4`, same repository. Publication is the next integration step; remote CI results must bind the actual new checkout. |
+
+The new local test receipt is `.local-data/successor-publication-qa-969dc373-f0b1-48da-a117-0592029cc60a/verification.json`, SHA256 `837ce3a61881081583d40e51937bc33f498245348cc8a97fbe91e602afd80704`; full 70-test log SHA256 `565e071fa4e4e572380e5196fc6e8bb2c6fa84b8a50e6b65c30ac9a1572c122f`. Initial sandbox junction EPERM failures are retained separately; normal local filesystem permissions resolved them without modifying tests. These CI/documentation changes do not change application, Rules, OAuth helper or artifact sources. Prior source-bound evidence in [EMAIL_FOLLOWUP_VALIDATION.md](EMAIL_FOLLOWUP_VALIDATION.md) remains applicable; it is not represented as a new full-SHA rerun.
+
+The remaining activation dependency is unchanged normal browser access to the approved callback, then one fresh consent attempt with the protected client. Do not replay/extract the stale code or repeat denied/disabled metadata requests without a state change. [Execution scope](EMAIL_ACTIVATION_EXECUTION.md) names the actual remaining inputs and future bounded inventory; it does not authorize cloud provisioning, deployment or send. [Publication scope](SUCCESSOR_PUBLICATION.md) separates repository CI from that activation. [Pilot runbook](V2_PILOT_RUNBOOK.md) prepares operation without claiming physical venue acceptance. The heartbeat remains paused; this is a user-requested active continuation, not an automatically resumed OAuth attempt.
+
+## Previous delegated OAuth and release follow-up — 2026-10-13
 
 Continued from clean `ccf2de0156e1d930238616a3127847dcdbe482ee` on `codex/oauth-followup-readiness` after the owner requested active, disjoint agent work. Existing worktrees and frozen deployed application remain preserved; no duplicate feature implementation was assigned.
 

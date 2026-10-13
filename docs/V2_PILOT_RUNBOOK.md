@@ -1,0 +1,37 @@
+# První pilot JustKvíz V2 — provozní návrh
+
+**DRAFT — pilot dosud není schválen.** Návrh: jedna nová V2 akce, jeden nově vytvořený kvíz, dva týmy z omezené osobně oslovené skupiny, jeden již oprávněný operátor pro přípravu i bodování. Vlastník před startem potvrdí datum, účastníky, provozního/záložního odpovědného člověka a povolené zveřejnění registrace. V1, produkce, migrace a mazání retained QA nejsou součástí pilotu. Email zůstává vypnutý do samostatně ověřené a schválené aktivace.
+
+Tento návod nepřidává nový QA běh. [Completion matrix](COMPLETION_MATRIX.md) váže dokončené online registrační, media, scoring, live/history a PDF důkazy na frozen aplikaci `ddb862f` a Storage opravu `5fe7d9b`. [Funkční akceptace](FINAL_FUNCTIONAL_ACCEPTANCE.md) odděluje další lokální pokrytí; [readiness](FINAL_LAUNCH_READINESS.md) uvádí provozní hranice. Nové místní změny nejsou automaticky nasazené na staging.
+
+## Staging: přístup a příprava nové akce
+
+1. Otevřete [V2 staging login](https://filmovy-kviz-v2-staging.web.app/admin/login). Použijte vlastní již založený účet s aktuálním aktivním členstvím, potřebnými oprávněními a scope kvízu/akce. Lokální demo login sem nepatří. Pozvaný člověk nemá účet vytvořený automaticky; samotná autentizace ani označení role přístup nezaručují. **Pozvánky zůstávají paused**; tento pilot je neaktivuje a nevyžaduje nové rozhodčí účty.
+2. V `/admin/quizzes/new` zadejte název a **Vytvořit**. V editoru `/admin/quizzes/:quizId/edit` připravte kola a otázky; začněte textem, obraz/zvuk přidejte jen s vyzkoušeným podkladem. Uložte změny a počkejte na potvrzení uložení. Drafty jsou v paměti, není autosave. **Připravenost** / **Zkontrolovat připravenost** musí mít odstraněné blockery; upozornění operátor vědomě posoudí. [Editor](ROUND_FIRST_EDITOR_USER_GUIDE.md), [working copy](EDITOR_WORKING_COPY.md).
+3. Otevřete `/admin/events/new`, vyplňte název, datum, místo a kapacity pro schválené dva týmy. Na detailu `/admin/events/:eventId` vyberte nový kvíz a **Zkontrolovat a připravit**; případná upozornění potvrďte pouze pro zobrazenou revizi. Zkontrolujte **Kvíz připraven** a počty kol/otázek. Akce používá neměnný snapshot, pozdější editace knihovny jej sama nezmění.
+4. Na detailu nastavte schválené registrační okno a zveřejnění registrace. Sdílejte registrační odkaz/QR z panelu jen do dohodnuté skupiny; veřejný endpoint není přístupová pozvánka pro administraci. Tým na `/events/:eventId` zadá název, počet členů a email. Musí si ihned bezpečně uchovat management link; **potvrzovací email neočekávat**. Ověřte přijaté týmy přes **Spravovat týmy a registrace**. Ztracený link řeší oprávněný staff stávajícím reissue postupem, starý link je po rotaci neplatný. [Registrace](REGISTRATIONS.md), [team tools](EVENT_TEAM_TOOLS.md).
+5. V `/admin/events/:eventId/print` vyberte týmové listy; **Vytvořit náhled** → zkontrolovat → **Stáhnout PDF** nebo **Vytisknout**. Klíč odpovědí zůstává pouze u oprávněného operátora. Tisk vychází z připraveného snapshotu. [Print center](PRINT_CENTER.md), [PDF security](PDF_SECURITY.md).
+
+## Průběh a uzavření
+
+1. Na detailu akce použijte **Otevřít moderování akce**. Otevře se `/admin/live/:sessionId`; projektor otevírejte jeho ovládacím odkazem na `/projector/:sessionId`, nikdy privátní editor. Začněte z čekajícího stavu navigací **Další**. Správnou odpověď zveřejňujte pouze explicitním reveal ovládáním po uzavření odpovědí; soukromý answer preview v editoru není live reveal. [Live flow](LIVE_SESSION.md).
+2. Po kole otevřete z detailu **Otevřít bodování** (`/admin/events/:eventId/scoring`). Vyberte kolo, u každého přijatého týmu zapište součet a samostatně **Uložit**; půlbody jsou podporované. Opravu existující hodnoty zdůvodněte. Nezadané skóre není nula. Při konfliktu zkontrolujte aktuální hodnotu a použijte **Připravit opravu aktuální revize**, až pak vědomě uložte. Nedělejte souběžné zápisy za jeden tým/kolo.
+3. Po posledním kole zkontrolujte úplnost bodování. V moderování otevřete **Finální vyhlášení** → **Načíst konečný náhled**; projděte všechny stránky → **Zahájit vyhlášení** → jednotlivě **Odhalit další umístění** → po dokončení **Zobrazit celé konečné pořadí**. Před vyhlášením neukončujte session. [Finální postup a případná oprava](FINAL_REVEAL.md).
+4. Až po potvrzeném finále použijte **Ukončit kvíz**. Na detailu dokončené akce otevřete **Otevřít konečné výsledky** (`/admin/events/:eventId/results`); historie je potvrzená read-only verze, nikoli restart session. Ponechte data a zaznamenejte stav dokončeno i případné provozní potíže. [Historie](HISTORICAL_RESULTS.md).
+
+## Samostatně: místní demo a event-night
+
+| Režim | Start / adresa | Ukončení a data |
+| --- | --- | --- |
+| Krátké demo / Human QA | `START_LOCAL_QA.cmd` → `http://localhost:5173/admin/login`; demo účet a heslo jsou v [LOCAL_QA.md](LOCAL_QA.md). Launcher seeduje pouze `demo-filmovy-kviz-v2`. | `STOP_LOCAL_QA.cmd`; tento režim není event-night checkpoint/recovery postup. |
+| Připravený místní event-night | Jednorázovou přípravu ze schváleného čistého release zajišťuje technický odpovědný podle [EVENT_NIGHT_LOCAL.md](EVENT_NIGHT_LOCAL.md). Operátor pak `START_EVENT_NIGHT.cmd` → `http://localhost:5000/admin/login`; běžný start importuje ověřený snapshot a neseeduje. | Po důležitých etapách `BACKUP_EVENT_NIGHT.cmd`; na konci `STOP_EVENT_NIGHT.cmd` ověří/exportuje data. Použít pouze připravený odpovídající build/snapshot. |
+
+Oba režimy jsou oddělené od stagingu a používají loopback demo emulátory. Porty ani účty se mezi režimy nezaměňují. `localhost` v telefonu účastníka není notebook operátora; tento návod neotevírá LAN ani veřejný tunnel. Lokální veřejný tok otevřete na stejném notebooku. Event-night neznamená synchronizaci se stagingem; YouTube potřebuje internet.
+
+## Fyzická akceptace na místě a zastavení
+
+Před příchodem týmů odpovědný člověk na skutečné sestavě potvrdí čitelný projektor/fullscreen, správný obrazový výstup bez editoru/odpovědí, skutečnou hlasitost a klipy, stabilní připojení pro staging/external media a čitelný vytištěný týmový list. Pro místní režim ověří napájení, zabránění uspání a použitelný checkpoint. Zapište datum, operátora a konkrétní výsledek; browser QA ani statický preflight tyto fyzické vlastnosti nedokazují. Bez potřebného obrazu/zvuku/připojení start odložte nebo předem odsouhlaste odpovídající rozsah obsahu.
+
+Při ztrátě spojení či konfliktu přerušte další klikání, obnovte aktuální autoritativní stav a zkontrolujte projektor před pokračováním; nereplayujte naslepo reveal či finále. Ukončenou session nelze oživit. Draft editoru zachovejte a konflikt řešte podle [working copy](EDITOR_WORKING_COPY.md). Místní přerušenou promotion/restart řešte výhradně [EVENT_NIGHT_LOCAL.md](EVENT_NIGHT_LOCAL.md): start použije jen journalem určený ověřený backup, při neplatné evidenci zastaví. Neseedovat prázdná data, nevybírat „nejnovější“ backup a nemazat chybnou evidenci. Cloudový incident předat jmenovanému odpovědnému podle [recovery hranic](FINAL_LAUNCH_READINESS.md#smallest-safe-recovery-target); tento návod neopravňuje deploy/rollback.
+
+Před rozšířením pilotu zbývá rozhodnout veřejné exposure/abuse kontroly a uchování kontaktů/capabilities. Tento návrh nevytváří retenční politiku; stejně tak neobnovuje pozvánky ani neprohlašuje fyzickou akceptaci za hotovou.
