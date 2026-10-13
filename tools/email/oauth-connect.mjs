@@ -111,6 +111,9 @@ export async function exchangeCode(client, code, verifier, http = fetch, timeout
 
 // Scripts are fixed; directories/secrets cross stdin only, never command arguments.
 const aclScript = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; $d=[Console]::In.ReadToEnd(); $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=[IO.Directory]::GetAccessControl($d); if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){throw 'Owner'}; $acl.SetAccessRuleProtection($true,$false); foreach($r in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])){[void]$acl.RemoveAccessRuleSpecific($r)}; $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow')); [IO.Directory]::SetAccessControl($d,$acl); $check=[IO.Directory]::GetAccessControl($d); if($check.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){throw 'Owner'}; if(-not $check.AreAccessRulesProtected){throw 'Inheritance'}; $rules=$check.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]); if($rules.Count -ne 1){throw 'Count'}; foreach($r in $rules){if($r.IdentityReference.Value -ne $sid.Value -or $r.AccessControlType -ne 'Allow' -or $r.FileSystemRights -ne 'FullControl'){throw 'Access'}}; [Console]::Out.Write('OWNER_ONLY')`;
+// Only createOutput's successful exclusive mkdir may use this initialization.
+// Elevated Windows can give a new directory the token's Administrators owner.
+const freshOwnerScript = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; $d=[Console]::In.ReadToEnd(); if(([IO.File]::GetAttributes($d) -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or [IO.Directory]::GetFileSystemEntries($d).Length -ne 0){throw 'Fresh'}; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=[IO.Directory]::GetAccessControl($d); $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; if($owner -ne $sid.Value){if($owner -ne 'S-1-5-32-544'){throw 'Owner'}; $acl.SetOwner($sid); [IO.Directory]::SetAccessControl($d,$acl)}; if([IO.Directory]::GetAccessControl($d).GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value){throw 'Owner'}; [Console]::Out.Write('CURRENT_USER_OWNER')`;
 const protectScript = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [void][Reflection.Assembly]::Load('System.Security, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a'); $bytes=[Convert]::FromBase64String([Console]::In.ReadToEnd()); $sealed=[Security.Cryptography.ProtectedData]::Protect($bytes,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser); [Console]::Out.Write([Convert]::ToBase64String($sealed))`;
 const unprotectScript = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [void][Reflection.Assembly]::Load('System.Security, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a'); $bytes=[Convert]::FromBase64String([Console]::In.ReadToEnd()); $opened=[Security.Cryptography.ProtectedData]::Unprotect($bytes,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser); [Console]::Out.Write([Convert]::ToBase64String($opened))`;
 async function powershell(script, input) {
@@ -130,6 +133,10 @@ async function powershell(script, input) {
   });
 }
 export async function secureDirectory(directory) { need(await powershell(aclScript, directory) === 'OWNER_ONLY', 'DIRECTORY_ACL_INVALID'); }
+async function secureFreshDirectory(directory) {
+  need(await powershell(freshOwnerScript, directory) === 'CURRENT_USER_OWNER', 'DIRECTORY_OWNER_INVALID');
+  await secureDirectory(directory);
+}
 export async function protectCurrentUser(bytes) {
   const encrypted = await powershell(protectScript, bytes.toString('base64'));
   need(/^[A-Za-z0-9+/]+={0,2}$/u.test(encrypted), 'PROTECTED_STORE_STOP');
@@ -151,7 +158,7 @@ function writeExclusive(file, bytes) {
   const descriptor = openSync(file, 'wx', 0o600);
   try { writeFileSync(descriptor, bytes); fsyncSync(descriptor); } finally { closeSync(descriptor); }
 }
-export async function createOutput(directory, secure = secureDirectory) {
+export async function createOutput(directory, secure = secureFreshDirectory) {
   need(!existsSync(directory), 'OUTPUT_EXISTS'); mkdirSync(directory, { mode: 0o700 });
   await secure(directory); need(readdirSync(directory).length === 0, 'OUTPUT_NOT_EMPTY');
 }

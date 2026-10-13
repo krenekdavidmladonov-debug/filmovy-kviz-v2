@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { get } from 'node:http';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
 import path from 'node:path';
@@ -24,6 +25,14 @@ function localGet(url) {
   return new Promise((resolve, reject) => {
     get(url, { agent: false }, response => { let body = ''; response.on('data', chunk => { body += chunk.toString(); }); response.on('end', () => resolve({ status: response.statusCode, headers: response.headers, body })); }).on('error', reject);
   });
+}
+function windowsDirectoryState(directory) {
+  const script = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; $d=[Console]::In.ReadToEnd(); $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=[IO.Directory]::GetAccessControl($d); $rules=$acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]); $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; $onlyOwner=$rules.Count -eq 1; foreach($r in $rules){$onlyOwner=$onlyOwner -and $r.IdentityReference.Value -eq $sid.Value -and $r.AccessControlType -eq 'Allow' -and $r.FileSystemRights -eq 'FullControl' -and $r.InheritanceFlags -eq 'ContainerInherit,ObjectInherit' -and $r.PropagationFlags -eq 'None' -and -not $r.IsInherited}; $hash=[Security.Cryptography.SHA256]::Create(); $descriptorHash=[Convert]::ToBase64String($hash.ComputeHash([Text.Encoding]::Unicode.GetBytes($acl.GetSecurityDescriptorSddlForm('All')))); $hash.Dispose(); [Console]::Out.Write((@{ownerUser=$owner -eq $sid.Value; ownerAdministrators=$owner -eq 'S-1-5-32-544'; protected=$acl.AreAccessRulesProtected; onlyOwner=$onlyOwner; descriptorHash=$descriptorHash}|ConvertTo-Json -Compress))`;
+  const result = spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+    { input: directory, encoding: 'utf8', timeout: 10_000, windowsHide: true });
+  assert.equal(result.error, undefined); assert.equal(result.status, 0); assert.equal(result.stderr, '');
+  return JSON.parse(result.stdout);
 }
 
 test('only the exact V2 staging web client and one exact registered redirect are accepted', () => {
@@ -140,6 +149,18 @@ test('failed protection and expired active handoff cannot leave a plaintext/toke
     await assert.rejects(createOutput(denied, async () => { throw new Error('Synthetic ACL failure'); })); assert.deepEqual(readdirSync(denied), []);
   } finally { own.cleanup(); }
 });
+
+test('existing output directory, file and junction never reach protection or change synthetic contents', async () => {
+  const own = fixture(); let calls = 0;
+  try {
+    const directory = path.join(own.directory, 'existing'), file = path.join(own.directory, 'existing-file'), link = path.join(own.directory, 'existing-link');
+    mkdirSync(directory); writeFileSync(path.join(directory, 'marker'), 'synthetic-original'); writeFileSync(file, 'synthetic-original-file');
+    symlinkSync(directory, link, process.platform === 'win32' ? 'junction' : 'dir');
+    for (const output of [directory, file, link]) await assert.rejects(createOutput(output, async () => { calls++; }), /OUTPUT_EXISTS/u);
+    assert.equal(calls, 0); assert.deepEqual(readdirSync(directory), ['marker']);
+    assert.equal(readFileSync(path.join(directory, 'marker'), 'utf8'), 'synthetic-original'); assert.equal(readFileSync(file, 'utf8'), 'synthetic-original-file');
+  } finally { own.cleanup(); }
+});
 test('encrypted-only client input binds original ciphertext and bounds/erases decoded bytes', async () => {
   const own = fixture();
   try {
@@ -156,7 +177,20 @@ test('encrypted-only client input binds original ciphertext and bounds/erases de
 test('actual Windows CurrentUser DPAPI round-trip and owner-only directory use only synthetic bytes', { skip: process.platform !== 'win32' }, async () => {
   const own = fixture();
   try {
-    const output = path.join(own.directory, 'secured'); await createOutput(output, secureDirectory);
+    // On elevated CI the untouched fixture has Administrators ownership. The
+    // standalone guard must reject it without normalizing any existing ACL.
+    const before = windowsDirectoryState(own.directory);
+    if (!before.ownerUser) {
+      assert.equal(before.ownerAdministrators, true);
+      await assert.rejects(secureDirectory(own.directory), /^Error: PROTECTED_STORE_STOP$/u);
+      assert.deepEqual(windowsDirectoryState(own.directory), before); assert.deepEqual(readdirSync(own.directory), []);
+    }
+    const output = path.join(own.directory, 'secured'); await createOutput(output);
+    const secured = windowsDirectoryState(output);
+    assert.equal(secured.ownerUser, true); assert.equal(secured.ownerAdministrators, false);
+    assert.equal(secured.protected, true); assert.equal(secured.onlyOwner, true); assert.deepEqual(readdirSync(output), []);
+    await secureDirectory(output); assert.deepEqual(windowsDirectoryState(output), secured);
+    await assert.rejects(createOutput(output), /OUTPUT_EXISTS/u); assert.deepEqual(windowsDirectoryState(output), secured);
     const synthetic = Buffer.from('SYNTHETIC ONLY: not an OAuth credential');
     const encrypted = await protectCurrentUser(synthetic), decoded = await unprotectCurrentUser(encrypted);
     assert.notDeepEqual(encrypted, synthetic); assert.deepEqual(decoded, synthetic);

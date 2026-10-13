@@ -196,59 +196,6 @@ jobs:
           node-version: 22
           package-manager-cache: false
 
-      - name: Diagnose synthetic Windows directory owner and ACL prerequisites
-        shell: powershell
-        run: |
-          # PowerShell 5.1; synthetic empty directory only. Retain directory; no cleanup.
-          $ErrorActionPreference = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          $stage = 'BOOTSTRAP'
-          $ownerUser = $null
-          $ownerAdministrators = $null
-          $ok = $false
-          try {
-            $stage = 'NEW_DIRECTORY'
-            $localRoot = [IO.Path]::Combine((Get-Location).Path, '.local-data')
-            if (-not [IO.Directory]::Exists($localRoot)) { [void][IO.Directory]::CreateDirectory($localRoot) }
-            if (([IO.File]::GetAttributes($localRoot) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Stop' }
-            $directory = [IO.Path]::Combine($localRoot, 'ci-acl-probe-' + [Guid]::NewGuid().ToString('N'))
-            if ([IO.Directory]::Exists($directory) -or [IO.File]::Exists($directory)) { throw 'Stop' }
-            [void][IO.Directory]::CreateDirectory($directory)
-            if ([IO.Directory]::GetFileSystemEntries($directory).Length -ne 0) { throw 'Stop' }
-            $stage = 'READ_BEFORE'
-            $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
-            $acl = [IO.Directory]::GetAccessControl($directory)
-            $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
-            $ownerUser = $owner -eq $sid.Value
-            $ownerAdministrators = $owner -eq 'S-1-5-32-544'
-            $stage = 'OWNER_BEFORE'
-            if (-not $ownerUser) { throw 'Stop' }
-            $stage = 'BUILD_ACL'
-            $acl.SetAccessRuleProtection($true, $false)
-            foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
-              [void]$acl.RemoveAccessRuleSpecific($rule)
-            }
-            $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
-            $stage = 'WRITE_ACL'
-            [IO.Directory]::SetAccessControl($directory, $acl)
-            $stage = 'READ_AFTER'
-            $check = [IO.Directory]::GetAccessControl($directory)
-            $stage = 'OWNER_AFTER'
-            if ($check.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $sid.Value) { throw 'Stop' }
-            $stage = 'INHERITANCE_AFTER'
-            if (-not $check.AreAccessRulesProtected) { throw 'Stop' }
-            $stage = 'RULE_COUNT_AFTER'
-            $rules = $check.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])
-            if ($rules.Count -ne 1) { throw 'Stop' }
-            $stage = 'RULE_ACCESS_AFTER'
-            foreach ($rule in $rules) {
-              if ($rule.IdentityReference.Value -ne $sid.Value -or $rule.AccessControlType -ne 'Allow' -or $rule.FileSystemRights -ne 'FullControl') { throw 'Stop' }
-            }
-            $stage = 'COMPLETE'
-            $ok = $true
-          } catch { }
-          [Console]::Out.WriteLine((@{ ok = $ok; stage = $stage; ownerUser = $ownerUser; ownerAdministrators = $ownerAdministrators } | ConvertTo-Json -Compress))
-
       # Built-in Node modules only; no credentials, cloud services or dependency install.
       # Exercise actual Windows ACL/DPAPI and child environment isolation.
       - name: Synthetic OAuth and activation contracts including Windows protection
