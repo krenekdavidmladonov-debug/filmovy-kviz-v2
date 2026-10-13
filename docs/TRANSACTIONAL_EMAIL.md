@@ -1,6 +1,6 @@
 # Registration transactional email
 
-This slice implements durable registration email intents, Czech templates, a shared delivery worker and organizer status. Gmail delivery is now cloud-ready in code, with Secret Manager bindings and a private Firebase task queue. **No real OAuth credentials/key values, deployment, mailbox changes or internet email sends have been performed.** See [GMAIL_DELIVERY.md](GMAIL_DELIVERY.md) for setup prerequisites and the real delivery guarantee.
+This slice implements durable registration email intents, Czech templates, a shared delivery worker and organizer status. The Gmail transport/worker foundation includes Secret Manager bindings and a private Firebase task queue, but current cloud registration email is deliberately disabled. **No real OAuth credentials/key values, deployment, mailbox changes or internet email sends have been performed.** See [GMAIL_DELIVERY.md](GMAIL_DELIVERY.md) for setup prerequisites and the real delivery guarantee.
 
 ## Domain operations
 
@@ -12,7 +12,7 @@ This slice implements durable registration email intents, Czech templates, a sha
 | No-op, failed operation, identical operation replay | None |
 | Admin manual add/edit, with or without email; any admin cancellation | None |
 
-The existing transaction commits registration, name reservation, capacity counters, email intent and safe organizer summary together. Recipient is the server-validated email from that completed operation (format validation, **not** proof of mailbox ownership). Templates use an immutable allowlist of event title/date/time zone/public venue, team name and member count from that operation. Admin, quiz, scoring and staff data never enter email content. Changed/cancelled messages go to the email current at the operation. Delivery does not rerun or roll back registration logic.
+In the guarded local email runtime, the transaction commits registration, name reservation, capacity counters, email intent and safe organizer summary together. Current cloud callables still commit registration changes, while `enqueueRegistrationEmail` returns outside emulator runtime (`functions/src/email/intent.ts`). Recipient is the server-validated email from that completed operation (format validation, **not** proof of mailbox ownership). Templates use an immutable allowlist of event title/date/time zone/public venue, team name and member count from that operation. Admin, quiz, scoring and staff data never enter email content. Changed/cancelled messages go to the email current at the operation. Delivery does not rerun or roll back registration logic.
 
 Text and HTML are generated together in Czech. HTML escapes every untrusted display value; subjects strip CR/LF. Confirmation contains a private “Spravovat přihlášku” CTA using the existing management route. No remote images or branding dependencies are needed. A message describes its completed operation; it is not a live view of subsequent team changes.
 
@@ -22,7 +22,7 @@ The server still issues a random 256-bit management token. Existing authorizatio
 
 Previously the raw token existed only at issuance, so a delivery retry could not reconstruct the same CTA. We now seal that **same token**, without issuing a second kind of management capability, into AES-256-GCM ciphertext in `events/{eventId}/emailSecrets/{intentId}`. A fresh 96-bit nonce and the exact intent path as authenticated additional data bind the envelope to its intended event/message. The envelope contains only version, key ID, nonce, ciphertext and authentication tag. It is separate from registration records and email audit and denied to **all** Firestore client roles. Only the trusted vault reconstructs the transient link. Its fragment keeps the token out of HTTP request paths and referrers.
 
-`TokenVault` accepts injected key material. The synthetic fixture remains behind **both** a `demo-*` project and an explicit localhost Firestore endpoint guard. Cloud create/replay resolves a protected versioned keyring from its Secret Manager binding. Missing/malformed keys fail closed with a generic precondition, with no plaintext or synthetic-key fallback. Retaining old key IDs permits decryption of existing receipts while new envelopes use the active key. No real key has been provisioned. A configured vault lets registration commit pending mail without contacting Gmail.
+`TokenVault` accepts injected key material. The synthetic fixture remains behind **both** a `demo-*` project and an explicit localhost Firestore endpoint guard. The protected cloud keyring adapter is implemented, but current registration callables choose a vault only in emulator runtime (`functions/src/registrations/callables.ts`): cloud email has no vault, secret binding, persisted raw-token envelope or queued message. Missing/malformed key material fails closed in the configured vault path, with no plaintext or synthetic-key fallback. Retaining old key IDs preserves existing envelopes/receipts. Activating cloud email requires a reviewed coordinated callable/intent/export change plus the documented configuration; adding secrets alone does not enable it.
 
 ## Operation idempotence and response loss
 
@@ -52,4 +52,4 @@ The standard Quality gate runs registration contracts, Gmail worker contracts an
 
 ## Separate future staging task
 
-Use the explicit prerequisites in [GMAIL_DELIVERY.md](GMAIL_DELIVERY.md). Real OAuth consent, secret values, private queue/service IAM, sender/domain verification, retention and public abuse controls still require operator decisions and separate authorization. No backfill, migration or historical email enqueue is implemented. The project estimate remains **88%**.
+Use the explicit prerequisites in [GMAIL_DELIVERY.md](GMAIL_DELIVERY.md). Real OAuth consent, secret values, private queue/service IAM, sender/domain verification, retention and public abuse controls still require operator decisions and separate authorization. No backfill, migration or historical email enqueue is implemented. Fake-provider/local PASS is not actual delivery evidence. Current measured scope and remaining boundaries are in [COMPLETION_MATRIX.md](COMPLETION_MATRIX.md).

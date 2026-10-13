@@ -2,7 +2,24 @@
 
 This is the dated coordination record for resuming Filmový Kvíz V2 / JustKvíz. It supplements the development workflow; it is not release approval or evidence of the current cloud environment. Historical roadmaps and audits must be checked against an exact commit before assigning implementation work.
 
-## Current retained QA checkpoint — 2026-10-13
+## Current autonomous completion phase — 2026-10-13
+
+The owner explicitly resumed autonomous development after the retained staging phase and asked the lead to use all available worker slots efficiently. Base `4a71cf0a1bf36d5e782a1327db58acb7d011091d`, clean at start; dedicated branch `codex/final-operational-readiness`. Completed staging evidence and expired metadata permissions remain historical and must not be replayed. This new phase closes remaining operational/coverage gaps with synthetic local work and prepares any concrete external prerequisites.
+
+| Owner | Bounded task / owned files | Acceptance / next step |
+| --- | --- | --- |
+| GPT-6.1 Sol HIGH (`access_candidate_review`) | `tools/event-night/restart-acceptance.mjs`, its `.test.mjs`, `docs/EVENT_NIGHT_RESTART_ACCEPTANCE.md` | Three actual isolated demo Suite cycles PASS: export/stop/import, exact Auth/Firestore/Storage readback, persisted score replay/CAS continuation, interrupted real-rename recovery and repeated restore with backup preservation. 13 guard tests, syntax and targeted lint PASS; MEDIUM and lead review PASS. |
+| GPT-6.1 Sol MEDIUM (`editor_candidate_review`) | `docs/FINAL_FUNCTIONAL_ACCEPTANCE.md`, `tests/browser/editor-save-all.spec.mjs` | Added failed authoritative reload/draft preservation/retry regression; all 7 browser cases PASS (24.7 s), targeted lint PASS. Existing access/referee/lifecycle evidence reconciled without repeated suites. Independently reviewed the restart helper and closed inherited ADC isolation finding. |
+| GPT-6.1 Sol LOW (`release_validation_record`) | `docs/FINAL_LAUNCH_READINESS.md`, email/security documentation | Concrete rollback compatibility, actual email activation prerequisites and minimal V2 launch scope recorded. Corrected obsolete recovery/percentage claims; independently reviewed autonomy/CI changes. |
+| Lead | `AGENTS.md`, CI, current status/matrix, test orchestration and integration | Added Save-all suite to the existing seeded CI step exactly once; offline YAML validation PASS. Reviewed and integrated local work; no new remote CI or cloud rollout claimed. |
+
+User-directed autonomy is recorded in AGENTS.md without weakening answer privacy, current membership authorization or credential protections. Routine local development needs no further confirmation. No production/V1 migration, expired IAM extension, destructive cleanup or unspecified real recipients are inferred.
+
+Actual restart receipt: `.local-data/en-restart/run-jBrlMA/acceptance-result.json`, mode `SYNTHETIC_EVENT_NIGHT_RESTART_RECOVERY_PASS`, at `2026-10-13T10:10:47.458Z`. The helper source is pinned to SHA-256 `5486b9e1f70cd540b0146df1c7b8b05fdeb3da6182ccd3a3ba44ebb7b3e5b62f`; isolated demo project `demo-restart-900d0c0b03b5`. Earlier setup failures remain retained and are not counted as passes. [Restart evidence](EVENT_NIGHT_RESTART_ACCEPTANCE.md) and [functional evidence](FINAL_FUNCTIONAL_ACCEPTANCE.md) bind exact sources/logs and limits. This is actual synthetic persistence/recovery, not physical power-loss or venue certification. Application sources and the deployed staging artifact are unchanged in this phase.
+
+Remaining concrete input for real email: a dedicated sender and an explicitly named verification recipient. The lead asked once; no reply is recorded yet. Cloud enqueue/vault and worker activation require a coordinated implementation/configuration change, not just secret values. A short source audit is checking any useful local preparation before declaring an external dependency. Physical projector/audio/print acceptance and actual operating scope remain separate from software test results.
+
+## Completed retained QA checkpoint — 2026-10-13
 
 Application `ddb862f` and separately approved Storage fix `5fe7d9b` are deployed. Editor/image/audio, viewer-selected media, second snapshot/revocation readback, public registrations and scoring PASS. Lead runs cloud/browser; existing GPT-6.1 Sol HIGH/MEDIUM/LOW own bounded tooling/review/evidence tasks. Full details and retained IDs are in [STAGING_QA_EXECUTION_DDB862F.md](STAGING_QA_EXECUTION_DDB862F.md).
 

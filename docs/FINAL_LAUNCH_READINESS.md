@@ -1,0 +1,41 @@
+# V2 operational readiness — 2026-10-13
+
+Inspection base: `4a71cf0a1bf36d5e782a1327db58acb7d011091d`. This record proposes a bounded operating scope; it authorizes no deployment, IAM, email, cleanup or production/V1 action. The [completion matrix](COMPLETION_MATRIX.md) and [retained QA execution](STAGING_QA_EXECUTION_DDB862F.md) establish completed staging evidence, not universal launch readiness.
+
+## Smallest safe recovery target
+
+The known tested combination is application `ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac` (Functions, frontend and Firestore Rules) plus Storage Rules fix `5fe7d9ba2f4f17dd1c8e727896ea7faa92b713fe`. Retain its membership/permission/scope checks, lifecycle dispositions, snapshot revocation and private media gateway. Never restore a claim-only backend or remove persisted data to make an older client work.
+
+| Incident / minimum action | Concrete binding / offline check | Remaining execution gate |
+| --- | --- | --- |
+| Frontend regression | Use the same retained `ddb862f` frontend, rather than an arbitrary historical Hosting version. [Artifact evidence](COMPLETION_VALIDATION.md#packaged-candidate): `.local-data/restart-release/ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac/receipt.json`, SHA256 `3507ab5d2742e50ff1798dfb1ffa1a3c2a166d1643d3c7ec3cd700bdedc5d375`; 118 checksummed files / 70 exports. Existing [rollout evidence](STAGING_EXECUTION_DDB862F.md) binds Hosting `5d6d0e6b0f400501`. Offline compare receipt file set/hashes, frontend callable names/DTOs and current backend response contracts. | Fresh current pointer/drift check and exact authorized target. This inspection did not rehearse a Hosting rollback. |
+| Backend or Firestore authorization regression | Prefer a narrow reviewed forward repair against the proven application, with relevant membership, lifecycle, snapshot and public-answer regressions. A previous backend is eligible only after explicit persisted-schema/security compatibility proof. [Fail-closed contract](RESTART_RELEASE_PLAN.md#fail-closed-rollback). | New exact source/artifact/CI and authorized writes; no blind replay of the completed rollout. |
+| Storage regression | Keep the proven fix by default. [Storage release record](STAGING_STORAGE_READ_BUDGET.md#readback-rollback-a-syntetický-smoke) contains a conditional pointer return to the captured prior ruleset. That return restores the known own-upload failure, so it is containment, not restored feature acceptance. | Compare current pointer/source; foreign drift stops. No ruleset/object deletion, IAM broadening or automatic rollback. |
+| Interrupted local event-night promotion | Existing `8efcb05` recovery selects a journal-managed validated backup, preserves canonical/backup safety; 130 fault-injection assertions passed on PS5 and PS7. [Local contract](EVENT_NIGHT_LOCAL.md). | Actual synthetic three-suite restart/recovery PASS at 2026-10-13T10:10:47Z: Auth/Firestore/Storage export/import, identity/media persistence, scoring replay/stale rejection and idempotent real-rename recovery. [Acceptance record](EVENT_NIGHT_RESTART_ACCEPTANCE.md), `.local-data/en-restart/run-jBrlMA/acceptance-result.json`, helper SHA256 `5486b9e1f70cd540b0146df1c7b8b05fdeb3da6182ccd3a3ba44ebb7b3e5b62f`. Caught process exception is not OS crash/power loss, fixed-port launcher/browser or venue proof. |
+
+The public `tools/staging/restart-release-manifest.json` is an inventory template (`releaseSha:null`, authorization flags false), not today's execution authorization. The retained package/report is the exact release evidence: `.local-data/completion-hardening/runtime-verification.json` records 70 discovered exports, no email workers/parameters/secret bindings and zero instrumented network attempts. This document inspected those public artifacts without rerunning their verification or reading private QA material.
+
+## Email: implemented foundation versus activation
+
+| Existing implementation | Actual missing prerequisite / next step |
+| --- | --- |
+| Durable intent/lease/retry domain, deterministic task enqueue, private worker, Gmail send-only transport, MIME validation, encrypted capability/key rotation and fake-provider tests are implemented. [Delivery contract](GMAIL_DELIVERY.md), `functions/src/email/{intent,task,worker,config}.ts`. | They are not an active deployed delivery service. The frozen package excludes both workers. `enqueueRegistrationEmail` explicitly returns outside emulator runtime (`functions/src/email/intent.ts`); activating cloud intents therefore requires a reviewed code/runtime contract change, not merely adding secrets. |
+| Existing create retry and staff link reissue are implemented and online-tested. | Old [registration-security](REGISTRATION_SECURITY.md) wording about token rotation/arbitrary recovery is not proof of missing implemented reissue. Optional recovery and public abuse policy require an owner decision. |
+| Send-only OAuth and secret/parameter names are defined. | Choose a dedicated sender mailbox, reply-to/public origin and send-only consent; provision the documented four secrets/three parameters through an authorized operator. No sender identity/settings were verified here. Never use a personal inbox or copy credentials automatically. |
+| Bounded Tasks/Gmail recovery and safe error/status handling exist; provider acceptance is distinct from delivery. | Verify queue/private invocation, API/quota/secret access, operational monitoring and recovery responsibility, then an explicitly authorized real-send acceptance. Review sender-domain configuration with its administrator. No real delivery, bounce handling or exactly-once physical mail claim exists. |
+
+The historical percentage in GMAIL_DELIVERY is not used as completion evidence. No cloud configuration failure is inferred from uninspected settings.
+
+## Proposed first V2 operating scope
+
+Start with a controlled V2-only pilot using newly authored V2 quizzes/events and explicit active scoped memberships. Keep V1/production and real migration excluded. Keep real email disabled until the sender and coordinated implementation/configuration have evidence; explain that users must retain their registration management link and staff may use the existing reviewed reissue workflow. Use the tested internal scoring, protected projector/media and private PDF flows; no offline synchronization, hosted-video processing or waitlist is implied.
+
+Before expanding from retained staging QA, finish only the applicable existing evidence gaps: invitation activation/issuer revocation, separate referee scope/revocation and broader online Save-all acceptance; reconcile case coverage before declaring a feature missing. Synthetic operational restart is now evidenced above; compatible cloud rollback was not executed and remains a separate proof. Physical projector/audio/connectivity/print acceptance remains a venue exercise. [Matrix](COMPLETION_MATRIX.md) records the limits; none is a newly diagnosed defect.
+
+Owner decisions actually needed:
+
+1. Accept the controlled V2-only pilot audience/event scope and name the operating/recovery owner; decide when invitations/collaboration may be restored through an exact reviewed CAS scope. Existing pause/retention are preserved until then.
+2. Set public exposure/abuse controls and contact/capability retention; choose whether additional recovery beyond create retry and staff reissue is required. Decide retained QA cleanup separately.
+3. Keep real email disabled for the pilot, or choose the dedicated sender and authorize the concrete email activation/acceptance task once prepared. Migration/production cutover and physical venue acceptance remain separate decisions.
+
+No action is requested merely because a historical document says UNKNOWN. A concrete proposed mutation must bind source, target, writes and rollback evidence before its authorization step.

@@ -125,6 +125,57 @@ test('confirmed conflict reload locks editing, saving and selection until author
   } finally { releaseReload(); await f.identity.dispose(); }
 });
 
+test('failed authoritative reload preserves drafts, unlocks navigation and permits an explicit successful retry', async ({ page }) => {
+  const f = await fixture(page);
+  let editorReads = 0, writesAfterConflict = 0;
+  try {
+    await select(page, 0); await prompt(page).fill('Question draft kept after failed reload');
+    await page.getByRole('button', { name: 'Základní údaje', exact: true }).click();
+    await page.getByLabel('Název kvízu *', { exact: true }).fill('Metadata draft kept after failed reload');
+    await select(page, 0);
+    const batch = f.identity.db.batch();
+    batch.update(f.root, { revision: 1, title: 'Authoritative title after retry' });
+    batch.update(f.root.collection('slides').doc('a'), { text: 'Authoritative question after retry' });
+    await batch.commit();
+    await save(page); await expect(page.locator('.round-editor-error')).toContainText('Kvíz mezitím upravil někdo jiný');
+    await page.route('**/updateQuizSlide', route => {
+      if (route.request().method() === 'POST') writesAfterConflict++;
+      return route.continue();
+    });
+    await page.route('**/updateQuizMetadata', route => {
+      if (route.request().method() === 'POST') writesAfterConflict++;
+      return route.continue();
+    });
+    await page.route('**/readAccessData', route => {
+      if (route.request().method() !== 'POST' || route.request().postDataJSON().data.operation !== 'editor') return route.continue();
+      editorReads++;
+      if (editorReads === 1) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { status: 'UNAVAILABLE', message: 'Synthetic authoritative read failure' } }) });
+      return route.continue();
+    });
+    const reloadButton = page.getByRole('button', { name: 'Zahodit rozepsané změny a načíst aktuální verzi', exact: true });
+    page.once('dialog', dialog => dialog.accept()); await reloadButton.click();
+    await expect.poll(() => editorReads).toBe(1);
+    await expect(page.locator('.save-state')).toHaveText('Uložení se nezdařilo');
+    await expect(reloadButton).toBeEnabled();
+    await expect(prompt(page)).toBeEnabled();
+    await expect(prompt(page)).toHaveValue('Question draft kept after failed reload');
+    await expect(page.getByRole('button', { name: 'Uložit vše', exact: true })).toBeEnabled();
+    await select(page, 1); await expect(prompt(page)).toHaveValue('b');
+    await select(page, 0); await expect(prompt(page)).toHaveValue('Question draft kept after failed reload');
+    await page.getByRole('button', { name: 'Základní údaje', exact: true }).click();
+    await expect(page.getByLabel('Název kvízu *', { exact: true })).toHaveValue('Metadata draft kept after failed reload');
+    expect(writesAfterConflict).toBe(0);
+    expect((await f.root.get()).data().revision).toBe(1);
+    page.once('dialog', dialog => dialog.accept()); await reloadButton.click();
+    await expect(page.locator('.save-state')).toHaveText('Uloženo');
+    await expect(page.getByLabel('Název kvízu *', { exact: true })).toHaveValue('Authoritative title after retry');
+    await select(page, 0); await expect(prompt(page)).toBeEnabled();
+    await expect(prompt(page)).toHaveValue('Authoritative question after retry');
+    expect(editorReads).toBe(2); expect(writesAfterConflict).toBe(0);
+    expect((await f.root.get()).data().revision).toBe(1);
+  } finally { await f.identity.dispose(); }
+});
+
 test('quiz metadata and round title survive selection, and invalid inactive content prevents all writes', async ({ page }) => {
   const f = await fixture(page);
   try {

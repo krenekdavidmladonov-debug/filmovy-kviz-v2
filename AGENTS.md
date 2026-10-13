@@ -19,6 +19,14 @@ This repository contains Filmový Kvíz V2, a replacement for an existing produc
 
 ## Engineering workflow
 
+### Owner-directed autonomy (2026-10-13)
+
+The owner has instructed the lead to continue development autonomously and coordinate all available worker slots efficiently. Local implementation, corrective changes, isolated synthetic emulator tests, documentation, dedicated branches and local commits are authorized; do not request repeated approval for these routine steps. An earlier completed QA phase does not prohibit new evidence-driven development.
+
+The lead assigns at most three concurrent workers, explicitly using GPT-6.1 Sol with low, medium or high reasoning and disjoint file ownership. Reuse prior passing evidence where source and scope still match; run additional checks for actual changes or missing coverage. The lead reviews and integrates results. Once a concrete external action is authorized in the conversation, carry out necessary implementation details within that scope without asking for the same approval again.
+
+This instruction does not supply missing credentials or physical equipment, expand an expired temporary grant, or authorize unrelated production data, destructive cleanup or real email to unspecified recipients. Prepare concrete remaining external steps and report only the actual missing input. Preserve all security invariants above.
+
 - Read `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`, and `docs/SECURITY.md` before changing boundaries, collections, or authorization.
 - Create a dedicated branch before a substantial change.
 - Keep commits small, logical, and reversible. Preserve unrelated user changes.
