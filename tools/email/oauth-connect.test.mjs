@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSyn
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { clientConfiguration, createConsent, consumeCallback, exchangeCode, tokenResult, ignoredPath, createOutput, persistGrant, listenForConsent,
-  encryptedClientInput, protectCurrentUser, unprotectCurrentUser, secureDirectory,
+  encryptedClientInput, protectCurrentUser, unprotectCurrentUser, secureDirectory, connectionDiagnostic, main,
   PROJECT, REDIRECT, SCOPE, TOKEN_ENDPOINT } from './oauth-connect.mjs';
 
 const repo = realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'));
@@ -181,10 +181,97 @@ test('actual local listener strips code; duplicate/favicon during delayed handof
   assert.equal(await flow, 'synthetic-complete'); await actions; assert.equal(calls, 1);
 });
 test('actual local listener rejects bad state before handoff and bounds absent consent', async () => {
-  const consent = createConsent(client, 'sender@example.test'); let calls = 0, readyFinished;
+  const consent = createConsent(client, 'sender@example.test'); let calls = 0, readyFinished; const statuses = [];
   const flow = listenForConsent(consent, async () => { calls++; }, { timeoutMs: 100, ready: () => {
     readyFinished = localGet('http://127.0.0.1:53682/oauth/callback?state=' + 'x'.repeat(43) + '&code=synthetic').then(response => assert.equal(response.status, 400));
     return readyFinished;
-  } });
+  }, onCallback: status => statuses.push(status) });
   await assert.rejects(flow, /CONSENT_WAIT_TIMEOUT/u); await readyFinished; assert.equal(calls, 0);
+  assert.deepEqual(statuses, ['REJECTED']);
+});
+test('diagnostics allow only fixed modes, stages and callback statuses, never supplied secret text', () => {
+  const secret = 'synthetic-code state=secret sender@example.test https://provider.test client-secret';
+  assert.deepEqual(connectionDiagnostic(secret, secret, secret), { mode: 'OAUTH_CONNECTION_STOP', stage: 'UNKNOWN', callback: 'UNKNOWN',
+    senderIdentityVerified: false, sends: 0, deployments: 0 });
+  assert.equal(connectionDiagnostic('OAUTH_CONNECTION_STOP', 'TOKEN_EXCHANGE', 'ACCEPTED').stage, 'TOKEN_EXCHANGE');
+});
+test('absence and unrelated requests differ from rejected callbacks; rejection reporting is bounded', async () => {
+  for (const rejected of [false, true]) {
+    const consent = createConsent(client, 'sender@example.test'), statuses = []; let actions, calls = 0;
+    const flow = listenForConsent(consent, async () => { calls++; }, { timeoutMs: 200, onCallback: status => statuses.push(status), ready: () => {
+      actions = (async () => {
+        assert.equal((await localGet('http://127.0.0.1:53682/favicon.ico')).status, 400);
+        assert.equal((await localGet('http://127.0.0.1:53682/oauth/callback-unrelated')).status, 400);
+        if (rejected) for (let i = 0; i < 4; i++) {
+          assert.equal((await localGet('http://127.0.0.1:53682/oauth/callback?state=' + 'x'.repeat(43) + '&code=synthetic')).status, 400);
+        }
+      })(); return actions;
+    } });
+    await assert.rejects(flow, /CONSENT_WAIT_TIMEOUT/u); await actions; assert.equal(calls, 0);
+    assert.deepEqual(statuses, rejected ? ['REJECTED'] : []);
+  }
+});
+test('a rejected callback can be followed by one accepted handoff; denial is distinct and never exchanges', async () => {
+  for (const denied of [false, true]) {
+    const consent = createConsent(client, 'sender@example.test'), statuses = []; let actions, calls = 0;
+    const flow = listenForConsent(consent, async () => { calls++; return 'complete'; }, { timeoutMs: 2000,
+      onCallback: status => statuses.push(status), ready: () => {
+        actions = (async () => {
+          await localGet('http://127.0.0.1:53682/oauth/callback?state=' + 'x'.repeat(43) + '&code=synthetic');
+          const url = denied ? '/oauth/callback?' + new URLSearchParams({ state: consent.state, error: 'sensitive-provider-error' }) : callback(consent).url;
+          assert.equal((await localGet('http://127.0.0.1:53682' + url)).status, 303);
+        })(); return actions;
+      } });
+    if (denied) await assert.rejects(flow, /^Error: CONSENT_NOT_COMPLETED$/u);
+    else assert.equal(await flow, 'complete');
+    await actions; assert.equal(calls, denied ? 0 : 1); assert.deepEqual(statuses, ['REJECTED', denied ? 'DENIED' : 'ACCEPTED']);
+  }
+});
+test('failed status persistence stops before handing a callback to the token exchange', async () => {
+  const consent = createConsent(client, 'sender@example.test'); let actions, calls = 0;
+  const flow = listenForConsent(consent, async () => { calls++; }, { timeoutMs: 2000,
+    onCallback: () => { throw new Error('synthetic-secret-error'); }, ready: () => {
+      actions = localGet('http://127.0.0.1:53682' + callback(consent).url); return actions;
+    } });
+  await assert.rejects(flow, /^Error: DIAGNOSTIC_STORE_STOP$/u); await actions; assert.equal(calls, 0);
+});
+test('synthetic main records token, protected-store and result failures separately from success without secret output', { skip: process.platform !== 'win32' }, async () => {
+  const own = fixture(), originalFetch = globalThis.fetch, originalLog = console.log;
+  try {
+    const encrypted = await protectCurrentUser(Buffer.from(JSON.stringify(input())));
+    const clientFile = path.join(own.directory, 'client.current-user.dpapi'), selectionFile = path.join(own.directory, 'owner-selection.json');
+    writeFileSync(clientFile, encrypted);
+    writeFileSync(selectionFile, JSON.stringify({ schemaVersion: 1, status: 'DRAFT', recordedAt: '2026-10-13T00:00:00Z', source: 'synthetic',
+      temporary: true, dedicatedMailboxPlanned: true, requestedSenderEmail: 'sender@example.test', verificationRecipientEmail: 'recipient@example.test',
+      interpretation: 'synthetic', currentTransport: 'synthetic', senderAuthorizationVerified: false, providerConnectionConfigured: false,
+      deliveryEnabled: false, containsCredentials: false }));
+    for (const expectedStage of ['TOKEN_EXCHANGE', 'PROTECTED_STORE', 'RESULT_RECEIPT', 'COMPLETE']) {
+      const output = path.join(own.directory, expectedStage), emitted = []; let request, calls = 0;
+      globalThis.fetch = async (url, options) => {
+        calls++; assert.equal(url, TOKEN_ENDPOINT); assert.equal(new URLSearchParams(options.body).get('code'), 'synthetic-code');
+        if (expectedStage === 'TOKEN_EXCHANGE') throw new Error('sensitive-provider-error sender@example.test synthetic-client-secret');
+        if (expectedStage === 'PROTECTED_STORE') writeFileSync(path.join(output, 'grant.current-user.dpapi'), 'preexisting-synthetic-ciphertext');
+        if (expectedStage === 'RESULT_RECEIPT') writeFileSync(path.join(output, 'result.json'), 'preexisting-synthetic-receipt');
+        return Response.json(token());
+      };
+      console.log = value => {
+        emitted.push(value);
+        if (JSON.parse(value).mode === 'OAUTH_CALLBACK_READY') {
+          const consentUrl = new URL(readFileSync(path.join(output, 'authorization-url.txt'), 'utf8'));
+          request = localGet('http://127.0.0.1:53682/oauth/callback?' + new URLSearchParams({ state: consentUrl.searchParams.get('state'), code: 'synthetic-code' }));
+        }
+      };
+      const run = main(['--connect', '--client', clientFile, '--owner-selection', selectionFile, '--out', output]);
+      if (expectedStage === 'COMPLETE') await run;
+      else await assert.rejects(run, error => { assert.equal(error.message, 'OAUTH_CONNECTION_STOP'); assert.equal(error.diagnostic.stage, expectedStage); return true; });
+      await request; assert.equal(calls, 1);
+      const diagnostic = JSON.parse(readFileSync(path.join(output, 'status.json'), 'utf8'));
+      assert.equal(diagnostic.stage, expectedStage); assert.equal(diagnostic.callback, 'ACCEPTED');
+      assert.equal(diagnostic.mode, expectedStage === 'COMPLETE' ? 'OAUTH_REFRESH_TOKEN_STORED' : 'OAUTH_CONNECTION_STOP');
+      assert.ok(readFileSync(path.join(output, 'status.json')).length < 1024);
+      for (const secret of ['synthetic-code', 'synthetic-client-secret', 'synthetic-refresh-token', 'sender@example.test', 'sensitive-provider-error', client.clientId]) {
+        assert.ok(!emitted.join('\n').includes(secret)); assert.ok(!JSON.stringify(diagnostic).includes(secret));
+      }
+    }
+  } finally { globalThis.fetch = originalFetch; console.log = originalLog; own.cleanup(); }
 });

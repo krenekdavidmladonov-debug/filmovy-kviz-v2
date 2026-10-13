@@ -33,6 +33,24 @@ The callback enforces exact host/path, allowed nonduplicate fields, timing-safe 
 
 Success is `OAUTH_REFRESH_TOKEN_STORED` with `senderIdentityVerified:false`, sends 0 and deployments 0. It proves protected local storage of a returned grant, not that the selected account matches the sender, that secrets are deployed, or that a message was delivered. A stopped attempt does not authorize automatic retries or broader scopes.
 
+## Safe local status
+
+The follow-up helper writes one bounded `status.json` in the new protected output directory and emits the same fixed diagnostic fields to the terminal. It records `mode`, `stage`, `callback`, `senderIdentityVerified:false`, sends 0 and deployments 0. It never copies exception text, provider bodies, callback inputs, addresses, client IDs, secrets or authorization URLs into diagnostics. The separate `authorization-url.txt` remains a private operator input. Rejected callback reporting occurs at most once; unrelated paths and duplicate requests do not cancel a valid handoff.
+
+| Last stage / callback | Meaning |
+| --- | --- |
+| `CALLBACK_WAIT` / `NONE` | The authorization file was written, but no callback was accepted or rejected. The tool cannot infer whether consent was completed or a browser blocked navigation. |
+| `CALLBACK_WAIT` / `REJECTED` | At least one request to the callback path failed validation. It supplied no exchange code; the listener continued waiting for a valid callback. |
+| `CALLBACK_WAIT` / `DENIED` | A validated consent-error callback consumed the attempt; no token exchange occurred. |
+| `TOKEN_EXCHANGE` / `ACCEPTED` | A valid callback was consumed and one exchange began. A stop here includes exchange/response validation failure or expiry of the overall wait. |
+| `PROTECTED_STORE` / `ACCEPTED` | Exchange returned a validated grant and protected local persistence began. A stop here does not establish successful storage. |
+| `RESULT_RECEIPT` / `ACCEPTED` | Ciphertext was written, but final receipt completion has not been established. Preserve any encrypted grant for operator review; this state does not authorize another consent attempt. |
+| `COMPLETE` / `ACCEPTED` with `OAUTH_REFRESH_TOKEN_STORED` | Ciphertext and the safe result receipt were written successfully. |
+
+`INPUT_VALIDATION`, `OUTPUT_PROTECTION`, `PREPARE_RECEIPT`, `CALLBACK_LISTENER` and `AUTHORIZATION_FILE` distinguish earlier local setup stages. `--prepare` finishes with `OAUTH_LOCAL_PREPARED`, `COMPLETE`, and callback `NONE`.
+
+`OAUTH_CONNECTION_STOP` means the helper caught a failure at the recorded stage; it never includes the underlying error text. `OAUTH_CONNECTION_IN_PROGRESS` records the last completed diagnostic write, not proof that the process is still running. An externally terminated process can leave this mode behind. A crash during receipt rewriting can leave an incomplete status file, and a storage failure can prevent the final status from being recorded; preserve terminal output when available. The protected status descriptor is opened exclusively once and reused, so diagnostics do not follow a replaced output path or grow with rejected requests. Historical receipts from the blocked attempt predate these diagnostics and are not rewritten.
+
 External OAuth apps in Testing have seven-day refresh-token expiry for Gmail scope; consent status and renewed authorization must be planned before relying on ongoing delivery. See [Google OAuth web-server flow](https://developers.google.com/identity/protocols/oauth2/web-server) and [OAuth overview](https://developers.google.com/identity/protocols/oauth2). This helper performs no consent-policy change.
 
 Further steps require the existing reviewed activation plan: establish the authorized sender/grant binding, protected provisioning, exact candidate/runtime/queue evidence and explicit deployment/bounded-send authorization. No inbox/profile query, SMTP fallback, backfill, team email, production/V1 access or real send is added by this helper.

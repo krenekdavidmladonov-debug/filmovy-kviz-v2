@@ -2,7 +2,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, openSync, writeFileSync, fsyncSync, closeSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, openSync, writeFileSync, writeSync, ftruncateSync, fsyncSync, closeSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ownerSelection } from './activation-plan.mjs';
@@ -15,6 +15,17 @@ const need = (condition, code) => { if (!condition) throw new Error(code); };
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const plain = value => value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
 const text = (value, max = 8192) => typeof value === 'string' && value.length > 0 && value.length <= max && /^[\x21-\x7e]+$/u.test(value);
+
+// Diagnostics contain only these fixed values, never an exception or OAuth input.
+export function connectionDiagnostic(mode, stage, callback) {
+  return {
+    mode: ['OAUTH_CONNECTION_IN_PROGRESS', 'OAUTH_CONNECTION_STOP', 'OAUTH_LOCAL_PREPARED', 'OAUTH_REFRESH_TOKEN_STORED'].includes(mode) ? mode : 'OAUTH_CONNECTION_STOP',
+    stage: ['INPUT_VALIDATION', 'OUTPUT_PROTECTION', 'PREPARE_RECEIPT', 'CALLBACK_LISTENER', 'AUTHORIZATION_FILE', 'CALLBACK_WAIT',
+      'TOKEN_EXCHANGE', 'PROTECTED_STORE', 'RESULT_RECEIPT', 'COMPLETE'].includes(stage) ? stage : 'UNKNOWN',
+    callback: ['NONE', 'REJECTED', 'ACCEPTED', 'DENIED'].includes(callback) ? callback : 'UNKNOWN',
+    senderIdentityVerified: false, sends: 0, deployments: 0,
+  };
+}
 
 export function clientConfiguration(input) {
   need(plain(input) && Object.keys(input).join(',') === 'web' && plain(input.web), 'WEB_CLIENT_REQUIRED');
@@ -154,10 +165,10 @@ export async function persistGrant(directory, client, refreshToken, bindings, pr
   return sha(encrypted);
 }
 
-export async function listenForConsent(consent, handle, { timeoutMs = MAX_WAIT_MS, ready = () => {} } = {}) {
+export async function listenForConsent(consent, handle, { timeoutMs = MAX_WAIT_MS, ready = () => {}, onCallback = () => {} } = {}) {
   need(Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= MAX_WAIT_MS, 'CONSENT_TIMEOUT_INVALID');
   return await new Promise((resolve, reject) => {
-    let settled = false;
+    let settled = false, rejectedCallbackReported = false;
     const server = createServer((request, response) => {
       response.setHeader('Cache-Control', 'no-store'); response.setHeader('Referrer-Policy', 'no-referrer');
       response.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
@@ -169,15 +180,27 @@ export async function listenForConsent(consent, handle, { timeoutMs = MAX_WAIT_M
       let code;
       try { code = consumeCallback(request, consent); }
       catch {
-        if (consent.consumed) { response.writeHead(303, { Location: '/oauth/complete' }); response.end(); finish(new Error('CONSENT_NOT_COMPLETED')); }
-        else { response.writeHead(400); response.end('Callback refused.'); }
+        if (consent.consumed) {
+          response.writeHead(303, { Location: '/oauth/complete' }); response.end();
+          if (notifyCallback('DENIED')) finish(new Error('CONSENT_NOT_COMPLETED'));
+        } else {
+          response.writeHead(400); response.end('Callback refused.');
+          if (!rejectedCallbackReported && /^\/oauth\/callback(?:\?|$)/u.test(request.url ?? '')) {
+            rejectedCallbackReported = true; notifyCallback('REJECTED');
+          }
+        }
         return;
       }
       // Strip the authorization code from the browser URL even if token exchange fails.
       response.writeHead(303, { Location: '/oauth/complete' }); response.end();
+      if (!notifyCallback('ACCEPTED')) return;
       Promise.resolve().then(() => handle(code, () => !settled)).then(value => finish(null, value), () => finish(new Error('CONSENT_HANDOFF_STOP')));
     });
     const timeout = setTimeout(() => finish(new Error('CONSENT_WAIT_TIMEOUT')), timeoutMs);
+    function notifyCallback(status) {
+      try { onCallback(status); return true; }
+      catch { finish(new Error('DIAGNOSTIC_STORE_STOP')); return false; }
+    }
     function finish(error, value) {
       if (settled) return; settled = true; clearTimeout(timeout);
       server.close();
@@ -192,6 +215,18 @@ export async function listenForConsent(consent, handle, { timeoutMs = MAX_WAIT_M
 
 function jsonInput(file) { const bytes = readFileSync(file); need(bytes.length <= 65536, 'INPUT_TOO_LARGE'); return { value: JSON.parse(bytes.toString('utf8')), hash: sha(bytes) }; }
 export async function main(argv = process.argv.slice(2)) {
+  let stage = 'INPUT_VALIDATION', callbackStatus = 'NONE', diagnosticFile;
+  function report(nextStage, nextCallback = callbackStatus, mode = 'OAUTH_CONNECTION_IN_PROGRESS') {
+    stage = nextStage; callbackStatus = nextCallback;
+    const diagnostic = connectionDiagnostic(mode, stage, callbackStatus);
+    if (diagnosticFile !== undefined) {
+      // Keep a single bounded receipt and retain the original exclusive descriptor.
+      const bytes = JSON.stringify(diagnostic, null, 2) + '\n';
+      ftruncateSync(diagnosticFile, 0); writeSync(diagnosticFile, bytes, 0, 'utf8'); fsyncSync(diagnosticFile);
+    }
+    console.log(JSON.stringify(diagnostic));
+  }
+  try {
   need(process.versions.node.split('.')[0] === '22', 'NODE22_REQUIRED');
   need(!process.env.NODE_OPTIONS && !process.env.FIREBASE_TOKEN && !process.env.GOOGLE_APPLICATION_CREDENTIALS
     && !Object.keys(process.env).some(key => key.endsWith('_EMULATOR_HOST') && process.env[key]), 'AMBIENT_OVERRIDE_REFUSED');
@@ -201,25 +236,45 @@ export async function main(argv = process.argv.slice(2)) {
   need(flags['--client'] && flags['--owner-selection'] && flags['--out'], 'EXPLICIT_PATHS_REQUIRED');
   const clientInput = await encryptedClientInput(ignoredPath(flags['--client'])), selectionInput = jsonInput(ignoredPath(flags['--owner-selection']));
   const client = clientInput.client, selection = ownerSelection(selectionInput.value), output = ignoredPath(flags['--out'], { output: true });
-  await createOutput(output);
+  stage = 'OUTPUT_PROTECTION'; await createOutput(output);
+  diagnosticFile = openSync(path.join(output, 'status.json'), 'wx', 0o600);
+  report('PREPARE_RECEIPT');
   const bindings = { projectId: PROJECT, redirectUri: REDIRECT, scope: SCOPE, helperSha256: sha(readFileSync(self)), clientInputSha256: clientInput.hash, ownerSelectionSha256: selectionInput.hash };
   const prepared = { schemaVersion: 1, mode: 'OAUTH_LOCAL_PREPARED', at: new Date().toISOString(), ...bindings,
     senderIdentityVerified: false, sends: 0, deployments: 0, limitations: ['Consent account must match the selected sender; login_hint is not identity proof.', 'No deployed secret, Gmail send or inbox delivery is established.'] };
   writeExclusive(path.join(output, 'prepare.json'), JSON.stringify(prepared, null, 2));
-  if (mode === '--prepare') { console.log(JSON.stringify({ mode: prepared.mode, receipt: path.join(output, 'prepare.json') })); return; }
+  if (mode === '--prepare') {
+    report('COMPLETE', callbackStatus, prepared.mode);
+    console.log(JSON.stringify({ mode: prepared.mode, receipt: path.join(output, 'prepare.json') })); return;
+  }
   const consent = createConsent(client, selection.senderEmail);
+  report('CALLBACK_LISTENER');
   await listenForConsent(consent, async (code, active) => {
+    report('TOKEN_EXCHANGE');
     const refreshToken = await exchangeCode(client, code, consent.verifier);
     need(active(), 'CONSENT_WAIT_TIMEOUT');
+    report('PROTECTED_STORE');
     const protectedGrantSha256 = await persistGrant(output, client, refreshToken, bindings, protectCurrentUser, active);
+    report('RESULT_RECEIPT');
     writeExclusive(path.join(output, 'result.json'), JSON.stringify({ ...prepared, mode: 'OAUTH_REFRESH_TOKEN_STORED', at: new Date().toISOString(),
       protection: 'WINDOWS_DPAPI_CURRENT_USER', protectedGrantSha256, senderIdentityVerified: false }, null, 2));
   }, { ready: () => {
+    report('AUTHORIZATION_FILE');
     writeExclusive(path.join(output, 'authorization-url.txt'), consent.authorizationUrl);
+    report('CALLBACK_WAIT');
     console.log(JSON.stringify({ mode: 'OAUTH_CALLBACK_READY', receipt: path.join(output, 'prepare.json') }));
-  } });
+  }, onCallback: status => { report(stage, status); } });
+  report('COMPLETE', callbackStatus, 'OAUTH_REFRESH_TOKEN_STORED');
   console.log(JSON.stringify({ mode: 'OAUTH_REFRESH_TOKEN_STORED', receipt: path.join(output, 'result.json') }));
+  } catch {
+    const diagnostic = connectionDiagnostic('OAUTH_CONNECTION_STOP', stage, callbackStatus);
+    try { report(stage, callbackStatus, diagnostic.mode); } catch { /* Preserve the safe stop even if its receipt cannot be written. */ }
+    const stopped = new Error('OAUTH_CONNECTION_STOP'); stopped.diagnostic = diagnostic; throw stopped;
+  } finally { if (diagnosticFile !== undefined) closeSync(diagnosticFile); }
 }
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
-  main().catch(() => { console.error('OAUTH_CONNECTION_STOP; NO_SEND_OR_DEPLOY'); process.exitCode = 1; });
+  main().catch(error => {
+    console.error(JSON.stringify(connectionDiagnostic(error?.diagnostic?.mode, error?.diagnostic?.stage, error?.diagnostic?.callback)));
+    process.exitCode = 1;
+  });
 }
