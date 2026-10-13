@@ -2,7 +2,23 @@
 
 This is the dated coordination record for resuming Filmový Kvíz V2 / JustKvíz. It supplements the development workflow; it is not release approval or evidence of the current cloud environment. Historical roadmaps and audits must be checked against an exact commit before assigning implementation work.
 
-## Current Gmail OAuth connection — 2026-10-13
+## Current delegated OAuth and release follow-up — 2026-10-13
+
+Continued from clean `ccf2de0156e1d930238616a3127847dcdbe482ee` on `codex/oauth-followup-readiness` after the owner requested active, disjoint agent work. Existing worktrees and frozen deployed application remain preserved; no duplicate feature implementation was assigned.
+
+| Owner | Bounded scope | Result |
+| --- | --- | --- |
+| GPT-6.1 Sol HIGH / `oauth_diagnostics` | OAuth helper, synthetic tests and connection guide | Fixed-value, bounded protected status identifies callback, exchange and storage phases without disclosing callback/provider/credential inputs. 26 synthetic tests PASS, then the final exact-path regression PASS; retained logs. |
+| GPT-6.1 Sol MEDIUM / `oauth_ci` | CI workflow; independent read-only review of both HIGH changes | Adds OAuth/package tests on Ubuntu and a bounded Windows OAuth ACL/DPAPI job. YAML/structure checks PASS. Final source-hash-bound reviews PASS, including the final callback-path change. Remote CI has not run. |
+| GPT-6.1 Sol LOW / readiness and `final_evidence` | Launch-readiness record, then bounded metadata evidence review | Reconciles actual OAuth/setup state and the separate five-target packaging gap. Independently verifies the 11-GET metadata script/receipt and distinguishes denied secret reads from absent resources. |
+| GPT-6.1 Sol HIGH / `email_package` | Separate offline activation builder, tests and guide after the first LOW slot finished | Exactly five Functions, immutable clean-SHA preparation, isolated compiler environment, fixed export/dependency/file scope and hashed receipt. Lead Node 22 tests 13/13 PASS, including actual path-link guards. |
+| Lead | Assignments, source review, integration, isolated checks, bounded read-only inventory and actual artifact verification | `pnpm check` and all 50 isolated demo Firestore Rules tests PASS. New actual artifact/discovery is the next local verification, not yet a deployment claim. |
+
+Read-only V2 staging inventory found the three registration callables ACTIVE with no activation parameters or secret bindings, both email workers `NOT_FOUND`, and Cloud Tasks / Secret Manager APIs `DISABLED`. Four secret metadata requests returned `PERMISSION_DENIED`; their existence/versions remain unverified. There were 11 target GETs, zero resource writes, zero secret-value/data reads, and no queue/IAM inspection. [Readiness record](FINAL_LAUNCH_READINESS.md) contains exact evidence hashes and implications.
+
+The actual Gmail blocker is unchanged: no usable grant was received because Chrome blocked the approved callback. No new OAuth attempt, extraction/replay, bypass, provisioning, deployment or send occurred in this follow-up. The heartbeat remains PAUSED. Complete the actual local five-target package/discovery and source binding, then prepare the concrete external scope; normal supported access to the approved callback remains necessary for a fresh consent attempt. Do not repeat already completed setup or frozen staging acceptance.
+
+## Previous Gmail OAuth connection — 2026-10-13
 
 Continued from clean `108f3deb9b4132f8de860b61dcb6ed2159e4f391` on `codex/gmail-oauth-connection`. HIGH owned only the one-shot OAuth helper/tests; MEDIUM independently reviewed; LOW wrote the operator guide; the lead owned approved Google Cloud UI actions, integration and verification. Existing worktrees were preserved. [Connection record](GMAIL_OAUTH_CONNECTION.md) describes the exact interface and remaining boundary.
 
