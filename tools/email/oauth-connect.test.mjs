@@ -1,0 +1,190 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createHash } from 'node:crypto';
+import { get } from 'node:http';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { clientConfiguration, createConsent, consumeCallback, exchangeCode, tokenResult, ignoredPath, createOutput, persistGrant, listenForConsent,
+  encryptedClientInput, protectCurrentUser, unprotectCurrentUser, secureDirectory,
+  PROJECT, REDIRECT, SCOPE, TOKEN_ENDPOINT } from './oauth-connect.mjs';
+
+const repo = realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'));
+const input = () => ({ web: { project_id: PROJECT, client_id: 'synthetic.apps.googleusercontent.com', client_secret: 'synthetic-client-secret',
+  auth_uri: 'https://accounts.google.com/o/oauth2/auth', token_uri: TOKEN_ENDPOINT, redirect_uris: [REDIRECT] } });
+const client = clientConfiguration(input());
+const token = () => ({ access_token: 'synthetic-access-token', refresh_token: 'synthetic-refresh-token', scope: SCOPE, token_type: 'Bearer', expires_in: 3600 });
+const callback = consent => ({ method: 'GET', headers: { host: '127.0.0.1:53682' }, rawHeaders: ['Host', '127.0.0.1:53682'],
+  url: '/oauth/callback?' + new URLSearchParams({ state: consent.state, code: 'synthetic-code' }) });
+function fixture() {
+  const directory = mkdtempSync(path.join(repo, '.local-data/oauth-connect-test-'));
+  return { directory, cleanup: () => { assert.equal(realpathSync(directory), directory); assert.equal(path.dirname(directory), path.join(repo, '.local-data')); rmSync(directory, { recursive: true }); } };
+}
+function localGet(url) {
+  return new Promise((resolve, reject) => {
+    get(url, { agent: false }, response => { let body = ''; response.on('data', chunk => { body += chunk.toString(); }); response.on('end', () => resolve({ status: response.statusCode, headers: response.headers, body })); }).on('error', reject);
+  });
+}
+
+test('only the exact V2 staging web client and one exact registered redirect are accepted', () => {
+  assert.deepEqual(client, { clientId: 'synthetic.apps.googleusercontent.com', clientSecret: 'synthetic-client-secret' });
+  for (const bad of [{ installed: input().web }, { web: { ...input().web, project_id: 'foreign-project' } },
+    { web: { ...input().web, redirect_uris: ['http://localhost:53682/oauth/callback'] } },
+    { web: { ...input().web, redirect_uris: [REDIRECT, 'https://foreign.test'] } }, { web: { ...input().web, token_uri: 'https://foreign.test/token' } },
+    { web: { ...input().web, client_secret: 'newline\nsecret' } }]) assert.throws(() => clientConfiguration(bad));
+});
+test('offline consent is sole gmail.send with fresh state and S256 PKCE, not identity proof', () => {
+  const first = createConsent(client, 'sender@example.test'), next = createConsent(client, 'sender@example.test');
+  const url = new URL(first.authorizationUrl);
+  assert.equal(url.origin + url.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
+  assert.equal(url.searchParams.get('scope'), SCOPE); assert.equal(url.searchParams.get('access_type'), 'offline');
+  assert.equal(url.searchParams.get('prompt'), 'consent select_account'); assert.equal(url.searchParams.get('include_granted_scopes'), 'false');
+  assert.equal(url.searchParams.get('redirect_uri'), REDIRECT); assert.equal(url.searchParams.get('login_hint'), 'sender@example.test');
+  assert.equal(url.searchParams.get('code_challenge_method'), 'S256'); assert.equal(first.state.length, 43);
+  assert.equal(url.searchParams.get('code_challenge'), createHash('sha256').update(first.verifier).digest('base64url'));
+  assert.notEqual(first.state, next.state); assert.notEqual(first.verifier, next.verifier); assert.ok(!url.href.includes(first.verifier));
+  assert.ok(!url.href.includes(client.clientSecret));
+});
+test('only one exact valid callback can consume a code', () => {
+  const consent = createConsent(client, 'sender@example.test');
+  assert.equal(consumeCallback(callback(consent), consent), 'synthetic-code');
+  assert.throws(() => consumeCallback(callback(consent), consent), /CALLBACK_ALREADY_CONSUMED/u);
+});
+test('wrong state, host, method, duplicate query, body, foreign path and malformed encoding cannot consume or exchange', () => {
+  for (const patch of [ { method: 'POST' }, { headers: { host: 'foreign.test' } }, { rawHeaders: ['Host', '127.0.0.1:53682', 'Host', 'foreign.test'] },
+    { headers: { host: '127.0.0.1:53682', 'content-length': '0' } }, { headers: { host: '127.0.0.1:53682', 'transfer-encoding': 'chunked' } } ]) {
+    const consent = createConsent(client, 'sender@example.test'); assert.throws(() => consumeCallback({ ...callback(consent), ...patch }, consent)); assert.equal(consent.consumed, false);
+  }
+  for (const suffix of ['&state=duplicate', '&code=duplicate', '&unexpected=synthetic', '&scope=openid', '&authuser=other', '&code=%ZZ']) {
+    const consent = createConsent(client, 'sender@example.test'); assert.throws(() => consumeCallback({ ...callback(consent), url: callback(consent).url + suffix }, consent)); assert.equal(consent.consumed, false);
+  }
+  const consent = createConsent(client, 'sender@example.test');
+  for (const url of ['/oauth/callback?state=' + 'x'.repeat(43) + '&code=synthetic', '/foreign', 'https://foreign.test/oauth/callback?x=1']) {
+    assert.throws(() => consumeCallback({ ...callback(consent), url }, consent)); assert.equal(consent.consumed, false);
+  }
+});
+test('consent denial consumes exactly once but never yields an exchange code', () => {
+  const consent = createConsent(client, 'sender@example.test');
+  assert.throws(() => consumeCallback({ ...callback(consent), url: '/oauth/callback?' + new URLSearchParams({ state: consent.state, error: 'access_denied' }) }, consent), /CONSENT_NOT_COMPLETED/u);
+  assert.equal(consent.consumed, true);
+});
+test('token exchange is one fixed Google POST with client binding, redirect error and matching PKCE', async () => {
+  let calls = 0;
+  const verifier = createConsent(client, 'sender@example.test').verifier;
+  const http = async (url, request) => {
+    calls++; assert.equal(url, TOKEN_ENDPOINT); assert.equal(request.method, 'POST'); assert.equal(request.redirect, 'error');
+    const params = new URLSearchParams(request.body);
+    assert.deepEqual(Object.fromEntries(params), { client_id: client.clientId, client_secret: client.clientSecret, code: 'synthetic-code',
+      code_verifier: verifier, redirect_uri: REDIRECT, grant_type: 'authorization_code' });
+    return Response.json(token());
+  };
+  assert.equal(await exchangeCode(client, 'synthetic-code', verifier, http), 'synthetic-refresh-token'); assert.equal(calls, 1);
+});
+for (const patch of [{ scope: SCOPE + ' openid' }, { scope: undefined }, { token_type: 'bearer' }, { refresh_token: undefined },
+  { access_token: undefined }, { expires_in: -1 }, { refresh_token: 'x'.repeat(8193) }]) test('rejects incomplete or wider token grant without secret diagnostics: ' + Object.keys(patch)[0], async () => {
+  const data = { ...token(), ...patch }; assert.throws(() => tokenResult(data), /TOKEN_RESPONSE_INVALID/u);
+  let calls = 0;
+  await assert.rejects(exchangeCode(client, 'synthetic-code', createConsent(client, 'sender@example.test').verifier, async () => { calls++; return Response.json(data); }), /^Error: TOKEN_EXCHANGE_STOP$/u);
+  assert.equal(calls, 1);
+});
+test('provider failure, response oversize and stalled handoff never retry or expose input/body', async () => {
+  for (const response of [Response.json({ error: 'sensitive-provider-text' }, { status: 401 }), new Response('x'.repeat(32769), { headers: { 'content-type': 'application/json' } })]) {
+    let calls = 0;
+    await assert.rejects(exchangeCode(client, 'synthetic-code', createConsent(client, 'sender@example.test').verifier, async () => { calls++; return response; }), /^Error: TOKEN_EXCHANGE_STOP$/u);
+    assert.equal(calls, 1);
+  }
+  let calls = 0;
+  await assert.rejects(exchangeCode(client, 'synthetic-code', createConsent(client, 'sender@example.test').verifier, async () => { calls++; return new Promise(() => {}); }, 5), /^Error: TOKEN_EXCHANGE_STOP$/u);
+  assert.equal(calls, 1);
+});
+test('explicit file guards refuse foreign, existing and linked paths; preserve synthetic original files', () => {
+  const own = fixture();
+  try {
+    const source = path.join(own.directory, 'client.json'); writeFileSync(source, 'synthetic');
+    assert.equal(ignoredPath(source), source);
+    assert.throws(() => ignoredPath(path.join(repo, 'package.json')), /IGNORED_PATH_REQUIRED/u);
+    assert.throws(() => ignoredPath(own.directory, { output: true }), /OUTPUT_EXISTS/u);
+    const target = path.join(own.directory, 'target'); mkdirSync(target);
+    const link = path.join(own.directory, 'link'); symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.throws(() => ignoredPath(path.join(link, 'out'), { output: true }), /PATH_MISSING_OR_LINKED/u);
+    assert.equal(readFileSync(source, 'utf8'), 'synthetic');
+  } finally { own.cleanup(); }
+});
+test('owner protection happens before sensitive output; DPAPI boundary persists only ciphertext and never overwrites', async () => {
+  const own = fixture();
+  try {
+    const output = path.join(own.directory, 'out'); let secured = false;
+    await createOutput(output, async directory => { assert.deepEqual(readdirSync(directory), []); secured = true; });
+    const ciphertext = Buffer.from('synthetic-encrypted-bytes');
+    const protect = async bytes => {
+      assert.equal(secured, true); const privateValue = JSON.parse(bytes.toString());
+      assert.equal(privateValue.refreshToken, 'synthetic-refresh-token'); assert.equal(privateValue.clientSecret, client.clientSecret);
+      return ciphertext;
+    };
+    const result = await persistGrant(output, client, 'synthetic-refresh-token', { scope: SCOPE }, protect);
+    assert.equal(result, createHash('sha256').update(ciphertext).digest('hex'));
+    assert.deepEqual(readFileSync(path.join(output, 'grant.current-user.dpapi')), ciphertext);
+    assert.ok(!readFileSync(path.join(output, 'grant.current-user.dpapi')).includes(Buffer.from('synthetic-refresh-token')));
+    await assert.rejects(persistGrant(output, client, 'synthetic-refresh-token', {}, protect), /EEXIST/u);
+    await assert.rejects(createOutput(output, async () => {}), /OUTPUT_EXISTS/u);
+  } finally { own.cleanup(); }
+});
+test('failed protection and expired active handoff cannot leave a plaintext/token artifact', async () => {
+  const own = fixture();
+  try {
+    const output = path.join(own.directory, 'out'); await createOutput(output, async () => {});
+    await assert.rejects(persistGrant(output, client, 'synthetic-refresh-token', {}, async () => { throw new Error('Synthetic protection failure'); }));
+    await assert.rejects(persistGrant(output, client, 'synthetic-refresh-token', {}, async () => Buffer.from('encrypted'), () => false), /CONSENT_WAIT_TIMEOUT/u);
+    assert.deepEqual(readdirSync(output), []);
+    const denied = path.join(own.directory, 'denied');
+    await assert.rejects(createOutput(denied, async () => { throw new Error('Synthetic ACL failure'); })); assert.deepEqual(readdirSync(denied), []);
+  } finally { own.cleanup(); }
+});
+test('encrypted-only client input binds original ciphertext and bounds/erases decoded bytes', async () => {
+  const own = fixture();
+  try {
+    const file = path.join(own.directory, 'client.current-user.dpapi'), encrypted = Buffer.from('synthetic-encrypted-client');
+    writeFileSync(file, encrypted);
+    const decoded = Buffer.from(JSON.stringify(input()));
+    const result = await encryptedClientInput(file, async bytes => { assert.deepEqual(bytes, encrypted); return decoded; });
+    assert.deepEqual(result.client, client); assert.equal(result.hash, createHash('sha256').update(encrypted).digest('hex'));
+    assert.ok(decoded.every(value => value === 0)); assert.deepEqual(readFileSync(file), encrypted);
+    await assert.rejects(encryptedClientInput(file, async () => Buffer.alloc(65537)), /DECODED_CLIENT_TOO_LARGE/u);
+    await assert.rejects(encryptedClientInput(file, async () => { throw new Error('Synthetic wrong Windows user'); }));
+  } finally { own.cleanup(); }
+});
+test('actual Windows CurrentUser DPAPI round-trip and owner-only directory use only synthetic bytes', { skip: process.platform !== 'win32' }, async () => {
+  const own = fixture();
+  try {
+    const output = path.join(own.directory, 'secured'); await createOutput(output, secureDirectory);
+    const synthetic = Buffer.from('SYNTHETIC ONLY: not an OAuth credential');
+    const encrypted = await protectCurrentUser(synthetic), decoded = await unprotectCurrentUser(encrypted);
+    assert.notDeepEqual(encrypted, synthetic); assert.deepEqual(decoded, synthetic);
+    decoded.fill(0);
+  } finally { own.cleanup(); }
+});
+test('actual local listener strips code; duplicate/favicon during delayed handoff do not cancel or replay', async () => {
+  const consent = createConsent(client, 'sender@example.test'); let calls = 0, release;
+  const delayed = new Promise(resolve => { release = resolve; });
+  let actions;
+  const flow = listenForConsent(consent, async () => { calls++; await delayed; return 'synthetic-complete'; }, { timeoutMs: 2000, ready: () => {
+    actions = (async () => {
+      const received = await localGet('http://127.0.0.1:53682' + callback(consent).url);
+      assert.equal(received.status, 303); assert.equal(received.headers.location, '/oauth/complete'); assert.ok(!received.body.includes('synthetic-code'));
+      const complete = await localGet('http://127.0.0.1:53682/oauth/complete'); assert.equal(complete.status, 200);
+      assert.equal((await localGet('http://127.0.0.1:53682/favicon.ico')).status, 400);
+      assert.equal((await localGet('http://127.0.0.1:53682' + callback(consent).url)).status, 400);
+      release();
+    })();
+    return actions;
+  } });
+  assert.equal(await flow, 'synthetic-complete'); await actions; assert.equal(calls, 1);
+});
+test('actual local listener rejects bad state before handoff and bounds absent consent', async () => {
+  const consent = createConsent(client, 'sender@example.test'); let calls = 0, readyFinished;
+  const flow = listenForConsent(consent, async () => { calls++; }, { timeoutMs: 100, ready: () => {
+    readyFinished = localGet('http://127.0.0.1:53682/oauth/callback?state=' + 'x'.repeat(43) + '&code=synthetic').then(response => assert.equal(response.status, 400));
+    return readyFinished;
+  } });
+  await assert.rejects(flow, /CONSENT_WAIT_TIMEOUT/u); await readyFinished; assert.equal(calls, 0);
+});
