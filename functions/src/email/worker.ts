@@ -4,7 +4,8 @@ import { getFunctions } from 'firebase-admin/functions';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
 
-import { cloudEmailOrigin, cloudGmailTransport, emailEmulatorRuntime, gmailWorkerSecrets, registrationTokenVault } from './config.js';
+import { cloudEmailOrigin, cloudGmailTransport, gmailWorkerSecrets, registrationTokenVault } from './config.js';
+import { allowedRegistrationEmailIntent, registrationEmailActivation } from './runtime.js';
 import { enqueueEmailTask, processEmailTask } from './task.js';
 
 if (getApps().length === 0) initializeApp();
@@ -15,17 +16,21 @@ export const dispatchRegistrationEmail = onDocumentCreated({
 }, async event => {
   // Local contract/browser tests drive processEmailTask with injected fake Gmail.
   // Never allow an emulator to call cloud Tasks or obtain Gmail credentials.
-  if (emailEmulatorRuntime()) return;
+  const activation = registrationEmailActivation();
+  if (!activation) return;
   if (!event.data?.exists) return;
+  if (!allowedRegistrationEmailIntent(event.data.data(), activation)) return;
   await enqueueEmailTask(getFunctions().taskQueue('locations/' + region + '/functions/deliverEmailTask'),
     { eventId: event.params.eventId, intentId: event.params.intentId });
 });
 
 export const deliverEmailTask = onTaskDispatched({
-  region, timeoutSeconds: 60, secrets: gmailWorkerSecrets,
+  region, timeoutSeconds: 60, invoker: 'private', secrets: gmailWorkerSecrets,
   retryConfig: { maxAttempts: 20, minBackoffSeconds: 120, maxBackoffSeconds: 600, maxDoublings: 3, maxRetrySeconds: 86400 },
   rateLimits: { maxConcurrentDispatches: 2, maxDispatchesPerSecond: 1 },
 }, async request => {
-  if (emailEmulatorRuntime()) throw new Error('Use the injected local email task fixture.');
-  await processEmailTask(request.data, { db: getFirestore(), transport: cloudGmailTransport, vault: registrationTokenVault, origin: cloudEmailOrigin });
+  const activation = registrationEmailActivation();
+  if (!activation) throw new Error('Registration email delivery is disabled.');
+  await processEmailTask(request.data, { db: getFirestore(), transport: cloudGmailTransport, vault: registrationTokenVault, origin: cloudEmailOrigin,
+    allowIntent: intent => allowedRegistrationEmailIntent(intent, activation) });
 });

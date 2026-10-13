@@ -27,10 +27,10 @@ export async function enqueueEmailTask(queue: EmailTaskQueue, data: unknown): Pr
 }
 export async function processEmailTask(data: unknown, deps: {
   db: Firestore; transport: EmailTransport | (() => EmailTransport); vault: TokenVault | (() => TokenVault);
-  origin: string | (() => string); clock?: () => number;
+  origin: string | (() => string); clock?: () => number; allowIntent?: (intent: Record<string, unknown>) => boolean;
 }): Promise<void> {
   const task = emailTask(data);
   const result = await deliverRegistrationEmail(deps.db, deps.db.collection('events').doc(task.eventId).collection('emailIntents').doc(task.intentId),
-    deps.transport, deps.vault, deps.origin, deps.clock);
+    deps.transport, deps.vault, deps.origin, deps.clock, deps.allowIntent);
   if (result === 'busy' || result === 'pending') throw new EmailDeliveryError('provider-unavailable', true);
 }

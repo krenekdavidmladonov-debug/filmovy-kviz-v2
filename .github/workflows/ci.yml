@@ -135,7 +135,7 @@ jobs:
           pnpm exec firebase emulators:exec
           --only auth,firestore,functions
           --project demo-filmovy-kviz-v2
-          "pnpm test:e2e:registration-email && pnpm test:e2e:gmail-delivery && pnpm test:e2e:registration-email-browser && pnpm test:e2e:event-team-email && pnpm test:e2e:event-team-email-browser"
+          "pnpm test:e2e:registration-email && node tools/local-emulator-environment.mjs full tests/e2e/email-activation-emulator.mjs && pnpm test:e2e:gmail-delivery && pnpm test:e2e:registration-email-browser && pnpm test:e2e:event-team-email && pnpm test:e2e:event-team-email-browser"
 
       - name: Interim leaderboard contracts and browser E2E (local emulators only)
         run: >-

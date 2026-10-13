@@ -38,7 +38,8 @@ export async function readProtectedEnvelope<T = TokenEnvelope>(read: () => Promi
 
 // Recipient/content always come from the committed server-owned intent, never a task.
 export async function deliverRegistrationEmail(db: Firestore, ref: DocumentReference, transport: Resolve<EmailTransport>,
-  vault: Resolve<TokenVault>, origin: Resolve<string>, clock: () => number = Date.now) {
+  vault: Resolve<TokenVault>, origin: Resolve<string>, clock: () => number = Date.now,
+  allowIntent?: (intent: Record<string, unknown>) => boolean) {
   if (!/^events\/[^/]+\/emailIntents\/[^/]+$/u.test(ref.path)) throw new Error('Invalid email intent path.');
   const leaseId = randomUUID();
   const claimed = await db.runTransaction(async (transaction) => {
@@ -46,6 +47,7 @@ export async function deliverRegistrationEmail(db: Firestore, ref: DocumentRefer
     if (!event || !eventOperational(event)) return { result: 'unchanged' as const };
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) return { result: 'unchanged' as const };
+    if (allowIntent && !allowIntent(snapshot.data() ?? {})) return { result: 'unchanged' as const };
     const intent = snapshot.data() as EmailIntent;
     if ((event.capabilityVersion ?? 0) !== (intent.capabilityVersion ?? 0)) return { result: 'unchanged' as const };
     if (intent.status === 'sent' || intent.status === 'failed') return { result: 'unchanged' as const };

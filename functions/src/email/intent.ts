@@ -1,7 +1,7 @@
 import { Timestamp, type DocumentReference, type Transaction } from 'firebase-admin/firestore';
 
 import type { RegistrationEmailContent, RegistrationEmailType } from './templates.js';
-import { emailEmulatorRuntime } from './runtime.js';
+import { registrationEmailRecipientEligible } from './runtime.js';
 
 export type DeliveryStatus = 'pending' | 'processing' | 'sent' | 'failed';
 interface EmailIntentState {
@@ -34,7 +34,7 @@ export type EmailIntent = RegistrationEmailIntent | EventTeamEmailIntent;
 // No raw token, full URL, provider body or client-supplied destination enters the audit.
 export function enqueueRegistrationEmail(transaction: Transaction, eventRef: DocumentReference, registrationRef: DocumentReference,
   intentId: string, type: RegistrationEmailType, event: Record<string, unknown>, registration: Record<string, unknown>, now: Timestamp) {
-  if (!emailEmulatorRuntime()) return;
+  if (!registrationEmailRecipientEligible(registration.contactEmail as string)) return;
   const venue = event.venue as { name: string; publicLocation: string };
   const intent: RegistrationEmailIntent = {
     capabilityVersion: Number(event.capabilityVersion ?? 0),

@@ -1,0 +1,48 @@
+# Příprava registration emailu pro V2 staging
+
+`tools/email/activation-plan.mjs` je offline **PREPARATION_ONLY** validator/planner. Nečte credentials, mailbox, OAuth tokeny ani cloud; neprovádí provisioning, IAM, deployment nebo odesílání. Samotná validní struktura stačí pro přípravu. Chybějící skutečné OAuth/config/cloud ověření zůstává v `blockers`; výsledek není ready-to-deploy.
+
+Rozsah je právě `filmovy-kviz-v2-staging`, `europe-west1`, origin `https://filmovy-kviz-v2-staging.web.app` a registration-only jeden vybraný test recipient. Plán navrhuje update `createEventRegistration`, `updateEventRegistration`, `cancelEventRegistration` a additive `dispatchRegistrationEmail` Firestore trigger + private `deliverEmailTask` task worker. Create váže pouze `EMAIL_TOKEN_KEYRING`; worker vyžaduje čtyři pojmenované secrets `EMAIL_TOKEN_KEYRING`, `GMAIL_OAUTH_CLIENT_ID`, `GMAIL_OAUTH_CLIENT_SECRET`, `GMAIL_OAUTH_REFRESH_TOKEN`, jejichž provisioning není ověřen. Cloud inventory musí skutečnou create/update klasifikaci později potvrdit. Team-message callables/intents, historický backfill a inbox přístup jsou vyloučené. Frozen restart manifest se pouze hashuje, nikdy nemění.
+
+Runtime kontrakt souběžné přípravy: default `off` bez email params/secret bindings; explicitní `REGISTRATION_EMAIL_MODE=staging`, `REGISTRATION_EMAIL_ACTIVATED_AT` UTC cutoff a `REGISTRATION_EMAIL_ALLOWED_RECIPIENT` jeden mailbox. Tento planner žádný runtime režim nenastavuje. Cutoff smí být zatím `null`; před konkrétní exekucí musí být nový schválený čas připnut. Nepředpokládá ověřenou mailbox ownership jen z formátu adresy.
+
+## Vstupy a příkaz
+
+Připravte nové ignored `.local-data/...` JSON vstupy a existující prázdný vlastní output directory. CLI nikde osobní selection nevyhledává. `sourceSha` musí odpovídat aktuálnímu HEAD; dirty worktree/artifact nejsou tímto ověřené. Přesné schema bez dalších polí:
+
+```json
+{"sourceSha":"REPLACE_WITH_CURRENT_40_HEX_HEAD","projectId":"filmovy-kviz-v2-staging","region":"europe-west1","publicOrigin":"https://filmovy-kviz-v2-staging.web.app","mode":"staging","activatedAt":null}
+```
+
+Volitelný **explicitní** owner-selection JSON používá již existující closed schema: `schemaVersion,status,recordedAt,source,temporary,dedicatedMailboxPlanned,requestedSenderEmail,verificationRecipientEmail,interpretation,currentTransport,senderAuthorizationVerified,providerConnectionConfigured,deliveryEnabled,containsCredentials`. Verze 1, DRAFT status; poslední čtyři booleany musí být false. Planner převezme pouze requested sender a verification recipient, nikoli osobní poznámky nebo tvrzení autorizace. Žádná kopie vstupu není nutná. Nepřidávat client ID, heslo, keyring, refresh/access token ani secret values. V repozitáři/testech používat jen `example.test`. Planner odmítne cesty mimo `.local-data`, symlinky a credential/secret/token/env filenames. Nečte žádný `.env` ani automaticky původní owner-selection.
+
+```text
+node tools/email/activation-plan.mjs --input .local-data/.../input.json --out .local-data/.../output
+node tools/email/activation-plan.mjs --input .local-data/.../input.json --out .local-data/.../output --owner-selection .local-data/.../owner-selection.json
+node --test tools/email/activation-plan.test.mjs
+```
+
+Node 22. Výstupy jsou výhradně ignored, `wx` bez overwrite. Veřejný `activation-plan.json` obsahuje scope, blocker seznam a input/planner/frozen-manifest hashes; adresy nejsou v něm ani stdout. Volitelný `activation-plan-private.json` obsahuje vybraný sender/recipient, má soukromý file mode a hash ve veřejném plánu. Windows ochranu ACL zajišťuje vlastník privátního QA adresáře; `0600` samotné není příslib ACL. Partial local output při chybě zachovat, použít nový output directory; žádný automatický reset.
+
+## Co musí následovat zvlášť
+
+Lidský OAuth login/consent pouze `gmail.send`, potvrzený sender a přesný test recipient; named secrets `GMAIL_OAUTH_CLIENT_ID`, `GMAIL_OAUTH_CLIENT_SECRET`, `GMAIL_OAUTH_REFRESH_TOKEN`, `EMAIL_TOKEN_KEYRING`. Zachovat staré keyring klíče pro envelopes. Hodnoty do plánu nepatří. Fresh read-only cloud inventory, exact-source artifact/discovery a least-privilege queue/service/secret IAM musí předcházet konkrétnímu návrhu provisioning/deployment; žádný široký allUsers invoker pro worker. Poté samostatný explicitní souhlas pro přesné změny a omezený skutečný send. Planner nemá deployment příkaz ani OAuth server.
+
+Základní transport, outbox, token protection a retry již existují; viz [GMAIL_DELIVERY.md](GMAIL_DELIVERY.md) a [TRANSACTIONAL_EMAIL.md](TRANSACTIONAL_EMAIL.md). Fake-provider/local PASS není skutečný Gmail send. Gmail acceptance není inbox delivery a ztracená odpověď může znamenat duplicate physical message. Příprava nemění dosavadní frozen release ani schválené retained QA.
+
+## Konkrétní návrh rollout, zastavení a smoke
+
+Dosavadní obecný souhlas a výběr adresy se neopakují. Chybějící lidský OAuth consent/config a read-only inventory musí dodat konkrétní podklady pro nový cloudový scope. Následující pořadí je návrh, nikoli oprávnění k exekuci:
+
+1. Připnout nový source SHA/artifact, skutečné verze pěti Functions a secrets, trigger, queue a service identities, invoker/secret IAM a předchozí konfiguraci. Všechny tyto cloudové identity/pointers jsou nyní **UNVERIFIED**; nezaměňovat je s názvy Functions nebo předpokládanou default service account. Připravit přesný provisioning/deployment diff a návratové verze v chráněném receipt, bez hodnot secrets/tokenů.
+2. Předložit konkrétní změny, nový UTC cutoff a omezený smoke níže. Po příslušném schválení nejdříve ověřit nebo zřídit potřebné secrets a privátní queue/IAM; queue ponechat pozastavenou. Jaký přesný queue control a caller mají být použity, musí určit inventory, ne tento dokument.
+3. Nasadit právě pět cílů ze stejného artefaktu: nejdříve private `deliverEmailTask`, potom `dispatchRegistrationEmail`, potom `createEventRegistration`, `updateEventRegistration`, `cancelEventRegistration`. Všech pět musí mít shodný staging mode, cutoff a allowed recipient. Create chrání token keyringem pouze pro allowed recipient; všechny tři callables vytvářejí email intent/summary pouze pro něj. Trigger filtruje tři registration typy a cutoff; worker stejný filtr znovu ověřuje nad aktuálním intentem uvnitř lease transakce před zápisem a lazy secret/provider resolution. Ostatní veřejné registrace dál fungují bez email pending/outbox/envelope. Částečně nasazenou sadu nepovažovat za aktivovanou.
+4. Před obnovením queue read-only ověřit všech pět nasazených verzí/config, privátní worker binding/invoker, přesný trigger a queue/IAM. Až pak řízeně obnovit dispatch a provést schválený smoke; žádné scan/requeue historických intentů. Firestore create trigger není historický backfill.
+
+Při nesouladu nebo neočekávaném příjemci ihned pozastavit přesnou queue a zastavit další testovací změny. Pozastavení neodvolá již dispatchovaný/in-flight task ani zprávu přijatou Gmailem. Následně připravit/nasadit containment konfiguraci `off` pro tutéž pětici: callables neprodukují nové email intenty/envelopes, trigger neenqueueuje a worker nedoručuje. `off` musí být ověřen na skutečných nasazených verzích; lokální změna env/plánu server nezastaví. Off worker odmítá task, takže už rozběhnuté retry může zůstat chybové; queue ponechat paused, dokud nebude zvlášť rozhodnuto o pokračování. Nemazat intenty, receipts, envelopes či secrets a neotáčet/neodstraňovat staré keyring klíče kvůli rollbacku. Návrat na dřívější code/config je oddělený přesný návrh nad zachycenými pointers, nikoli automatický reset nebo replay.
+
+Smoke navrhnout nad jednou novou syntetickou akcí a dvěma syntetickými registracemi s receipt všech server IDs: jedna pro již vybraný recipient, druhá pro `example.test` mimo allowlist. U allowed registrace provést create → jednu skutečnou update → cancel, nejvýše tři zamýšlené zprávy (jedna na typ); pokud bude schválen jen jeden send, omezit online smoke na create a update/cancel ponechat lokálním regresím. U neallowed registrace očekávat úspěšný veřejný create, ale žádný intent/envelope/email summary a žádný send. Skutečná exekuce a případné další obsahové writes musí být součástí konkrétního smoke scope.
+
+Pro každou povolenou zprávu zaznamenat request/receipt identity, intent typ/čas/recipient match jako boolean, aktuální capability epoch, binding na registraci, status a bezpečný provider acceptance identifikátor/hash bez management URL/tokenu či těla. Repeated stejné create requestKey a terminal task replay nesmí vytvořit další intent ani změnit sent stav; fyzický exactly-once send tím neslibovat. No-op update nemá nový intent. Nesprávný recipient, pre-cutoff a team-message task musí zůstat bez lease/status write a bez provider/secret resolution; tuto hranici dokazují lokální fake-provider + skutečné emulator transaction regrese, cloud backfill nebo team-message fixture k tomu nevytvářet. Nakonec ověřit read-only stav queue/intents a předem dohodnuté pokračování nebo containment. Inbox delivery, lidské přečtení a produkční připravenost z tohoto smoke nevyplývají.
+
+Podporovaný sender může být uživatelův consumer Gmail; Workspace není povinný. [Firebase configuration](https://firebase.google.com/docs/functions/config-env) popisuje explicitní secret bindings/runtime konfiguraci; [Google OAuth web-server flow](https://developers.google.com/identity/protocols/oauth2/web-server) vyžaduje lidský consent a offline access pro refresh token. U External aplikace v Testing může refresh token s Gmail scope expirovat po sedmi dnech; [OAuth token expiration](https://developers.google.com/identity/protocols/oauth2) je konkrétní provisioning gate, nikoli údaj potvrzený tímto offline plánem.

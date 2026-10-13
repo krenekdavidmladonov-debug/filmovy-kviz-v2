@@ -129,7 +129,6 @@ test('local inventory authorizes no cloud activity, invitations or email infrast
   assert.equal(manifest.cloudPrerequisites.storage.publicBucketReadsAllowed, false);
   assert.equal(manifest.cloudPrerequisites.storage.cleanupApproved, false);
   assert.deepEqual(manifest.cloudPrerequisites.historicalEventManagementAdditions, events.newCallableFunctions);
-  assert.match(read('functions/src/email/intent.ts'), /if \(!emailEmulatorRuntime\(\)\) return;/u);
-  assert.match(read('functions/src/registrations/callables.ts'), /from '\.\.\/email\/runtime\.js'/u);
-  assert.doesNotMatch(read('functions/src/registrations/callables.ts'), /from '\.\.\/email\/(?:config|worker)\.js'/u);
+  // Runtime default-off and secret bindings are covered by emailActivation.test.ts
+  // and compiled endpoint discovery; source import/guard regexes do not prove them.
 });

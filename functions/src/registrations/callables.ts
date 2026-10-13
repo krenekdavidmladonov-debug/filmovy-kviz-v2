@@ -9,7 +9,7 @@ import { accessActor, securedOnCall, runAccessTransaction } from '../access/auth
 import { buildPublicEventProjection } from '../events/model.js';
 import { enqueueRegistrationEmail } from '../email/intent.js';
 import { emulatorTokenVault, type TokenEnvelope } from '../email/token-vault.js';
-import { emailEmulatorRuntime } from '../email/runtime.js';
+import { emailEmulatorRuntime, registrationEmailActivation, registrationEmailRecipientEligible, registrationEmailSecrets } from '../email/runtime.js';
 import { capacityAfter, effectiveRegistrationStatus, hasCapacity } from './domain.js';
 import type { RegistrationCapacity, RegistrationInput } from './types.js';
 import { manualTeamInput, registrationInput, registrationWindow, requestId, requestToken } from './validation.js';
@@ -190,7 +190,7 @@ export const configureEventRegistration = securedOnCall('configureEventRegistrat
   });
 });
 
-export const createEventRegistration = onCall(callableOptions, async (request) => {
+export const createEventRegistration = onCall({ ...callableOptions, secrets: registrationEmailSecrets() }, async (request) => {
   requirePublicCaller(request.auth);
   const eventId = requestId(request.data, 'eventId');
   const input = registrationInput(request.data);
@@ -199,13 +199,16 @@ export const createEventRegistration = onCall(callableOptions, async (request) =
   // Legacy clients keep the existing unique-name retry behavior.
   const retryKey = record(request.data).requestKey === undefined ? undefined : requestToken({ token: record(request.data).requestKey });
   // The random 256-bit client retry capability derives a one-way management capability.
-  // Cloud email remains disabled: no vault, secret binding, raw token persistence or queued message.
+  // Default-off cloud has no vault or queued message. Explicit staging opt-in binds only the keyring.
   const rawToken = retryKey ? createHash('sha256').update(JSON.stringify(['registration-management-v1', eventId, retryKey])).digest('base64url') : randomBytes(32).toString('base64url');
   const operationRef = retryKey === undefined ? undefined : eventRef.collection('registrationOperations').doc('create_' + tokenHash(retryKey));
   const registrationRef = eventRef.collection('registrations').doc();
   const intentId = randomUUID();
   const intentRef = eventRef.collection('emailIntents').doc(intentId);
-  const vault = emailEmulatorRuntime() ? emulatorTokenVault() : undefined;
+  const activation = registrationEmailActivation();
+  const eligible = registrationEmailRecipientEligible(input.contactEmail);
+  const vault = !eligible ? undefined : activation ? (await import('../email/config.js')).registrationTokenVault()
+    : emailEmulatorRuntime() ? emulatorTokenVault() : undefined;
   const envelope = vault?.seal(rawToken, intentRef.path);
   const fingerprint = tokenHash(JSON.stringify(input));
   const nameRef = eventRef.collection('registrationNames').doc(nameKey(input.normalizedTeamName));
@@ -219,14 +222,15 @@ export const createEventRegistration = onCall(callableOptions, async (request) =
       const saved = await transaction.get(eventRef.collection('registrations').doc(receipt.registrationId as string));
       assertCapability(event.data, record(saved.data()));
       let recovered = rawToken;
-      if (vault) {
+      if (vault || activation) {
         const savedIntentRef = eventRef.collection('emailIntents').doc(receipt.intentId as string);
         const protectedLink = await transaction.get(eventRef.collection('emailSecrets').doc(savedIntentRef.id));
         // Pre-activation receipts have no envelope. Their verified requestKey still
         // derives the original token; an existing malformed envelope must fail closed.
         if (protectedLink.exists) {
           const savedEnvelope = record(protectedLink.data()).envelope as TokenEnvelope;
-          recovered = vault.open(savedEnvelope, savedIntentRef.path);
+          const replayVault = vault ?? (await import('../email/config.js')).registrationTokenVault();
+          recovered = replayVault.open(savedEnvelope, savedIntentRef.path);
         }
       }
       verifyToken(record(saved.data()).managementTokenHash, recovered);

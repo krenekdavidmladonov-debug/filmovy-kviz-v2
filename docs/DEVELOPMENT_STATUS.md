@@ -2,6 +2,21 @@
 
 This is the dated coordination record for resuming Filmový Kvíz V2 / JustKvíz. It supplements the development workflow; it is not release approval or evidence of the current cloud environment. Historical roadmaps and audits must be checked against an exact commit before assigning implementation work.
 
+## Current email activation preparation — 2026-10-13
+
+The owner supplied a replacement Gmail address and explicitly resumed work. Its sender/test-recipient selection remains in the ignored `.local-data/email-activation/owner-selection.json`. Work starts from clean `ef43eb1f1bee517b70cf86b6e4ce95029c8d7aff` on dedicated branch `codex/email-activation-preparation`. The prior completion/paused statements below describe the previous phase.
+
+| Owner | Scope | Acceptance |
+| --- | --- | --- |
+| GPT-6.1 Sol HIGH / `access_candidate_review` | Email runtime/config/intent/worker, registration callable, internal task/delivery guard and new activation unit tests | Default-off without secret/parameter discovery; explicit exact V2 staging opt-in, creation cutoff and one allowed test recipient; registration types only, no old/team backlog; lazy credentials; preserve local fake-provider contracts. |
+| GPT-6.1 Sol MEDIUM / `editor_candidate_review` | Offline `tools/email/activation-plan*`, `docs/EMAIL_ACTIVATION_PLAN.md`; independent HIGH review | A concrete preparation-only plan with exact five target functions and unmet OAuth/queue/configuration prerequisites; explicit private owner-selection input, no secret values or cloud execution. |
+| GPT-6.1 Sol LOW / `release_validation_record` | Read-only risk/test/evidence review | Check legacy team intents, queued tasks, cutoff/retry behavior, source/log bindings and truthful readiness limits. |
+| Lead | Architecture, vitest include, status, isolated runtime orchestration, review and integration | Run relevant unit/plan tests, check, Rules and changed email emulator contracts; preserve prior evidence without unrelated reruns. |
+
+Implementation and independent review are complete. Integrated `pnpm check`, 82 targeted unit tests, 13 offline planner/inventory tests, 50 Rules tests, actual compiled SDK discovery (off 70 / opt-in 5 exports) and four emulator suites / 23 contract groups PASS. [Exact validation](EMAIL_ACTIVATION_VALIDATION.md) binds the source/log hashes and corrected test/orchestration stops. LOW independently verified all 15 source, nine log/result and four orchestration hashes. Existing success outside this scope was reused rather than rerun.
+
+No cloud metadata inspection, deployment, OAuth login, credentials read or real email occurred during this local preparation. The one-recipient staging design is reviewed and locally verified; [the activation plan](EMAIL_ACTIVATION_PLAN.md) defines rollout, off/paused-queue containment and smoke. The remaining human step is actual Google account consent and provisioned sender configuration, not another confirmation of the already supplied address. The lead is recording the local candidate SHA and private offline plan before closing this phase.
+
 ## Current autonomous completion phase — 2026-10-13
 
 The owner explicitly resumed autonomous development after the retained staging phase and asked the lead to use all available worker slots efficiently. Base `4a71cf0a1bf36d5e782a1327db58acb7d011091d`, clean at start; dedicated branch `codex/final-operational-readiness`. Completed staging evidence and expired metadata permissions remain historical and must not be replayed. This new phase closes remaining operational/coverage gaps with synthetic local work and prepares any concrete external prerequisites.

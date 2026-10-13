@@ -1,25 +1,14 @@
-import { defineSecret, defineString } from 'firebase-functions/params';
 import { HttpsError } from 'firebase-functions/v2/https';
 
 import { EmailDeliveryError } from './errors.js';
 import { GmailEmailTransport } from './gmail.js';
 import { createTokenVault, emulatorTokenVault, type TokenVault } from './token-vault.js';
+import { emailEmulatorRuntime, EMAIL_KEYRING_SECRET, registrationEmailActivation } from './runtime.js';
 
-export const emailKeyring: ReturnType<typeof defineSecret> = defineSecret('EMAIL_TOKEN_KEYRING');
-const clientId = defineSecret('GMAIL_OAUTH_CLIENT_ID');
-const clientSecret = defineSecret('GMAIL_OAUTH_CLIENT_SECRET');
-const refreshToken = defineSecret('GMAIL_OAUTH_REFRESH_TOKEN');
-const sender = defineString('GMAIL_SENDER_EMAIL', { default: '' });
-const replyTo = defineString('GMAIL_REPLY_TO', { default: '' });
-const linkOrigin = defineString('EMAIL_PUBLIC_ORIGIN', { default: '' });
-
-export function emailEmulatorRuntime(): boolean {
-  return process.env.FUNCTIONS_EMULATOR === 'true' || Boolean(process.env.FIRESTORE_EMULATOR_HOST)
-    || (process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT ?? '').startsWith('demo-');
-}
-// Local Functions discovery never resolves actual Secret Manager values.
-export const registrationEmailSecrets: ReturnType<typeof defineSecret>[] = emailEmulatorRuntime() ? [] : [emailKeyring];
-export const gmailWorkerSecrets: ReturnType<typeof defineSecret>[] = emailEmulatorRuntime() ? [] : [emailKeyring, clientId, clientSecret, refreshToken];
+export { emailEmulatorRuntime } from './runtime.js';
+// String bindings are supported by Functions v2; values are read only at invocation.
+export const gmailWorkerSecrets: string[] = registrationEmailActivation()
+  ? [EMAIL_KEYRING_SECRET, 'GMAIL_OAUTH_CLIENT_ID', 'GMAIL_OAUTH_CLIENT_SECRET', 'GMAIL_OAUTH_REFRESH_TOKEN'] : [];
 
 export function keyringVault(serialized: string): TokenVault {
   try {
@@ -44,18 +33,19 @@ export function keyringVault(serialized: string): TokenVault {
 export function registrationTokenVault(): TokenVault {
   try {
     if (emailEmulatorRuntime()) return emulatorTokenVault();
-    return keyringVault(emailKeyring.value());
+    if (!registrationEmailActivation()) throw new Error();
+    return keyringVault(process.env.EMAIL_TOKEN_KEYRING ?? '');
   } catch { throw new HttpsError('failed-precondition', 'Registration email link protection is not configured.'); }
 }
 
 export function cloudEmailOrigin(): string {
   // Only the existing V2 staging surface is prepared in this slice. No V1 target.
-  if (emailEmulatorRuntime() || linkOrigin.value() !== 'https://filmovy-kviz-v2-staging.web.app') throw new EmailDeliveryError('configuration-invalid', false);
-  return linkOrigin.value();
+  if (!registrationEmailActivation() || process.env.EMAIL_PUBLIC_ORIGIN !== 'https://filmovy-kviz-v2-staging.web.app') throw new EmailDeliveryError('configuration-invalid', false);
+  return process.env.EMAIL_PUBLIC_ORIGIN;
 }
 
 export function cloudGmailTransport(): GmailEmailTransport {
-  if (emailEmulatorRuntime()) throw new EmailDeliveryError('configuration-invalid', false);
-  return new GmailEmailTransport({ clientId: clientId.value(), clientSecret: clientSecret.value(), refreshToken: refreshToken.value(),
-    sender: sender.value(), replyTo: replyTo.value(), projectId: process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT ?? '' }, fetch);
+  if (!registrationEmailActivation()) throw new EmailDeliveryError('configuration-invalid', false);
+  return new GmailEmailTransport({ clientId: process.env.GMAIL_OAUTH_CLIENT_ID ?? '', clientSecret: process.env.GMAIL_OAUTH_CLIENT_SECRET ?? '', refreshToken: process.env.GMAIL_OAUTH_REFRESH_TOKEN ?? '',
+    sender: process.env.GMAIL_SENDER_EMAIL ?? '', replyTo: process.env.GMAIL_REPLY_TO ?? '', projectId: process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT ?? '' }, fetch);
 }
