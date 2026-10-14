@@ -58,7 +58,9 @@
     "test:e2e:media": "node tools/local-emulator-environment.mjs full tests/e2e/media-emulator.mjs",
     "test:e2e:media-browser": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/media-storage.config.ts",
     "test:e2e:complete-editor": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/complete-editor.config.ts",
-    "test:e2e:complete-editor-performance": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/complete-editor-performance.config.ts"
+    "test:e2e:complete-editor-performance": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/complete-editor-performance.config.ts",
+    "test:e2e:whole-evening": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/whole-evening-design.config.ts",
+    "test:e2e:whole-evening-performance": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/whole-evening-performance.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

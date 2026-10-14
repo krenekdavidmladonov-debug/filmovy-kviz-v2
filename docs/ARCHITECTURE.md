@@ -77,6 +77,8 @@ The PDF Print Center adds `/admin/events/:eventId/print` and a binary HTTPS Func
 
 ## Firebase services
 
+Whole-evening visual authoring adds bounded quiz/round/slide design inheritance and frozen result/print templates to these same boundaries. The moderator preview consumes the actual public payload; questions, scores and results retain their original authoritative sources. See [WHOLE_EVENING_DESIGN.md](WHOLE_EVENING_DESIGN.md).
+
 - Authentication: staff sign-in; authorization through current server-managed membership, permissions and resource scopes.
 - Firestore: operational and public projection data.
 - Storage: quiz media, with metadata/access controlled by Firestore and Rules.

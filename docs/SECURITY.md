@@ -12,6 +12,8 @@
 
 ## Preventing answer leakage
 
+Visual metadata follows the same boundary: `answerDesign` is private answer content and is merged into the public design only on explicit reveal. Public design/result copy uses bounded allowlists; unknown private extensions and private print templates are never published. Owned design images require current publication and existing quiz/media permissions. The full contract is in [WHOLE_EVENING_DESIGN.md](WHOLE_EVENING_DESIGN.md).
+
 The projector reads only one `publicSessions/{sessionId}` document. The trusted `buildPublicSessionState` allowlist builds this projection from private quiz data. In ordinary question mode it copies only explicitly safe title/text/options, normalized visual media, and presentation controls; AUDIO source is omitted entirely. In explicit recap mode it adds only the selected question's display-form `revealedAnswer` and allowed answer image—not the private slide or question. Hiding an answer in React state, CSS, a network response, an error, or an unread UI branch is not acceptable.
 
 The projector ignores inbound BroadcastChannel presentation state entirely. Only Firestore may supply a slide or an explicitly reviewed interim-results page. The projector rejects cache-only data, stale revisions and foreign sessions, invalidates old callbacks, and performs a fresh server read on reconnect. Channel player lifecycle reports contain only session ID, generation and an allowlisted state; authenticated staff and the trusted Function still validate them.

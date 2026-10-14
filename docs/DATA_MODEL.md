@@ -29,6 +29,8 @@ Quiz readiness is intentionally not stored on this document. `PreflightResult` i
 
 ### `quizzes/{quizId}/slides/{slideId}`
 
+Optional `defaultDesign`, `resultTemplates` and `printTemplate` on the quiz root are validated visual metadata, frozen into each event snapshot. Slide `design` and private `answerDesign` contain sparse overrides. Round-header design is also maintained on its derived round document for bounded live reads. Optional `hidden` is restricted to standalone information slides. Details and compatibility rules: [WHOLE_EVENING_DESIGN.md](WHOLE_EVENING_DESIGN.md).
+
 Private, globally ordered presentation source. It preserves every V1 slide, including non-question intro, agenda, recap, round content, and end slides. Fields include `position`, `kind`, `isQuestion`, title/text, options, classified media, presentation controls, optional `roundId`, moderator-only fields, and private `legacy.raw`. A private `correctAnswer` may be present for question slides. Public and projector clients never read this collection directly.
 
 The separate slide stream is intentionally lossless, presentation-oriented, and authoritative for editor order. The nested rounds/questions remain an operational projection for the library and future scoring logic. The editor derives its round-first facade rather than migrating this stream. Trusted slide, round, and question Functions refresh known derived fields after every structural mutation while merge-preserving private legacy extensions.
