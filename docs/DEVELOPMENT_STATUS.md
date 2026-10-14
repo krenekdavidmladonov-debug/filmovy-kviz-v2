@@ -2,7 +2,20 @@
 
 This is the dated coordination record for resuming Filmový Kvíz V2 / JustKvíz. It supplements the development workflow; it is not release approval or evidence of the current cloud environment. Historical roadmaps and audits must be checked against an exact commit before assigning implementation work.
 
-## Current three-worker continuation — 2026-10-13
+## Current OAuth continuation — 2026-10-14
+
+The owner requested that the lead resolve the Google callback blocker, finish emails and use three disjoint workers. Work resumed from clean `faa9f05914b89fe1f6fdfec1bdbdc4077e6d34dc`; tested/published runtime candidate `819f351` and its successful CI remain unchanged. No repeated full checks or new OAuth attempt occurred.
+
+| Owner | Bounded assignment | Result |
+| --- | --- | --- |
+| GPT-6.1 Sol MEDIUM / `oauth_callback_readiness` | Read-only helper inspection and synthetic reachability-probe design | Existing `/oauth/complete` does not prove the exact callback path. Designed a separate 120-second HTTP listener with no credential inputs, OAuth imports or token exchange; only the exact bare callback GET succeeds and query-bearing requests are refused without logging inputs. |
+| GPT-6.1 Sol HIGH / `email_activation_inventory` | Retained metadata inspection; ignored exact-resource read plan only | Three existing service pointers and one shared runtime identity are recorded. `.local-data/email-activation/resume-20261014/inventory-plan.json`, SHA256 `9042ff3eaaa22cc3bb4e240fece5c2b2e6f5412fa0ef1fa10709fd458bd69233`, proposes nine new metadata reads and five separately gated prewrite freshness reads. No cloud requests were executed; unavailable Tasks/Secrets are excluded and new identities remain unknown. |
+| GPT-6.1 Sol LOW / `email_delivery_acceptance` | Read-only source/acceptance review | Found and corrected a documentation-only mismatch: Gmail validates but does not persist the provider response ID. Smoke must use safe delivery state and recipient confirmation, not promise an unavailable provider-ID receipt or expand inbox/profile scope. Lead verified the source before updating the execution document. |
+| Lead | Browser diagnostics, integration and handoff | First synthetic listener was unreachable from the browser/local HTTP check; navigation reported `ERR_CONNECTION_TIMED_OUT`. A separately bounded host listener then passed its local self-check. Browser attachment timed out; Windows Computer Use subsequently stopped because it could not determine the current browser URL confidently enough to enforce policy. No workaround or further UI action followed. |
+
+The host self-check does **not** establish Chrome reachability or removal of the historical `ERR_BLOCKED_BY_CLIENT`. Both synthetic listeners terminated normally with `LOCAL_PROBE_STOPPED`; the host session exited 0. They neither accepted OAuth parameters nor read credentials. No grant, sender identity proof, infrastructure change, deployment or send exists from this continuation. The user was asked only to report the visible error code or `LOCAL_CALLBACK_REACHABLE` from the new bare-loopback tab, never its full URL. Await that answer; the diagnostic listener has expired, so a later connection-refused page alone cannot diagnose the original block. Reconcile normal permitted browser access before one fresh bounded consent. All three assignments are complete and the heartbeat is kept PAUSED, without repeated UI attempts or successful tests.
+
+## Previous three-worker continuation — 2026-10-13
 
 The owner explicitly resumed work with all three workers. The lead reused the existing agents and clean `e418eab0b774027e866f4989c9929c0cb787aa9e`, created `codex/activation-execution-readiness`, and preserved all prior worktrees, retained QA and frozen deployment. No duplicate OAuth setup or successful full test suite was assigned.
 

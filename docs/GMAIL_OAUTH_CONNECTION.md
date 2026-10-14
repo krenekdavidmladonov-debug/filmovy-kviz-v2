@@ -4,7 +4,13 @@ Integrated helper commit: **`585fcbd80e2f7c881c10feac268a18693feff5f7`**. Eviden
 
 Source baseline: `108f3deb9b4132f8de860b61dcb6ed2159e4f391`, branch `codex/gmail-oauth-connection`. [oauth-connect.mjs](../tools/email/oauth-connect.mjs) prepares or performs one operator consent exchange; it does not send mail, read an inbox, provision secrets or deploy. Continue under the concrete scope in [EMAIL_ACTIVATION_PLAN.md](EMAIL_ACTIVATION_PLAN.md).
 
-## Current handoff — 2026-10-13
+## Current diagnostic handoff — 2026-10-14
+
+The owner resumed callback diagnosis. A standalone 120-second synthetic listener accepted only the bare approved callback path and used no credentials, OAuth code/state parsing or token exchange. The initial sandbox probe was unreachable and browser navigation returned `ERR_CONNECTION_TIMED_OUT`; the subsequent ordinary host listener passed its own local HTTP check. Browser attachment timed out, and Windows Computer Use then stopped because it could not confidently determine the current browser URL to enforce policy. No further UI action or alternative route was used after that stop. Both listeners have terminated normally. Browser reachability and resolution of the old block remain unverified; no fresh consent was started.
+
+The user has been asked to report only the visible error code or `LOCAL_CALLBACK_REACHABLE` on the new bare-loopback tab. The diagnostic listener is now stopped, so reloading later may show connection-refused even if the earlier block differs. Do not infer success or repeat probes/consent automatically. Await the report, establish normal supported browser access, then use the preserved client for one fresh bounded consent. The three workers' preparation and precise remaining evidence are in [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md#current-oauth-continuation--2026-10-14).
+
+## Previous handoff — 2026-10-13
 
 After explicit owner policy approval and manual handoff, the OAuth app **JustKvíz staging** was created, Gmail API enabled, and the Web client **JustKvíz staging – Gmail** created with the sole redirect `http://127.0.0.1:53682/oauth/callback`. External/Testing has one selected test user and only `gmail.send`; the console confirmed the saved scope. The client JSON was captured from the exact user-supplied download, validated, stored under Windows DPAPI CurrentUser with owner-only ACL and successfully read back. After byte-for-byte digest verification of the decrypted copy, the task-created plaintext download was removed. No credentials are committed.
 
