@@ -64,7 +64,7 @@ export function createApiEnablePolicy(approval, operatorReference, now = Date.no
     // A projected response contract; the future adapter must validate HTTP
     // success and map the real Operation without leaking provider error text.
     closed(value, ['name', 'done', 'failed']);
-    need(typeof value.name === 'string' && /^operations\/[A-Za-z0-9][A-Za-z0-9_-]{0,199}$/u.test(value.name), 'API_POLICY_OPERATION');
+    need(typeof value.name === 'string' && /^operations\/[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/u.test(value.name), 'API_POLICY_OPERATION');
     need(typeof value.done === 'boolean' && typeof value.failed === 'boolean'
       && !value.failed, 'API_POLICY_OPERATION');
     need(state.operation === null || state.operation === value.name, 'API_POLICY_OPERATION');

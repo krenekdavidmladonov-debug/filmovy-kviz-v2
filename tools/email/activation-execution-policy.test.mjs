@@ -28,7 +28,8 @@ test('exact two enablements require fresh reads, bound operation and enabled rea
   const policy = create();
   for (const [index, service] of API_SERVICES.entries()) {
     enable(policy, service, NOW + index * 10_000);
-    const operation = `operations/synthetic-${index}`;
+    // Service Usage returns opaque single-segment IDs including a literal dot.
+    const operation = `operations/acf.p2-177615774316-synthetic-${index}`;
     policy.acceptOperation(service, {name:operation, done:false, failed:false}, NOW + index * 10_000);
     const at = NOW + index * 10_000 + 5000;
     assert.equal(policy.authorize(request('GET', 'https://serviceusage.googleapis.com/v1/' + operation), at).kind, 'operation-read');
@@ -96,6 +97,8 @@ test('operation pointers are only admitted after enable and cannot expand or cha
   const premature = create();
   assert.throws(() => premature.acceptOperation(service, {name:'operations/synthetic', done:true, failed:false}, NOW), /API_POLICY_PHASE/u);
   for (const bad of [{name:'operations/../foreign', done:false, failed:false},
+    {name:'operations/..', done:false, failed:false}, {name:'operations/acf.p2/foreign', done:false, failed:false},
+    {name:'operations/acf%2ep2', done:false, failed:false},
     {name:'https://foreign.test/operations/id', done:false, failed:false},
     {name:'operations/id?query=1', done:false, failed:false}, {name:'operations/id', done:true, failed:true},
     {name:'operations/id', done:true, failed:false, extra:'synthetic-provider-error'}]) {
