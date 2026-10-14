@@ -67,7 +67,8 @@ export function consumeCallback(request, consent) {
     && !request.url.includes('#') && !/%(?![a-fA-F0-9]{2})/u.test(request.url), 'CALLBACK_REQUEST_INVALID');
   const params = new URL(request.url, REDIRECT).searchParams;
   const keys = [...params.keys()];
-  need(new Set(keys).size === keys.length && keys.every(key => ['state', 'code', 'scope', 'authuser', 'prompt', 'error'].includes(key)), 'CALLBACK_FIELDS_INVALID');
+  need(new Set(keys).size === keys.length && keys.every(key => ['state', 'code', 'scope', 'authuser', 'prompt', 'error', 'iss'].includes(key)), 'CALLBACK_FIELDS_INVALID');
+  need(!params.has('iss') || params.get('iss') === 'https://accounts.google.com', 'CALLBACK_ISSUER_INVALID');
   const state = params.get('state');
   need(typeof state === 'string' && /^[A-Za-z0-9_-]{43}$/u.test(state) && state.length === consent.state.length
     && timingSafeEqual(Buffer.from(state), Buffer.from(consent.state)), 'CALLBACK_STATE_INVALID');

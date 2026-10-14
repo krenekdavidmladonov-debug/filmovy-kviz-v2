@@ -59,6 +59,36 @@ test('only one exact valid callback can consume a code', () => {
   assert.equal(consumeCallback(callback(consent), consent), 'synthetic-code');
   assert.throws(() => consumeCallback(callback(consent), consent), /CALLBACK_ALREADY_CONSUMED/u);
 });
+test('Google issuer is optional but must match exactly before consuming a callback', () => {
+  for (const suffix of ['', '&iss=https%3A%2F%2Faccounts.google.com']) {
+    const consent = createConsent(client, 'sender@example.test');
+    assert.equal(consumeCallback({ ...callback(consent), url: callback(consent).url + suffix }, consent), 'synthetic-code');
+    assert.equal(consent.consumed, true);
+  }
+  for (const issuer of ['', 'https://foreign.test', 'http://accounts.google.com', 'https://accounts.google.com/',
+    'https://ACCOUNTS.google.com', 'https://accounts.google.com?x=1', 'https://accounts.google.com#fragment']) {
+    const consent = createConsent(client, 'sender@example.test');
+    assert.throws(() => consumeCallback({ ...callback(consent), url: callback(consent).url + '&iss=' + encodeURIComponent(issuer) }, consent),
+      /^Error: CALLBACK_ISSUER_INVALID$/u);
+    assert.equal(consent.consumed, false);
+  }
+  const consent = createConsent(client, 'sender@example.test');
+  assert.throws(() => consumeCallback({ ...callback(consent), url: callback(consent).url +
+    '&iss=https%3A%2F%2Faccounts.google.com&iss=https%3A%2F%2Faccounts.google.com' }, consent), /^Error: CALLBACK_FIELDS_INVALID$/u);
+  assert.equal(consent.consumed, false);
+});
+test('valid Google issuer cannot bypass state or scope and denial never yields a code', () => {
+  for (const patch of [{ state: 'x'.repeat(43), scope: SCOPE }, { scope: 'openid' }]) {
+    const consent = createConsent(client, 'sender@example.test');
+    const url = '/oauth/callback?' + new URLSearchParams({ state: consent.state, code: 'synthetic-code', iss: 'https://accounts.google.com', ...patch });
+    assert.throws(() => consumeCallback({ ...callback(consent), url }, consent));
+    assert.equal(consent.consumed, false);
+  }
+  const consent = createConsent(client, 'sender@example.test');
+  const url = '/oauth/callback?' + new URLSearchParams({ state: consent.state, error: 'access_denied', iss: 'https://accounts.google.com' });
+  assert.throws(() => consumeCallback({ ...callback(consent), url }, consent), /^Error: CONSENT_NOT_COMPLETED$/u);
+  assert.equal(consent.consumed, true);
+});
 test('wrong state, host, method, duplicate query, body, foreign path and malformed encoding cannot consume or exchange', () => {
   for (const patch of [ { method: 'POST' }, { headers: { host: 'foreign.test' } }, { rawHeaders: ['Host', '127.0.0.1:53682', 'Host', 'foreign.test'] },
     { headers: { host: '127.0.0.1:53682', 'content-length': '0' } }, { headers: { host: '127.0.0.1:53682', 'transfer-encoding': 'chunked' } } ]) {
@@ -214,6 +244,32 @@ test('actual local listener strips code; duplicate/favicon during delayed handof
   } });
   assert.equal(await flow, 'synthetic-complete'); await actions; assert.equal(calls, 1);
 });
+test('actual local listener rejects invalid issuer then hands off Google issuer exactly once', async () => {
+  const consent = createConsent(client, 'sender@example.test'); let calls = 0, release, actions;
+  const delayed = new Promise(resolve => { release = resolve; });
+  const statuses = [];
+  const acceptedUrl = 'http://127.0.0.1:53682' + callback(consent).url + '&iss=https%3A%2F%2Faccounts.google.com&scope=' + encodeURIComponent(SCOPE);
+  const flow = listenForConsent(consent, async () => { calls++; await delayed; return 'synthetic-complete'; }, {
+    timeoutMs: 2000, onCallback: status => statuses.push(status), ready: () => {
+      actions = (async () => {
+        for (const suffix of ['&iss=', '&iss=https%3A%2F%2Fforeign.test', '&iss=https%3A%2F%2Faccounts.google.com%2F',
+          '&iss=https%3A%2F%2Faccounts.google.com&iss=https%3A%2F%2Faccounts.google.com']) {
+          const rejected = await localGet('http://127.0.0.1:53682' + callback(consent).url + suffix);
+          assert.equal(rejected.status, 400); assert.equal(rejected.body, 'Callback refused.');
+          assert.equal(calls, 0); assert.equal(consent.consumed, false);
+        }
+        const accepted = await localGet(acceptedUrl);
+        assert.equal(accepted.status, 303); assert.equal(accepted.headers.location, '/oauth/complete');
+        assert.ok(!accepted.body.includes('synthetic-code'));
+        assert.equal((await localGet(acceptedUrl)).status, 400);
+        release();
+      })();
+      return actions;
+    }
+  });
+  assert.equal(await flow, 'synthetic-complete'); await actions;
+  assert.equal(calls, 1); assert.deepEqual(statuses, ['REJECTED', 'ACCEPTED']);
+});
 test('actual local listener rejects bad state before handoff and bounds absent consent', async () => {
   const consent = createConsent(client, 'sender@example.test'); let calls = 0, readyFinished; const statuses = [];
   const flow = listenForConsent(consent, async () => { calls++; }, { timeoutMs: 100, ready: () => {
@@ -252,7 +308,7 @@ test('a rejected callback can be followed by one accepted handoff; denial is dis
       onCallback: status => statuses.push(status), ready: () => {
         actions = (async () => {
           await localGet('http://127.0.0.1:53682/oauth/callback?state=' + 'x'.repeat(43) + '&code=synthetic');
-          const url = denied ? '/oauth/callback?' + new URLSearchParams({ state: consent.state, error: 'sensitive-provider-error' }) : callback(consent).url;
+          const url = denied ? '/oauth/callback?' + new URLSearchParams({ state: consent.state, error: 'sensitive-provider-error', iss: 'https://accounts.google.com' }) : callback(consent).url;
           assert.equal((await localGet('http://127.0.0.1:53682' + url)).status, 303);
         })(); return actions;
       } });
