@@ -20,6 +20,7 @@ export function EditorOutline({
   onCreateQuestion,
   onAddRound,
   onAddClosing,
+  onAddInfo,
   onMove,
 }: {
   readonly model: SemanticQuizModel;
@@ -33,6 +34,7 @@ export function EditorOutline({
   readonly onCreateQuestion: (round: SemanticRound, type: CreatableQuestionType) => void;
   readonly onAddRound: () => void;
   readonly onAddClosing?: () => void;
+  readonly onAddInfo?: () => void;
   readonly onMove: (id: string, roundId: string | undefined, beforeId?: string) => Promise<boolean>;
 }) {
   const dragged = useRef<string | null>(null);
@@ -71,12 +73,19 @@ export function EditorOutline({
         <button type="button" className={`outline-root-button ${selected('quiz')}`} onClick={() => onSelect('quiz')}>Základní údaje</button>
       </header>
       <span className="outline-move-status" role="status" aria-live="polite">{announcement}</span>
+      <details className="outline-section"><summary>Celé pořadí promítání</summary><ol className="presentation-outline">{[...model.slideById.values()].sort((a, b) => a.position - b.position).map(slide => {
+        const round = model.rounds.find(item => item.settingsSlide?.id === slide.id);
+        const key = round ? `round:${round.id}` : `slide:${slide.id}`;
+        const section = model.introduction.find(item => item.slide?.id === slide.id);
+        const selection = section ? `system:${section.key}` : key;
+        return <li key={slide.id}><button type="button" className={`outline-system-item ${selected(selection)}`} onClick={() => onSelect(selection)}><span>{slide.position}. {slide.isQuestion ? questionSummary(slide) : slide.title || (round ? 'Úvod kola' : slide.kind === 'recap' ? 'Rekapitulace' : section?.label ?? 'Informační slide')}</span>{slide.hidden && <small>Skryté</small>}</button></li>;
+      })}</ol></details>
 
       <section className="outline-section">
         <h2>Úvod kvízu</h2>
         {model.introduction.map((section) => (
           <button key={section.key} type="button" className={`outline-system-item ${selected(`system:${section.key}`)}`} onClick={() => onSelect(`system:${section.key}`)}>
-            <span>{section.label}</span>{section.generated && <small>Automaticky</small>}
+            <span>{section.label}</span>{section.generated && (section.key !== 'agenda' || section.slide?.automaticAgenda === true) && <small>Automaticky</small>}
           </button>
         ))}
       </section>
@@ -88,7 +97,7 @@ export function EditorOutline({
             <summary onDragOver={event => {
               if (round.id !== 'roundless') { allowDrop(event, `end:${round.id}`); event.currentTarget.parentElement?.setAttribute('open', ''); }
             }} onDrop={event => { event.preventDefault(); if (dragged.current && round.id !== 'roundless') void move(dragged.current, round.id); }}><span>{round.position}. kolo</span><strong>{round.title}</strong><small>{round.questions.length} otázek</small></summary>
-            <button type="button" className={`outline-system-item ${selected(`round:${round.id}`)}`} onClick={() => onSelect(`round:${round.id}`)}>Nastavení kola</button>
+            <button type="button" className={`outline-system-item ${selected(`round:${round.id}`)}`} onClick={() => onSelect(`round:${round.id}`)}>Úvod a vzhled kola</button>
             <ol>
               {round.questions.map((question, index) => {
                 const key = `slide:${question.slide.id}`;
@@ -147,7 +156,7 @@ export function EditorOutline({
               <button key={recap.id} type="button" className={`outline-system-item ${selected(`slide:${recap.id}`)}`} onClick={() => onSelect(`slide:${recap.id}`)}>Rekapitulace</button>
             ))}
             {round.otherSystemSlides.map((slide) => (
-              <button key={slide.id} type="button" className={`outline-system-item legacy ${selected(`slide:${slide.id}`)}`} onClick={() => onSelect(`slide:${slide.id}`)}>Starší nastavení kola</button>
+              <button key={slide.id} type="button" className={`outline-system-item ${selected(`slide:${slide.id}`)}`} onClick={() => onSelect(`slide:${slide.id}`)}>{slide.title || 'Informační slide'}</button>
             ))}
             {round.id === 'roundless'
               ? <p className="field-help">Otázky bez kola lze přesunout do existujícího kola.</p>
@@ -165,12 +174,19 @@ export function EditorOutline({
         ))}
       </section>
 
+      {onAddInfo && <button type="button" className="secondary-button" disabled={disabled} onClick={onAddInfo}>+ Informační slide / přestávka</button>}
+      <section className="outline-section">
+        <h2>Výsledkové obrazovky</h2>
+        <button type="button" className={`outline-system-item ${selected('results:interim')}`} onClick={() => onSelect('results:interim')}>Průběžné pořadí · šablona</button>
+        <button type="button" className={`outline-system-item ${selected('results:final')}`} onClick={() => onSelect('results:final')}>Finální vyhlášení · šablona</button>
+        <p className="field-help">Moderátor je zobrazí po publikaci výsledků.</p>
+      </section>
       {model.closing.length === 0 && onAddClosing && <button type="button" className="secondary-button" disabled={disabled} onClick={onAddClosing}>+ Závěrečná obrazovka</button>}
       {(model.closing.length > 0 || model.legacy.length > 0) && (
         <section className="outline-section">
           <h2>Závěr a starší obsah</h2>
           {model.closing.map((slide) => <button key={slide.id} type="button" className={`outline-system-item ${selected(`slide:${slide.id}`)}`} onClick={() => onSelect(`slide:${slide.id}`)}>Závěr kvízu</button>)}
-          {model.legacy.map((slide) => <button key={slide.id} type="button" className={`outline-system-item legacy ${selected(`slide:${slide.id}`)}`} onClick={() => onSelect(`slide:${slide.id}`)}>Starší obsah</button>)}
+          {model.legacy.map((slide) => <button key={slide.id} type="button" className={`outline-system-item ${selected(`slide:${slide.id}`)}`} onClick={() => onSelect(`slide:${slide.id}`)}>{slide.title || 'Informační slide'}</button>)}
         </section>
       )}
     </aside>

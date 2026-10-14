@@ -50,3 +50,27 @@ it('does not recreate an acknowledged new item when a later metadata write fails
   const saved = await saveEditorEntries(base, { draft: { draft: slide('new'), dirtySlide: true, dirtyRound: false, roundTitle: '', pendingCreate: { position: 3, semanticKey: 'draft' } } }, metadata, ops);
   expect(saved.created).toEqual({ draft: 'created' }); expect(saved.remaining).toEqual({}); expect(saved.quiz.slides.some(s => s.id === 'created')).toBe(true);
 });
+
+it('acknowledges shared design, results and print templates together without changing slide overrides', async () => {
+  const ops = operations();
+  const updateMetadata = vi.fn(() => Promise.resolve(result(8)));
+  const metadata = { title: 'Quiz', description: '', appearance: { backgroundImage: '', backgroundOverlay: 0, imageLayout: 'split' as const }, defaultDesign: { accentColor: '#f3b33d' }, resultTemplates: { final: { title: 'Naši vítězové', design: { fontScale: 1.2 } } }, printTemplate: { title: 'Hrací list' } };
+  const local = { ...base, slides: [{ ...slide('a'), design: { accentColor: '#ffffff' } }, slide('b')] };
+  const saved = await saveEditorEntries(local, {}, metadata, { ...ops, updateMetadata });
+  expect(updateMetadata.mock.calls[0]).toEqual(['quiz', 7, 'Quiz', '', metadata.appearance, metadata.defaultDesign, metadata.resultTemplates, metadata.printTemplate]);
+  expect(saved.quiz.defaultDesign).toEqual(metadata.defaultDesign);
+  expect(saved.quiz.resultTemplates).toEqual(metadata.resultTemplates);
+  expect(saved.quiz.printTemplate).toEqual(metadata.printTemplate);
+  expect(saved.quiz.slides[0]?.design).toEqual({ accentColor: '#ffffff' });
+  expect(saved.metadataPending).toBe(false);
+});
+
+it('creates a missing round introduction with the existing round identity', async () => {
+  const createSlide = vi.fn(() => Promise.resolve(result(8, 'new-header')));
+  const draft = { ...slide('header'), kind: 'round' as const, storedKind: 'round', isQuestion: false, roundId: 'existing-round', title: 'Moje kolo', correctAnswer: '' };
+  const entry = { draft, dirtySlide: true, dirtyRound: false, roundTitle: 'Moje kolo', roundId: 'existing-round', pendingCreate: { position: 1, semanticKey: 'round:existing-round' } };
+  const saved = await saveEditorEntries(base, { 'round:existing-round': entry }, null, { ...operations(), createSlide });
+  expect(createSlide.mock.calls[0]).toEqual(['quiz', 7, 1, draft, undefined, 'existing-round']);
+  expect(saved.created['round:existing-round']).toBe('new-header');
+  expect(saved.remaining).toEqual({});
+});

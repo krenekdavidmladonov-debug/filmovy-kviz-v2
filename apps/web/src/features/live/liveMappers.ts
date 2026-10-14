@@ -1,4 +1,5 @@
 import { parseFinalPage } from '../final-reveal/types';
+import { normalizeSlideDesign } from '@filmovy-kviz/quiz-domain';
 import { parseResultPage } from '../leaderboard/types';
 import type { DocumentData } from 'firebase/firestore';
 
@@ -135,6 +136,9 @@ export function mapLiveControlState(id: string, data: DocumentData): LiveControl
 
 export function mapLiveControlSlide(id: string, data: DocumentData): LiveControlSlide {
   return {
+    ...(data.hidden === true ? { hidden: true } : {}),
+    ...(object(data.design) ? { design: normalizeSlideDesign(data.design) } : {}),
+    ...(object(data.answerDesign) ? { answerDesign: normalizeSlideDesign(data.answerDesign) } : {}),
     id,
     position: requiredNumber(data, 'position'),
     kind: requiredString(data, 'kind'),
@@ -166,6 +170,9 @@ export function mapPublicLiveState(id: string, data: DocumentData): PublicLiveSt
   if ((data.interimResults || data.finalReveal) && (data.status !== "active" || data.answerRevealed || data.mediaPlaybackState !== "idle" || data.revealedAnswer || data.recapQuestionPosition || data.mediaSource)) throw new Error("Unsafe result presentation.");
   if (data.finalReveal && data.interimResults) throw new Error("Conflicting result presentation.");
   return {
+    ...(object(data.design) ? { design: normalizeSlideDesign(data.design) } : {}),
+    ...(optionalString(data, 'roundTitle') === undefined ? {} : { roundTitle: optionalString(data, 'roundTitle') }),
+    ...(optionalString(data, 'subtitle') === undefined ? {} : { subtitle: optionalString(data, 'subtitle') }),
     sessionId: id,
     ...(data.finalReveal === undefined ? {} : { finalReveal: parseFinalPage(data.finalReveal) }),
     quizTitle: requiredString(data, 'quizTitle'),

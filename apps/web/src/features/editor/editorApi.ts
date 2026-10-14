@@ -1,7 +1,7 @@
 import { FunctionsError, httpsCallable } from 'firebase/functions';
 
 import { getFirebaseServices } from '../../services/firebase/client';
-import type { EditorAppearance } from '@filmovy-kviz/quiz-domain';
+import type { EditorAppearance, SlideDesign, ResultTemplates, PrintTemplate } from '@filmovy-kviz/quiz-domain';
 import type { EditorMutationResponse, EditorSlide } from './types';
 
 export const staleEditorMessage = 'Kvíz byl mezitím změněn v jiném okně. Načtěte prosím aktuální verzi a své změny zopakujte.';
@@ -13,6 +13,11 @@ function callable(name: string) {
 function slidePayload(slide: EditorSlide) {
   return {
     kind: slide.kind,
+    ...(slide.resetAppearance === true ? { resetAppearance: true } : {}),
+    ...(slide.hidden === undefined ? {} : { hidden: slide.hidden }),
+    ...(slide.design === undefined ? {} : { design: slide.design }),
+    ...(slide.answerDesign === undefined ? {} : { answerDesign: slide.answerDesign }),
+    ...(slide.automaticAgenda === undefined ? {} : { automaticAgenda: slide.automaticAgenda }),
     ...(slide.authoringStatus === undefined ? {} : { authoringStatus: slide.authoringStatus }),
     ...(slide.answerMode === undefined ? {} : { answerMode: slide.answerMode }),
     ...(slide.imageLayout === undefined ? {} : { imageLayout: slide.imageLayout }),
@@ -48,8 +53,8 @@ async function invoke(name: string, data: Record<string, unknown>): Promise<Edit
 export const createQuiz = (title: string, requestId: string) => (
   invoke('createQuiz', { title, requestId })
 );
-export const updateQuizMetadata = (quizId: string, revision: number, title: string, description: string, defaultAppearance?: EditorAppearance) => (
-  invoke('updateQuizMetadata', { quizId, expectedRevision: revision, quiz: { title, description, ...(defaultAppearance === undefined ? {} : { defaultAppearance }) } })
+export const updateQuizMetadata = (quizId: string, revision: number, title: string, description: string, defaultAppearance?: EditorAppearance, defaultDesign?: SlideDesign, resultTemplates?: ResultTemplates, printTemplate?: PrintTemplate) => (
+  invoke('updateQuizMetadata', { quizId, expectedRevision: revision, quiz: { title, description, ...(defaultAppearance === undefined ? {} : { defaultAppearance }), ...(defaultDesign === undefined ? {} : { defaultDesign }), ...(resultTemplates === undefined ? {} : { resultTemplates }), ...(printTemplate === undefined ? {} : { printTemplate }) } })
 );
 export const updateQuizSlide = (quizId: string, revision: number, slide: EditorSlide) => (
   invoke('updateQuizSlide', { quizId, slideId: slide.id, expectedRevision: revision, slide: slidePayload(slide) })
@@ -68,8 +73,8 @@ export const repairQuizVideoTiming = (
 ) => invoke('repairQuizPreflightIssue', {
   quizId, slideId, expectedRevision: revision, kind: 'video-timing', clipStartSeconds, clipEndSeconds,
 });
-export const createQuizSlide = (quizId: string, revision: number, position: number, slide: EditorSlide, scope?: 'quiz') => (
-  invoke('createQuizSlide', { quizId, expectedRevision: revision, position, slide: slidePayload(slide), ...(scope === undefined ? {} : { scope }) })
+export const createQuizSlide = (quizId: string, revision: number, position: number, slide: EditorSlide, scope?: 'quiz', roundId?: string) => (
+  invoke('createQuizSlide', { quizId, expectedRevision: revision, position, slide: slidePayload(slide), ...(scope === undefined ? {} : { scope }), ...(roundId === undefined ? {} : { roundId }) })
 );
 export const duplicateQuizSlide = (quizId: string, revision: number, slideId: string) => (
   invoke('duplicateQuizSlide', { quizId, slideId, expectedRevision: revision })

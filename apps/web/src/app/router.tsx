@@ -17,6 +17,7 @@ import { AdminShell } from './AdminShell';
 import { AppLayout } from './AppLayout';
 import { AccountPage } from '../routes/AccountPage';
 import { UsersAccessPage } from '../routes/admin/UsersAccessPage';
+import { AdminSettingsPage } from '../routes/admin/AdminSettingsPage';
 import '../styles/access.css';
 
 const ProjectorPage = lazy(async () => {
@@ -43,6 +44,7 @@ export const router = createBrowserRouter([
         element: <AdminShell />,
         children: [
           { index: true, element: <AdminPage /> },
+          { path: 'settings', element: <AdminSettingsPage /> },
           { path: 'users', element: <PermissionGate requires={['users.manage']}><UsersAccessPage /></PermissionGate> },
           { path: 'quizzes', lazy: lazyAdminRoute(() => import('../routes/admin/QuizLibraryPage').then(module => module.QuizLibraryPage), ['quiz.read']) },
           { path: 'quizzes/new', lazy: lazyAdminRoute(() => import('../routes/admin/QuizCreatePage').then(module => module.QuizCreatePage), ['quiz.create']) },

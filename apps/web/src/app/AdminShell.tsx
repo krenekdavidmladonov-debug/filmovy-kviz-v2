@@ -5,18 +5,19 @@ import { useAuth } from '../auth/AuthProvider';
 import { roleLabels } from '@filmovy-kviz/quiz-domain';
 import { productConfig } from '../config/product';
 import { Brand } from '../ui/Brand';
+import { EventNavigation } from '../features/events/EventNavigation';
 
 const navigation = [
-  { to: '/admin', label: 'Přehled', end: true },
   { to: '/admin/quizzes', label: 'Kvízy', end: false },
   { to: '/admin/events', label: 'Akce', end: false },
+  { to: '/admin/settings', label: 'Nastavení', end: false },
 ] as const;
 
 function AdminNavigation() {
   const { can } = useAuth();
   return (
     <nav className="admin-navigation" aria-label="Administrace">
-      {navigation.filter(item => item.to === '/admin' || (item.to === '/admin/quizzes' ? can('quiz.read') : can('event.read'))).map((item) => (
+      {navigation.filter(item => item.to === '/admin/settings' || (item.to === '/admin/quizzes' ? can('quiz.read') : can('event.read'))).map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
@@ -27,8 +28,6 @@ function AdminNavigation() {
           {item.label}
         </NavLink>
       ))}
-      {can('users.manage') && <NavLink className="admin-nav-link" to="/admin/users">Uživatelé a přístupy</NavLink>}
-      <NavLink className="admin-nav-link" to="/account">Můj účet</NavLink>
     </nav>
   );
 }
@@ -95,6 +94,7 @@ export function AdminShell() {
       <main className="admin-main" id="main-content">
         <div className="admin-content">
           {isStaging && <p role="note" className="admin-environment-note">Pro zkoušení používejte pouze smyšlená data.</p>}
+          <EventNavigation />
           <Outlet />
         </div>
       </main>

@@ -1,3 +1,7 @@
+import { resolveSlideDesign, resolveLegacySlideAppearance, type SlideDesign, type ResultTemplates, type PrintTemplate } from '@filmovy-kviz/quiz-domain';
+import { SlideDesignFields, legacySlideDesign } from '../../features/editor/SlideDesignFields';
+import { ResultTemplatePreview } from '../../features/editor/ResultTemplatePreview';
+import { PrintTemplateFields } from '../../features/print/PrintTemplateFields';
 import { QuizPractice } from '../../features/editor/QuizPractice';
 import { MediaAuthoringContext } from '../../features/media/MediaUploadField';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -24,6 +28,7 @@ import {
   duplicateQuizSlide,
   moveQuizQuestionToRound,
   moveQuizRound,
+  moveQuizSlide,
   removeQuizRound,
   reorderQuizQuestion,
   staleEditorMessage,
@@ -110,7 +115,7 @@ function newQuestionDraft(type: CreatableQuestionType, round: SemanticRound): Ed
 
 function systemDraft(key: string, model: SemanticQuizModel, position: number): EditorSlide {
   if (key === 'rules') return localDraft('rules', position, { options: [...defaultRules] });
-  if (key === 'agenda') return localDraft('agenda', position, { options: generatedAgendaOptions(model.rounds) });
+  if (key === 'agenda') return localDraft('agenda', position, { automaticAgenda: true, options: generatedAgendaOptions(model.rounds) });
   return localDraft('intro', position);
 }
 
@@ -156,6 +161,9 @@ export function QuizEditorPage() {
   const [description, setDescription] = useState('');
   const [appearance, setAppearance] = useState<import('@filmovy-kviz/quiz-domain').EditorAppearance>(initialAppearance);
   const [roundTitle, setRoundTitle] = useState('');
+  const [defaultDesign, setDefaultDesign] = useState<SlideDesign>({});
+  const [resultTemplates, setResultTemplates] = useState<ResultTemplates>({});
+  const [printTemplate, setPrintTemplate] = useState<PrintTemplate>({});
   const [dirtySlide, setDirtySlide] = useState(false);
   const [dirtyQuiz, setDirtyQuiz] = useState(false);
   const [dirtyRound, setDirtyRound] = useState(false);
@@ -180,6 +188,8 @@ export function QuizEditorPage() {
   const uploadPending = useRef(false);
   const onUploadPending = useCallback((pending: boolean) => { uploadPending.current = pending; setUploading(pending); }, []);
   const [saveFailed, setSaveFailed] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  useEffect(() => { setLastSavedAt(null); }, [quizId, readOnly]);
   const [error, setError] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const handledDeepLink = useRef<string | undefined>(undefined);
@@ -227,6 +237,9 @@ export function QuizEditorPage() {
       setTitle(loaded.title);
       setDescription(loaded.description);
       setAppearance(loaded.defaultAppearance ?? initialAppearance);
+      setDefaultDesign(loaded.defaultDesign ?? {});
+      setResultTemplates(loaded.resultTemplates ?? {});
+      setPrintTemplate(loaded.printTemplate ?? {});
       setSelectedKey(preferredSlideId === undefined ? preferredKey : selectionForSlide(preferredSlideId, model, preferredKey));
       setDirtySlide(false);
       setDirtyQuiz(false);
@@ -288,7 +301,7 @@ export function QuizEditorPage() {
     setTouched(new Set());
     setShowReadiness(false);
     setPendingCreate(null);
-    if (selectedKey === 'quiz') {
+    if (selectedKey === 'quiz' || selectedKey.startsWith('results:')) {
       setDraft(null);
       setRoundTitle('');
       return;
@@ -301,14 +314,17 @@ export function QuizEditorPage() {
         const previous = semantic.introduction.slice(0, ['opening','agenda','rules'].indexOf(key)).flatMap(item => item.slide ? [item.slide.position] : []);
         const position = previous.length ? Math.max(...previous) + 1 : 1;
         setDraft(systemDraft(key, semantic, position));
-        if (key !== 'agenda') setPendingCreate({ position, semanticKey: selectedKey });
+        setPendingCreate({ position, semanticKey: selectedKey });
       }
       setRoundTitle('');
       return;
     }
     if (selectedKey.startsWith('round:')) {
       const round = roundForSelection(selectedKey, semantic);
-      setDraft(round?.settingsSlide ?? null);
+      if (round !== undefined && round.id !== 'roundless' && round.settingsSlide === undefined) {
+        setDraft(localDraft('round', round.firstPosition, { roundId: round.id, roundTitle: round.title, title: round.title }));
+        setPendingCreate({ position: round.firstPosition, semanticKey: selectedKey });
+      } else setDraft(round?.settingsSlide ?? null);
       setRoundTitle(round?.title ?? '');
       return;
     }
@@ -367,7 +383,7 @@ export function QuizEditorPage() {
     if (dirtyQuiz && title.trim() === '') { setError('Název kvízu nesmí být prázdný.'); return null; }
     savePending.current = true; setSaving(true); setError(null); setSaveFailed(false);
     try {
-      const result = await saveEditorEntries(quiz, entries, dirtyQuiz ? { title, description, appearance } : null, {
+      const result = await saveEditorEntries(quiz, entries, dirtyQuiz ? { title, description, appearance, defaultDesign, resultTemplates, printTemplate } : null, {
         updateSlide: updateQuizSlide, createSlide: createQuizSlide,
         updateRound: updateQuizRound, updateMetadata: updateQuizMetadata,
       });
@@ -380,16 +396,19 @@ export function QuizEditorPage() {
       if (selectedKey === 'draft' && result.created[selectedKey]) setSelectedKey(`slide:${result.created[selectedKey]}`);
       if (result.error !== null) {
         setSaveFailed(true);
-        setError((result.acknowledged > 0 ? 'Část změn je uložená. Zbývající změny zůstávají rozepsané. ' : '') + safeErrorMessage(result.error));
+        const remainingScopes = Object.values(result.remaining).map(entry => entry.dirtyRound ? `kolo ${entry.roundTitle || 'bez názvu'}` : entry.draft?.text || entry.draft?.title || 'slide bez názvu').map(label => label.length > 65 ? label.slice(0, 62) + '…' : label);
+        if (result.metadataPending) remainingScopes.push('společný vzhled, údaje kvízu a šablony');
+        setError((result.acknowledged > 0 ? 'Část změn je uložená. ' : '') + `Zbývá uložit: ${remainingScopes.join('; ')}. ` + safeErrorMessage(result.error));
         requestAnimationFrame(() => errorRef.current?.focus()); return null;
       }
+      if (result.acknowledged > 0) setLastSavedAt(new Date());
       const createdId = result.created[selectedKey];
       const key = pendingCreate?.semanticKey ?? afterKey;
       const refreshed = await reload(key, pendingCreate?.semanticKey.startsWith('system:') ? undefined : createdId);
       if (refreshed === null) setError('Změny jsou uložené, ale nový náhled se nepodařilo načíst. Obnovte stránku.');
       return refreshed ?? result.quiz;
     } finally { savePending.current = false; setSaving(false); }
-  }, [appearance, can, description, dirtyQuiz, dirtyRound, dirtySlide, draft, pendingCreate, quiz, readOnly, reload, roundTitle, selectedKey, selectedRoundForDraft, semantic, setParked, title]);
+  }, [appearance, defaultDesign, resultTemplates, printTemplate, can, description, dirtyQuiz, dirtyRound, dirtySlide, draft, pendingCreate, quiz, readOnly, reload, roundTitle, selectedKey, selectedRoundForDraft, semantic, setParked, title]);
 
   useEffect(() => {
     const keyboardSave = (event: KeyboardEvent) => {
@@ -407,6 +426,9 @@ export function QuizEditorPage() {
     setTitle(quiz.title);
     setDescription(quiz.description);
     setAppearance(quiz.defaultAppearance ?? initialAppearance);
+    setDefaultDesign(quiz.defaultDesign ?? {});
+    setResultTemplates(quiz.resultTemplates ?? {});
+    setPrintTemplate(quiz.printTemplate ?? {});
     setDirtySlide(false);
     setDirtyQuiz(false);
     setDirtyRound(false);
@@ -516,10 +538,16 @@ export function QuizEditorPage() {
   const selectedSection = selectedKey.startsWith('system:')
     ? semantic.introduction.find((item) => item.key === selectedKey.slice('system:'.length))
     : undefined;
-  const previewBase = draft ?? selectedRound?.settingsSlide ?? semantic.introduction.find((item) => item.slide)?.slide ?? quiz.slides[0];
-  const previewSlide = selectedSection?.key === 'agenda' && previewBase !== undefined
-    ? { ...previewBase, kind: 'agenda' as const, storedKind: 'agenda', options: generatedAgendaOptions(semantic.rounds) }
-    : previewBase;
+  const selectedTemplate = selectedKey.startsWith('results:') ? selectedKey.slice('results:'.length) as 'interim' | 'final' : undefined;
+  const template = selectedTemplate ? resultTemplates[selectedTemplate] : undefined;
+  const inheritedRound = selectedRound === undefined ? undefined : (parked[`round:${selectedRound.id}`]?.draft ?? selectedRound.settingsSlide)?.design;
+  const inheritedDesign = resolveSlideDesign(defaultDesign, selectedKey.startsWith('round:') ? undefined : inheritedRound);
+  const previewBase = selectedTemplate ? localDraft('end', 0, { title: template?.title ?? (selectedTemplate === 'final' ? 'Finální výsledky' : 'Průběžné pořadí'), text: template?.subtitle ?? 'Pořadí a body se doplní z publikovaných výsledků.', ...(template?.design ? { design: template.design } : {}) }) : draft ?? selectedRound?.settingsSlide ?? semantic.introduction.find((item) => item.slide)?.slide ?? quiz.slides[0];
+  const previewSlide = previewBase === undefined ? undefined : {
+    ...previewBase, ...resolveLegacySlideAppearance(appearance, previewBase), design: resolveSlideDesign(defaultDesign, selectedKey.startsWith('round:') || selectedTemplate ? undefined : inheritedRound, previewBase.design),
+    ...(selectedKey.startsWith('round:') && dirtyRound ? { title: roundTitle } : {}),
+    ...(selectedSection?.key === 'agenda' && previewBase.automaticAgenda === true ? { options: generatedAgendaOptions(semantic.rounds) } : {}),
+  };
   const saveLabel = uploading ? 'Nejdřív dokončete nahrávání média.' : editorSaveLabels[editorSaveStatus(dirty, saving, saveFailed)];
   const structuralDisabled = readOnly || saving || dirty || uploading;
   const navigationAsDraft = draft?.isQuestion === true && (draft.authoringStatus === 'draft' || hasSaveBlockingIssues(draft, quiz.slides.find(slide => slide.id === draft.id), !can('quiz.answers.read')));
@@ -569,6 +597,7 @@ export function QuizEditorPage() {
         <div className="round-editor-save">
           {readOnly && <span className="read-only-badge">Pouze pro čtení</span>}
           <span className={`save-state ${dirty ? 'dirty' : ''} ${saveFailed ? 'failed' : ''}`} role="status" aria-live="polite">{saveLabel}</span>
+          {!dirty && !saving && !saveFailed && lastSavedAt && <time className="working-copy-count" dateTime={lastSavedAt.toISOString()}>Vše uloženo v {lastSavedAt.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })}</time>}
           {dirty && <span className="working-copy-count">Rozpracované položky: {new Set([...Object.keys(parked), ...(dirtySlide || dirtyRound ? [selectedKey] : []), ...(dirtyQuiz ? ['quiz'] : [])]).size}</span>}
           <button type="button" className="secondary-button preflight-header-button" onClick={() => setPreflightOpen((value) => !value)}>Zkontrolovat kvíz</button><button type="button" ref={practiceButtonRef} className="secondary-button practice-button" disabled={dirty || saving || uploading || (preflightResult?.blockerCount ?? 1) > 0} onClick={() => setPracticing(true)}>Soukromá zkouška</button>
           <button type="button" className="primary-button" disabled={readOnly || saving || uploading || !dirty} onClick={() => void saveAll()}>Uložit vše</button>
@@ -621,6 +650,7 @@ export function QuizEditorPage() {
             setShowReadiness(false);
             setActivePanel('content');
           }}
+          onAddInfo={() => void mutate(current => createQuizSlide(current.id, current.revision, current.slideCount + 1, localDraft('info', current.slideCount + 1, { title: 'Organizační sdělení', text: 'Napište oznámení, poděkování nebo pokyny k přestávce.' }), 'quiz'))}
           onAddClosing={() => void mutate(current => createQuizSlide(current.id, current.revision, current.slideCount + 1, localDraft('end', current.slideCount + 1, { title: 'Děkujeme za hru' }), 'quiz'))}
           onAddRound={() => {
             void mutate(current => createQuizRound(current.id, current.revision, `Nové ${semantic.rounds.length + 1}. kolo`));
@@ -633,14 +663,23 @@ export function QuizEditorPage() {
               onTitle={(value) => { setTitle(value); setDirtyQuiz(true); }}
               onDescription={(value) => { setDescription(value); setDirtyQuiz(true); }} />
           )}
+          {selectedKey === 'quiz' && <SlideDesignFields scope="quiz" value={defaultDesign} disabled={readOnly || saving || uploading} onChange={value => { setDefaultDesign(value); setDirtyQuiz(true); }} />}
+          {selectedKey === 'quiz' && <details className="editor-extra"><summary>Tiskové materiály</summary><PrintTemplateFields quizId={quiz.id} value={printTemplate} disabled={readOnly || saving || uploading} onChange={value => { setPrintTemplate(value); setDirtyQuiz(true); }} /></details>}
+          {selectedTemplate && <section className="editor-form-stack">
+            <header className="content-form-heading"><span>Šablona výsledků</span><h2>{selectedTemplate === 'final' ? 'Finální vyhlášení' : 'Průběžné pořadí'}</h2></header>
+            <p className="field-help">Názvy týmů, body a pořadí doplní aplikace z publikovaných výsledků. Zde připravujete jejich vzhled.</p>
+            <label className="form-field">Nadpis<input disabled={readOnly || saving} maxLength={500} value={template?.title ?? ''} placeholder={selectedTemplate === 'final' ? 'Finální výsledky' : 'Průběžné pořadí'} onChange={event => { setResultTemplates({ ...resultTemplates, [selectedTemplate]: { ...template, title: event.target.value } }); setDirtyQuiz(true); }} /></label>
+            <label className="form-field">Doprovodný text<textarea disabled={readOnly || saving} maxLength={2000} value={template?.subtitle ?? ''} onChange={event => { setResultTemplates({ ...resultTemplates, [selectedTemplate]: { ...template, subtitle: event.target.value } }); setDirtyQuiz(true); }} /></label>
+            <SlideDesignFields scope="results" value={template?.design ?? {}} inherited={defaultDesign} disabled={readOnly || saving || uploading} onChange={value => { setResultTemplates({ ...resultTemplates, [selectedTemplate]: { ...template, design: value } }); setDirtyQuiz(true); }} />
+          </section>}
           {selectedSection !== undefined && draft !== null && draft.id === (selectedSection.slide?.id ?? `local-${selectedSection.key === 'opening' ? 'intro' : selectedSection.key}`) && (
             <SystemSectionForm section={selectedSection} slide={draft} model={semantic} disabled={readOnly || saving}
               onChange={(value) => { setDraft(value); setDirtySlide(true); }} />
           )}
-          {selectedKey.startsWith('round:') && selectedRound !== undefined && draft?.id === selectedRound.settingsSlide?.id && (
+          {selectedKey.startsWith('round:') && selectedRound !== undefined && (draft?.id === selectedRound.settingsSlide?.id || draft?.roundId === selectedRound.id) && (
             <>
               <RoundSettingsForm round={selectedRound} title={roundTitle} slide={draft ?? undefined} disabled={readOnly || saving}
-                onTitle={(value) => { setRoundTitle(value); setDirtyRound(true); }}
+                onTitle={(value) => { setRoundTitle(value); setDirtyRound(true); if (draft?.id === 'local-round') { setDraft({ ...draft, title: value }); setDirtySlide(true); } }}
                 onChange={(value) => { setDraft(value); setDirtySlide(true); }} />
               {selectedRound.id !== 'roundless' ? <div className="semantic-actions round-actions">
                 <button type="button" className="secondary-button" disabled={structuralDisabled || selectedRound.position === 1} onClick={() => void mutate((current) => moveQuizRound(current.id, current.revision, selectedRound.id, -1), `round:${selectedRound.id}`)}>Přesunout nahoru</button>
@@ -685,17 +724,26 @@ export function QuizEditorPage() {
           {draft !== null && !draft.isQuestion && !selectedKey.startsWith('system:') && !selectedKey.startsWith('round:') && (
             <SystemContentForm slide={draft} disabled={readOnly || saving} onChange={(value) => { setDraft(value); setDirtySlide(true); }} />
           )}
+          {draft !== null && <details className="editor-extra" open={!draft.isQuestion}><summary>Vzhled {selectedKey.startsWith('round:') ? 'celého kola' : 'slidu'}</summary><SlideDesignFields scope={selectedKey.startsWith('round:') ? 'round' : 'slide'} value={draft.design ?? {}} legacy={legacySlideDesign({ ...draft, ...resolveLegacySlideAppearance(appearance, draft) })} legacyResetAvailable={Boolean(draft.backgroundImage) || (draft.backgroundOverlay ?? draft.presentation.backgroundOverlay ?? 0) > 0 || draft.imageLayout !== undefined} inherited={inheritedDesign} disabled={readOnly || saving || uploading} onChange={value => { setDraft({ ...draft, design: value }); setDirtySlide(true); }} onReset={() => { setDraft({ ...draft, design: {}, resetAppearance: true, backgroundImage: '', backgroundOverlay: null, imageLayout: undefined, presentation: { ...draft.presentation, backgroundOverlay: null } }); setDirtySlide(true); }} /></details>}
+          {draft?.isQuestion && can('quiz.answers.read') && <details className="editor-extra"><summary>Vzhled odhalené odpovědi</summary><SlideDesignFields scope="answer" value={draft.answerDesign ?? {}} inherited={resolveSlideDesign(legacySlideDesign(draft), inheritedDesign, draft.design)} disabled={readOnly || saving || uploading || !can('quiz.answers.edit')} onChange={value => { setDraft({ ...draft, answerDesign: value }); setDirtySlide(true); }} /></details>}
+          {draft !== null && !draft.isQuestion && ['info', 'end', 'title'].includes(draft.kind) && !pendingCreate && <div className="semantic-actions">
+            <button type="button" className="secondary-button" disabled={structuralDisabled} onClick={() => void mutate(current => duplicateQuizSlide(current.id, current.revision, draft.id))}>Duplikovat slide</button>
+            <button type="button" className="secondary-button" disabled={structuralDisabled || draft.position <= 1} onClick={() => void mutate(current => moveQuizSlide(current.id, current.revision, draft.id, -1))}>Posunout před předchozí slide</button>
+            <button type="button" className="secondary-button" disabled={structuralDisabled || draft.position >= quiz.slideCount} onClick={() => void mutate(current => moveQuizSlide(current.id, current.revision, draft.id, 1))}>Posunout za následující slide</button>
+            <button type="button" className="danger-button" disabled={structuralDisabled || !can('quiz.delete') || quiz.slideCount <= 1} onClick={() => { if (window.confirm('Odstranit tento informační slide?')) void mutate(current => deleteQuizSlide(current.id, current.revision, draft.id)); }}>Odstranit slide</button>
+          </div>}
+          {draft !== null && !draft.isQuestion && !draft.roundId && ['intro', 'agenda', 'rules', 'end', 'title', 'info'].includes(draft.kind) && <label className="binary-answer"><input type="checkbox" checked={draft.hidden === true} disabled={readOnly || saving} onChange={event => { setDraft({ ...draft, hidden: event.target.checked }); setDirtySlide(true); }} /> Skrýt při moderování <span className="field-help">Obsah zůstane uložený, průběh jej přeskočí.</span></label>}
           {showReadiness && draft?.isQuestion && <ReadinessSummary slide={draft} />}
           {dirty && <p className="structure-save-hint">Strukturální operace budou dostupné po uložení nebo zahození rozepsaných změn.</p>}
         </main>
 
-        {previewSlide === undefined ? (
+        {selectedTemplate ? <ResultTemplatePreview key={selectedTemplate} kind={selectedTemplate} template={{ ...template, design: resolveSlideDesign(defaultDesign, undefined, template?.design) }} onEdit={() => setActivePanel('content')} /> : previewSlide === undefined ? (
           <aside className="round-editor-preview editor-panel-preview editor-empty-preview">
             <header className="preview-heading"><span>Náhled</span><strong>Zatím není co promítnout</strong></header>
             <p>Nejdřív přidejte kolo a otázku. Prázdný rozpracovaný kvíz zůstává bezpečně uložený.</p>
           </aside>
         ) : (
-          <EditorPreview slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer && can('quiz.answers.read')} onShowAnswer={value => { if (can('quiz.answers.read')) setShowAnswer(value); }} />
+          <EditorPreview onEdit={() => { setActivePanel('content'); requestAnimationFrame(() => document.querySelector<HTMLElement>('.round-editor-content input, .round-editor-content textarea, .round-editor-content summary')?.focus()); }} slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer && can('quiz.answers.read')} onShowAnswer={value => { if (can('quiz.answers.read')) setShowAnswer(value); }} />
         )}
       </section>
     </article></MediaAuthoringContext.Provider>

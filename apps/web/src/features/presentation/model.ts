@@ -1,3 +1,4 @@
+import { normalizeSlideDesign } from '@filmovy-kviz/quiz-domain';
 import type {
   MediaPlaybackCommand,
   MediaPlaybackState,
@@ -87,6 +88,7 @@ export function buildSlideRenderModel(
   requestedMode?: SlideRenderMode,
 ): NormalizedSlideRenderModel {
   const kind = contentKind(input.kind);
+  const design = normalizeSlideDesign(input.design) ?? {};
   const numbers = questionNumbers(input);
   const presentationStart = finiteNonNegative(input.presentation?.clipStartSeconds)
     ?? finiteNonNegative(input.presentation?.videoStart);
@@ -99,17 +101,19 @@ export function buildSlideRenderModel(
   const promptAudio = mediaSource(input.media, 'prompt', 'audio');
   const promptVideo = mediaSource(input.media, 'prompt', 'video');
   const fallbackMedia = kind === 'audio' ? promptAudio : kind === 'video' ? promptVideo : undefined;
-  const backgroundOverlay = clampOverlay(input.backgroundOverlay ?? input.presentation?.backgroundOverlay);
+  const backgroundOverlay = clampOverlay(design.backgroundOverlay ?? input.backgroundOverlay ?? input.presentation?.backgroundOverlay);
   const isQuestionLike = ['question', 'free', 'image', 'audio', 'video', 'pl'].includes(kind);
   return {
+    design,
+    ...(input.roundTitle === undefined ? {} : { roundTitle: input.roundTitle }),
     contentKind: kind,
     renderMode: requestedMode ?? modeForKind(kind),
     title: input.title,
     text: input.text,
     options: input.options,
     ...numbers,
-    ...(input.backgroundImage ?? mediaSource(input.media, 'background', 'image')
-      ? { backgroundImage: input.backgroundImage ?? mediaSource(input.media, 'background', 'image') }
+    ...(design.backgroundImage ?? input.backgroundImage ?? mediaSource(input.media, 'background', 'image')
+      ? { backgroundImage: design.backgroundImage ?? input.backgroundImage ?? mediaSource(input.media, 'background', 'image') }
       : {}),
     ...(input.questionImage ?? (kind === 'image' ? promptImage : undefined)
       ? { questionImage: input.questionImage ?? promptImage }

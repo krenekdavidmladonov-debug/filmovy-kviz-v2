@@ -11,7 +11,7 @@ import { QuizErrorState } from '../../features/quizzes/QuizErrorState';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
 
 const ARTIFACTS = [
-  { type: 'team-sheets', title: 'Hrací archy', description: 'Čisté archy pro ruční odpovědi týmů.' },
+  { type: 'team-sheets', title: 'Hrací archy', description: 'A4 odpovědní listy s prostorem pro psaní a označením týmu na každé straně.' },
   { type: 'answer-key', title: 'Klíč odpovědí', description: 'Privátní přehled správných odpovědí pro administrátora.' },
   { type: 'score-table', title: 'Bodovací tabulka', description: 'Tabulka kol, půlbodů a celkového součtu.' },
 ] as const;
@@ -111,13 +111,15 @@ export function AdminPrintCenterPage() {
         <section className="print-workspace">
           <div className="event-section print-settings">
             <div><p className="eyebrow">Nastavení</p><h2>{ARTIFACTS.find((artifact) => artifact.type === artifactType)?.title}</h2></div>
+            <p className="event-muted">Nadpis, pokyny, patičku, logo a hustotu archů nastavíte v editoru kvízu. PDF přebírá vzhled uložený při přípravě této akce.</p>
+            <p className="event-muted">Tiskněte na A4 v měřítku 100 %. Bílé pozadí a jemné linky zůstávají čitelné i černobíle.</p>
             {artifactType === 'team-sheets' && <fieldset className="print-mode"><legend>Varianta archu</legend>{([
               ['generic', 'Obecný arch'], ['single', 'Jeden tým'], ['all', 'Všechny týmy'],
             ] as const).map(([value, label]) => <label key={value}><input type="radio" name="team-mode" value={value} checked={teamMode === value} onChange={() => { setTeamMode(value); clearPreview(); }} /> {label}</label>)}</fieldset>}
             {artifactType === 'team-sheets' && teamMode === 'single' && <label className="editor-field"><span>Tým</span><select value={teamId} onChange={(change) => { setTeamId(change.target.value); clearPreview(); }}><option value="">Vyberte přijatý tým</option>{registrations.map((team) => <option key={team.id} value={team.id}>{team.teamName}</option>)}</select></label>}
             {(artifactType === 'score-table' || (artifactType === 'team-sheets' && teamMode === 'all')) && <p className="event-muted">Server použije {teamCount} přijatých týmů. Zrušené týmy a kontaktní e-maily do PDF nevstupují.</p>}
             {artifactType === 'answer-key' && <p className="print-private-note">Privátní dokument. Odpovědi načte server ze snapshotu a browser je nikdy neposílá.</p>}
-            {formInvalid && <p className="round-editor-error" role="alert">Zadejte 1 až 30 týmů, každý na samostatný řádek.</p>}
+            {formInvalid && <p className="round-editor-error" role="alert">{teamMode === 'single' && artifactType === 'team-sheets' ? 'Vyberte přijatý tým.' : 'Pro tuto variantu je potřeba 1 až 30 přijatých týmů.'}</p>}
             {generationError && <p className="round-editor-error" role="alert">{generationError}</p>}
             <button className="primary-button" type="button" disabled={pending || formInvalid} onClick={() => void generate()}>{pending ? 'Generuji PDF…' : preview ? 'Obnovit náhled' : 'Vytvořit náhled'}</button>
           </div>

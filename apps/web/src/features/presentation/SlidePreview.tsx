@@ -1,9 +1,13 @@
 import { SlideRenderer } from './SlideRenderer';
+import { resolveSlideDesign, type SlideDesign } from '@filmovy-kviz/quiz-domain';
 import type { SlideMediaReference, SlidePresentationInput } from './types';
 
 export type PreviewMedia = SlideMediaReference;
 
 export interface PreviewSlide {
+  readonly design?: SlideDesign;
+  readonly answerDesign?: SlideDesign;
+  readonly roundTitle?: string;
   readonly kind: string;
   readonly title: string;
   readonly text: string;
@@ -40,9 +44,10 @@ export function SlidePreview({
       <SlideRenderer
         compact
         quizTitle={quizTitle}
-        mode={showAnswer ? 'recap' : 'editorPreview'}
+        {...(showAnswer ? { mode: 'recap' as const } : {})}
         slide={{
           ...slide,
+          design: resolveSlideDesign(undefined, undefined, slide.design, slide.answerDesign, showAnswer),
           ...(showAnswer && slide.correctAnswer ? { revealedAnswer: slide.correctAnswer } : {}),
         }}
       />

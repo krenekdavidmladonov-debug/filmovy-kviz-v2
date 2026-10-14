@@ -7,6 +7,8 @@ import { Link, useParams } from 'react-router-dom';
 import { SnapshotMediaContext } from '../../features/media/SnapshotMediaContext';
 import {
   endLiveSession,
+  revealAnswer,
+  hideAnswer,
   nextSlide,
   playMedia,
   previousSlide,
@@ -21,7 +23,7 @@ import { recapQuestionChoices } from '../../features/live/livePresentation';
 import { broadcastPublicState, openProjectorChannel, parseProjectorChannelMessage, type ProjectorChannel } from '../../features/live/projectorChannel';
 import { openOrFocusProjector, projectorPopupBlockedMessage } from '../../features/live/projectorWindow';
 import { subscribeLiveControl, subscribeLiveControlSlides, subscribePublicLiveState } from '../../features/live/liveRepository';
-import type { LiveActionResponse, LiveControlSlide, LiveControlState } from '../../features/live/types';
+import type { LiveActionResponse, LiveControlSlide, LiveControlState, PublicLiveState } from '../../features/live/types';
 import { indexSlidesByPosition } from '../../features/presentation/performance';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
 import type { HumanErrorValue } from '../../ui/HumanError';
@@ -61,6 +63,7 @@ function loadingError(area: 'session' | 'slides'): HumanErrorValue {
 export function LiveControlPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [session, setSession] = useState<LiveControlState | null>(null);
+  const [publicState, setPublicState] = useState<PublicLiveState | null>(null);
   const [slides, setSlides] = useState<readonly LiveControlSlide[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState<LivePendingAction | null>(null);
@@ -78,6 +81,7 @@ export function LiveControlPage() {
     const invalidate = () => {
       accessGenerationRef.current++; operationIdRef.current++; sessionRef.current = null;
       confirmedRevisionRef.current = -1; mutationQueueRef.current = Promise.resolve();
+      setPublicState(null);
     };
     confirmedRevisionRef.current = -1;
     mutationQueueRef.current = Promise.resolve();
@@ -130,8 +134,9 @@ export function LiveControlPage() {
       });
     }
     const unsubscribe = subscribePublicLiveState(sessionId, (value) => {
+      setPublicState(value);
       if (value) broadcastPublicState(channel, value);
-    }, () => undefined);
+    }, () => setPublicState(null));
     return () => { unsubscribe(); channel?.close(); channelRef.current = undefined; };
   }, [sessionId]);
 
@@ -229,10 +234,9 @@ export function LiveControlPage() {
 
   return (
     <SnapshotMediaContext.Provider value={session.snapshotId}>
-    {session.eventId && session.snapshotId && <InterimResultsPanel key={session.sessionId} session={session} />}
-    {session.eventId && session.snapshotId && <FinalRevealPanel key={session.sessionId} session={session} ending={pendingAction === 'end'} />}
     <LiveModeratorView
       session={session}
+      publicState={publicState}
       slides={slides}
       currentSlide={currentSlide}
       presentedSlide={presentedSlide}
@@ -243,6 +247,8 @@ export function LiveControlPage() {
       onOpenProjector={openProjector}
       onPrevious={() => void run(previousSlide, 'previous')}
       onNext={() => void run(nextSlide, 'next')}
+      onReveal={() => void run(revealAnswer, 'reveal')}
+      onHide={() => void run(hideAnswer, 'hide')}
       onStartIntro={() => void run(startIntro, 'intro')}
       onSelectRecap={(position) => void run((id, revision) => selectRecapQuestion(id, revision, position), 'recap')}
       onPlay={() => void run(playMedia, 'play')}
@@ -253,6 +259,7 @@ export function LiveControlPage() {
       onMediaError={(generation) => void reportPlayback(generation, 'error')}
       onMediaPlayback={(generation, playbackState) => void reportPlayback(generation, playbackState)}
     />
+    {session.eventId && session.snapshotId && <div className="live-secondary-work"><InterimResultsPanel key={session.sessionId} session={session} /><FinalRevealPanel key={session.sessionId} session={session} ending={pendingAction === 'end'} /></div>}
     </SnapshotMediaContext.Provider>
   );
 }

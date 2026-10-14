@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { semanticQuestionType } from '@filmovy-kviz/quiz-domain';
+import { canHideInfoSlide, resolveSlideDesign, resolveLegacySlideAppearance, semanticQuestionType } from '@filmovy-kviz/quiz-domain';
 import type { EditorQuiz, EditorSlide } from './types';
 import { SlideRenderer } from '../presentation/SlideRenderer';
 import { MediaPlayer } from '../presentation/MediaPlayer';
@@ -8,7 +8,7 @@ import type { MediaPlaybackCommand } from '../presentation/types';
 export function practiceSlides(quiz: EditorQuiz): readonly EditorSlide[] {
   // Rehearse the same persisted stream consumed by snapshots and live sessions.
   // Missing system sections and manually authored agendas must stay unchanged.
-  return [...quiz.slides].sort((a, b) => a.position - b.position);
+  return [...quiz.slides].filter(slide => !(slide.hidden === true && canHideInfoSlide(slide))).sort((a, b) => a.position - b.position);
 }
 
 /** Private in-memory rehearsal. No session, channel, persistence or public URL. */
@@ -47,7 +47,7 @@ export function QuizPractice({ quiz, onClose }: { quiz: EditorQuiz; onClose: () 
   return <dialog ref={dialogRef} className="private-practice" aria-modal="true" aria-label="Soukromá zkouška kvízu" onKeyDown={trapBoundaryTab} style={{ margin: 0, width: '100%', height: '100%', maxWidth: 'none', maxHeight: 'none', boxSizing: 'border-box', border: 0, color: 'inherit' }} onCancel={event => { event.preventDefault(); onClose(); }}>
     <div className="practice-content" style={{ display: 'flex', flexDirection: 'column', flex: 1, background: 'var(--color-background)' }}>
     <header><strong>Soukromá zkouška · {index + 1} / {slides.length}</strong><span>Bez živé publikace</span><button type="button" onClick={event => { const content = event.currentTarget.closest('.practice-content'); if (content && document.fullscreenElement === null) void content.requestFullscreen().catch(() => {}); }}>Zvětšit</button><button ref={closeRef} type="button" onClick={onClose}>Zavřít zkoušku</button></header>
-    <div className="practice-stage" data-slide-id={original.id}><SlideRenderer key={slide.id} quizTitle={quiz.title} mode={showAnswer ? 'recap' : undefined} slide={{ ...slide, ...(showAnswer ? { revealedAnswer: slide.correctAnswer } : {}) }} mediaCommand={command} mediaGeneration={generation} onMediaFinished={() => setCommand('finished')} /></div>
+    <div className="practice-stage" data-slide-id={original.id}><SlideRenderer key={slide.id} quizTitle={quiz.title} mode={showAnswer ? 'recap' : undefined} slide={{ ...slide, ...resolveLegacySlideAppearance(quiz.defaultAppearance, slide), design: resolveSlideDesign(quiz.defaultDesign, quiz.slides.find(item => item.roundId === slide.roundId && ['round', 'roundheader', 'round-header', 'section'].includes(item.kind))?.design ?? quiz.slides.find(item => item.roundId === slide.roundId && item.kind === 'intro' && !item.isQuestion)?.design, slide.design, slide.answerDesign, showAnswer), ...(showAnswer ? { revealedAnswer: slide.correctAnswer } : {}) }} mediaCommand={command} mediaGeneration={generation} onMediaFinished={() => setCommand('finished')} /></div>
     {type === 'audio' && !showAnswer && original.kind !== 'recap' && slide.mediaSource && <div className="practice-audio"><MediaPlayer key={slide.id} source={slide.mediaSource} command={command} generation={generation} startSeconds={slide.clipStartSeconds ?? 0} {...(slide.clipEndSeconds === null ? {} : { endSeconds: slide.clipEndSeconds })} onFinished={() => setCommand('finished')} /></div>}
     <footer><button type="button" disabled={index === 0} onClick={() => change(index - 1)}>Předchozí</button><button type="button" disabled={index === slides.length - 1} onClick={() => change(index + 1)}>Další</button>
       {original.isQuestion && <button type="button" onClick={() => { setAnswer(value => !value); run('stop'); }}>{answer ? 'Skrýt odpověď' : 'Odhalit odpověď ve zkoušce'}</button>}

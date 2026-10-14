@@ -1,4 +1,4 @@
-import type { FinalRevealPage, FinalRevealState } from '@filmovy-kviz/quiz-domain';
+import type { FinalRevealPage, FinalRevealState, SlideDesign } from '@filmovy-kviz/quiz-domain';
 import type { ResultPage } from '../leaderboard/types';
 import type { MediaPlaybackCommand, MediaPlaybackState, SlidePresentationInput } from '../presentation/types';
 
@@ -36,6 +36,9 @@ export interface LiveControlMedia {
 }
 
 export interface LiveControlSlide {
+  readonly hidden?: boolean;
+  readonly design?: SlideDesign;
+  readonly answerDesign?: SlideDesign;
   readonly id: string;
   readonly position: number;
   readonly kind: string;
@@ -69,6 +72,9 @@ export interface PublicMedia {
 }
 
 export interface PublicLiveState {
+  readonly design?: SlideDesign;
+  readonly roundTitle?: string;
+  readonly subtitle?: string;
   readonly finalReveal?: FinalRevealPage;
   readonly interimResults?: ResultPage;
   readonly sessionId: string;

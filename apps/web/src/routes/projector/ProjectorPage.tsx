@@ -31,8 +31,9 @@ function ProjectorState({ state, onMediaFinished, onMediaPlaybackState }: {
 }) {
   if (state.status === 'waiting') return <ProjectorMessage quizTitle={state.quizTitle} title="Čekáme na první slide" text="Moderátor kvíz připravuje." />;
   if (state.status === 'ended') return <ProjectorMessage quizTitle={state.quizTitle} title="Kvíz skončil" text="Děkujeme za účast." />;
-  if (state.finalReveal) return <div className="results-frame" data-version-id={state.finalReveal.versionId}><FinalRevealView {...state.finalReveal} /></div>;
-  if (state.interimResults) return <div className="results-frame" data-version-id={state.interimResults.versionId}><ResultsTable {...state.interimResults} /></div>;
+  const resultTemplate = { ...(state.title === undefined ? {} : { title: state.title }), ...(state.subtitle === undefined ? {} : { subtitle: state.subtitle }), ...(state.design === undefined ? {} : { design: state.design }) };
+  if (state.finalReveal) return <div className="results-frame" data-version-id={state.finalReveal.versionId}><FinalRevealView {...state.finalReveal} template={resultTemplate} mediaSessionId={state.sessionId} /></div>;
+  if (state.interimResults) return <div className="results-frame" data-version-id={state.interimResults.versionId}><ResultsTable {...state.interimResults} template={resultTemplate} mediaSessionId={state.sessionId} /></div>;
   return (
     <SlideRenderer
       mediaSessionId={state.sessionId}
@@ -45,6 +46,8 @@ function ProjectorState({ state, onMediaFinished, onMediaPlaybackState }: {
       onMediaFinished={onMediaFinished}
       onMediaPlaybackState={(generation, playbackState) => onMediaPlaybackState(generation, playbackState)}
       slide={{
+        ...(state.design === undefined ? {} : { design: state.design }),
+        ...(state.roundTitle === undefined ? {} : { roundTitle: state.roundTitle }),
         kind: state.slideKind ?? 'legacy', title: state.title ?? '', text: state.text ?? '',
         options: state.options, media: state.media, presentation: state.presentation,
         ...(state.questionNumber === undefined ? {} : { questionNumber: state.questionNumber }),

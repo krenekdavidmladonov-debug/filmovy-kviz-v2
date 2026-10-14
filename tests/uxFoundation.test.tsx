@@ -10,7 +10,7 @@ import { HumanError } from '../apps/web/src/ui/HumanError';
 import { LiveModeratorView } from '../apps/web/src/features/live/LiveModeratorView';
 import { recapQuestionChoices } from '../apps/web/src/features/live/livePresentation';
 import { SlideRenderer } from '../apps/web/src/features/presentation/SlideRenderer';
-import type { LiveControlSlide, LiveControlState } from '../apps/web/src/features/live/types';
+import type { LiveControlSlide, LiveControlState, PublicLiveState } from '../apps/web/src/features/live/types';
 
 const question = (id: string, position: number, kind = 'question'): LiveControlSlide => ({
   id,
@@ -63,16 +63,19 @@ function moderatorMarkup({
   slides = baseSlides,
   current = baseSlides[1],
   presented = current,
+  publicState,
 }: {
   readonly liveSession?: LiveControlState;
   readonly slides?: readonly LiveControlSlide[];
   readonly current?: LiveControlSlide;
   readonly presented?: LiveControlSlide;
+  readonly publicState?: PublicLiveState;
 } = {}): string {
   return renderToStaticMarkup(
     <MemoryRouter>
       <LiveModeratorView
         session={liveSession}
+        publicState={publicState}
         slides={slides}
         currentSlide={current}
         presentedSlide={presented}
@@ -104,6 +107,20 @@ function documentFor(markup: string): Document {
 }
 
 describe('UX foundation contracts', () => {
+  test('moderator preview uses the published payload and does not reconstruct it from private answers', () => {
+    const publicState: PublicLiveState = {
+      sessionId: 'safe-session-id', quizTitle: 'Syntetický kvíz', status: 'active', slidePosition: 2, slideKind: 'question',
+      answerRevealed: false, presentationMode: 'slide', mediaCommand: 'idle', mediaPlaybackState: 'idle', mediaGeneration: 0, introGeneration: 0, revision: 42,
+      title: 'Publikované zadání', text: 'Potvrzeno serverem', options: [], media: [], presentation: {}, renderMode: 'question',
+    };
+    const doc = documentFor(moderatorMarkup({ publicState }));
+    const preview = doc.querySelector('.live-preview-stage');
+    expect(preview?.textContent).toContain('Publikované zadání');
+    expect(preview?.textContent).not.toContain('Syntetická odpověď');
+    expect(doc.querySelector('[data-private-answer]')?.textContent).toContain('Syntetická odpověď');
+    expect(doc.querySelector('.live-next-step')?.textContent).toContain('Syntetická otázka 4');
+    expect(documentFor(moderatorMarkup()).querySelector('.live-preview-stage')?.textContent).toContain('Načítám obsah');
+  });
   test('brand configuration and projector rendering preserve the public name', () => {
     expect(productConfig).toMatchObject({ name: 'JustKvíz', shortName: 'JK', adminLabel: 'JustKvíz' });
     const markup = renderToStaticMarkup(

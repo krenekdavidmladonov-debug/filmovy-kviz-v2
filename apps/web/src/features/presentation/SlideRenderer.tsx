@@ -7,12 +7,14 @@ import { productConfig } from '../../config/product';
 import { buildSlideRenderModel, defaultRules, formatPlAnswer, isSafeHttpUrl, projectorMediaPlan } from './model';
 import type { MediaPlaybackCommand, MediaPlaybackState, SlideRenderInput, SlideRenderMode } from './types';
 import { MediaPlayer } from './MediaPlayer';
+import { slideDesignStyle } from './design';
+import './presentation.css';
 
 function QuestionHeader({ number, count, legacyPl }: { readonly number?: number; readonly count?: number; readonly legacyPl: boolean }) {
   return (
     <div className="slide-question-label">
       <span>{number !== undefined && count !== undefined ? `OTÁZKA ${number} / ${count}` : 'OTÁZKA'}</span>
-      {legacyPl && <span className="legacy-pl-badge">PŮVODNÍ · PRAVDA / LEŽ</span>}
+      {legacyPl && <span className="legacy-pl-badge">PRAVDA / LEŽ</span>}
     </div>
   );
 }
@@ -31,7 +33,7 @@ function Options({ options }: { readonly options: readonly string[] }) {
 function AgendaItems({ items }: { readonly items: readonly string[] }) {
   return (
     <ol className="agenda-items">
-      {items.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}
+      {items.map((item, index) => <li key={`${index}-${item}`}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item}</strong></li>)}
     </ol>
   );
 }
@@ -97,6 +99,11 @@ export function SlideRenderer({
     ? formatPlAnswer(model.revealedAnswer)
     : model.revealedAnswer;
   const visibleMode = model.renderMode === 'editorPreview' ? 'editorPreview' : model.renderMode;
+  const questionHeader = model.design.showQuestionNumber === false ? null
+    : <QuestionHeader number={model.questionNumber} count={model.questionCount} legacyPl={model.isLegacyPl} />;
+  const layout = model.design.layout ?? (slide.imageLayout === 'full' ? 'image-first' : model.contentKind === 'image' || model.contentKind === 'audio' ? 'split' : 'classic');
+  const textLength = model.title.length + model.text.length + model.options.join('').length;
+  const density = textLength > 650 || model.options.length > 6 ? 'dense' : textLength > 350 ? 'medium' : 'normal';
   const finish = (generation: number) => {
     if (generation !== mediaGeneration) return;
     setLocallyFinishedGeneration(generation);
@@ -119,10 +126,10 @@ export function SlideRenderer({
     const recapMedia = model.contentKind === 'audio' || model.contentKind === 'video';
     content = (
       <div className={`slide-layout recap-layout recap-${model.contentKind}`}>
-        <QuestionHeader number={model.questionNumber} count={model.questionCount} legacyPl={model.isLegacyPl} />
+        {questionHeader}
         <QuestionCopy title={model.title} text={model.text} />
         {model.contentKind === 'image' && model.questionImage && (isSafeHttpUrl(model.questionImage) || Boolean(parseQuizAsset(model.questionImage))) && (
-          <QuestionImage sessionId={mediaSessionId} source={model.questionImage} overlay={model.backgroundOverlay} />
+          <QuestionImage sessionId={mediaSessionId} source={model.questionImage} overlay={0} />
         )}
         {recapMedia && model.mediaSource && mediaPlan.mountPlayer && (
           <MediaPlayer
@@ -148,17 +155,17 @@ export function SlideRenderer({
       </div>
     );
   } else if (model.contentKind === 'agenda') {
-    content = <div className="slide-centered slide-list"><p className="slide-kicker">PROGRAM VEČERA</p><h1>{model.title || 'Dnešní kola'}</h1><AgendaItems items={model.options} /></div>;
+    content = <div className="slide-centered slide-list"><p className="slide-kicker">PROGRAM VEČERA</p><h1>{model.title || 'Dnešní kola'}</h1>{model.text && <p>{model.text}</p>}<AgendaItems items={model.options} /></div>;
   } else if (model.contentKind === 'rules') {
-    content = <div className="slide-centered slide-list"><p className="slide-kicker">PRAVIDLA</p><h1>{model.title || 'Hrajeme fér'}</h1><Options options={model.options.length > 0 ? model.options : defaultRules} /></div>;
+    content = <div className="slide-centered slide-list"><p className="slide-kicker">PRAVIDLA</p><h1>{model.title || 'Hrajeme fér'}</h1>{model.text && <p>{model.text}</p>}<AgendaItems items={model.options.length > 0 ? model.options : defaultRules} /></div>;
   } else if (model.contentKind === 'intro' || model.contentKind === 'roundIntro') {
-    content = <div key={introGeneration} className={`slide-centered round-intro-content ${introGeneration > 0 ? 'intro-running' : ''}`}><p className="slide-kicker">{model.contentKind === 'intro' ? <Brand /> : 'NOVÉ KOLO'}</p><h1>{model.title || quizTitle}</h1>{model.text && <p>{model.text}</p>}</div>;
+    content = <div key={introGeneration} className={`slide-centered round-intro-content ${introGeneration > 0 ? 'intro-running' : ''}`}><p className="slide-kicker">{model.contentKind === 'intro' ? 'VÍTEJTE NA KVÍZU' : 'NOVÉ KOLO'}</p><h1>{model.title || quizTitle}</h1>{model.text && <p>{model.text}</p>}</div>;
   } else if (model.contentKind === 'end') {
     content = <div className="slide-centered"><p className="slide-kicker">DĚKUJEME</p><h1>{model.title || 'To je pro dnešek vše'}</h1>{model.text && <p>{model.text}</p>}</div>;
   } else if (model.contentKind === 'audio') {
     content = (
       <div className="slide-layout audio-layout">
-        <QuestionHeader number={model.questionNumber} count={model.questionCount} legacyPl={false} />
+        {questionHeader}
         <QuestionCopy title={model.title} text={model.text} />
           <Options options={model.options} /><div className={`vinyl-visual ${mediaPlan.vinylPlaying ? 'is-playing' : ''}`} aria-label={mediaPlan.vinylPlaying ? 'Audio se přehrává' : 'Audio je připravené'}>
           <div className="vinyl-disc"><div className="vinyl-label">{productConfig.shortName}</div></div><div className="vinyl-arm" />
@@ -187,10 +194,11 @@ export function SlideRenderer({
   } else {
     content = (
       <div className={`slide-layout question-layout question-${model.contentKind}`}>
-        {model.isQuestionLike && <QuestionHeader number={model.questionNumber} count={model.questionCount} legacyPl={model.isLegacyPl} />}
+        {model.isQuestionLike && questionHeader}
+        {!model.isQuestionLike && <p className="slide-kicker">{model.contentKind === 'info' ? 'DNEŠNÍ VEČER' : 'JUSTKVÍZ'}</p>}
         <QuestionCopy title={model.title || (model.contentKind === 'legacy' ? 'Legacy slide' : '')} text={model.text} />
         {model.contentKind === 'image' && model.questionImage && (isSafeHttpUrl(model.questionImage) || Boolean(parseQuizAsset(model.questionImage))) && (
-          <QuestionImage sessionId={mediaSessionId} source={model.questionImage} overlay={model.backgroundOverlay} />
+          <QuestionImage sessionId={mediaSessionId} source={model.questionImage} overlay={0} />
         )}
         <Options options={model.contentKind === 'free' ? [] : model.options} />
       </div>
@@ -198,12 +206,13 @@ export function SlideRenderer({
   }
 
   return (
-    <article className={`slide-renderer mode-${visibleMode} kind-${model.contentKind} image-layout-${slide.imageLayout ?? 'split'}${compact ? ' is-compact' : ''}`}>
+    <article style={slideDesignStyle(model.design)} className={`slide-renderer mode-${visibleMode} kind-${model.contentKind} layout-${layout} align-${model.design.textAlign ?? 'left'} density-${density}${model.design.backgroundColor ? ' has-custom-background' : ''} image-layout-${slide.imageLayout ?? 'split'}${compact ? ' is-compact' : ''}`}>
       <div className="slide-background" aria-hidden="true">{model.backgroundImage && <AssetImage source={model.backgroundImage} alt="" sessionId={mediaSessionId} />}</div>
       <div className="slide-background-overlay" style={{ opacity: model.backgroundOverlay / 100 }} aria-hidden="true" />
       <div className="slide-safe-area">
-        <header className="slide-brand"><span>{quizTitle}</span><Brand /></header>
+        <header className="slide-brand"><span>{quizTitle}</span>{model.design.showLogo !== false && (model.design.logoImage ? <span className="slide-custom-logo"><AssetImage source={model.design.logoImage} alt="Logo pořadatele" sessionId={mediaSessionId} /></span> : <Brand />)}</header>
         {content}
+        {model.design.showRoundTitle !== false && model.roundTitle && model.isQuestionLike && <footer className="slide-round-title">{model.roundTitle}</footer>}
         {showMediaError && <p className="projector-media-error" role="status">Médium se nepodařilo přehrát. Moderátor může použít Pustit znovu nebo pokračovat otázkou.</p>}
       </div>
     </article>
