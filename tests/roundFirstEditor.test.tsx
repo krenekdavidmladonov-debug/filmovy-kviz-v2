@@ -2,7 +2,8 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, test, vi } from 'vitest';
 
-import { EditorPreview, QuestionForm } from '../apps/web/src/features/editor/EditorForms';
+import { EditorPreview, QuestionForm, SystemSectionForm } from '../apps/web/src/features/editor/EditorForms';
+import { practiceSlides } from '../apps/web/src/features/editor/QuizPractice';
 import {
   buildSemanticQuizModel,
   creatableQuestionTypes,
@@ -13,7 +14,12 @@ import {
 import { editorSaveLabels, editorSaveStatus, needsNavigationDecision } from '../apps/web/src/features/editor/sessionState';
 import { clipDuration, formatHumanTime, parseHumanTime } from '../apps/web/src/features/editor/time';
 import type { EditorQuiz, EditorSlide } from '../apps/web/src/features/editor/types';
-import { correctOptionIndex, hasBlockingIssues, validateQuestion } from '../apps/web/src/features/editor/validation';
+import {
+  correctOptionIndex,
+  hasBlockingIssues,
+  hasSaveBlockingIssues,
+  validateQuestion,
+} from '../apps/web/src/features/editor/validation';
 
 function slide(overrides: Partial<EditorSlide> = {}): EditorSlide {
   return {
@@ -57,7 +63,36 @@ function renderQuestion(value: EditorSlide, showAllIssues = true): string {
   );
 }
 
+test('private rehearsal preserves persisted legacy order and manual agenda without inventing sections', () => {
+  const manualAgenda = slide({ id: 'manual-agenda', position: 9, kind: 'agenda', storedKind: 'agenda', isQuestion: false, options: ['Ručně napsaný program', 'Přestávka'] });
+  const question = slide({ id: 'only-question', position: 4 });
+  const quiz = { ...quizFixture(), slides: [manualAgenda, question] };
+  const originalOrder = [...quiz.slides];
+  expect(practiceSlides(quiz)).toEqual([question, manualAgenda]);
+  expect(quiz.slides).toEqual(originalOrder);
+  expect(practiceSlides({ ...quiz, slides: [] })).toEqual([]);
+});
+
 describe('round-first semantic editor model', () => {
+  test('agenda form preserves manual options and generates only automatic agendas', () => {
+    const quiz = quizFixture(), model = buildSemanticQuizModel(quiz);
+    const section = model.introduction.find(item => item.key === 'agenda')!;
+    const manual = slide({ kind: 'agenda', isQuestion: false, options: ['Původní ruční položka'] });
+    const onChange = vi.fn();
+    const render = (agenda: EditorSlide) => renderToStaticMarkup(<SystemSectionForm section={section} slide={agenda} model={model} disabled={false} onChange={onChange} />);
+    for (const automaticAgenda of [undefined, false]) {
+      const html = render({ ...manual, automaticAgenda });
+      expect(html).toContain('Uložený ruční harmonogram');
+      expect(html).toContain('Původní ruční položka');
+      expect(html).not.toContain('První kolo');
+    }
+    const automatic = render({ ...manual, automaticAgenda: true });
+    expect(automatic).toContain('Automaticky podle pořadí a názvů kol');
+    expect(automatic).toContain('První kolo');
+    expect(automatic).not.toContain('Původní ruční položka');
+    expect(manual.options).toEqual(['Původní ruční položka']);
+    expect(onChange).not.toHaveBeenCalled();
+  });
   test('builds intro system sections, rounds, round-local questions, and generated recap nodes', () => {
     const quiz = quizFixture();
     const model = buildSemanticQuizModel(quiz);
@@ -101,6 +136,34 @@ describe('type-specific question forms and validation', () => {
     expect(validateQuestion(value)).toEqual([]);
   });
 
+  test('allows unrelated edits to persisted imported unset timing while keeping readiness strict', () => {
+    const persisted = slide({
+      kind: 'audio',
+      storedKind: 'audio',
+      options: [],
+      correctAnswer: 'Syntetická odpověď',
+      mediaSource: 'test__local',
+      presentation: {
+        videoStart: 0,
+        videoEnd: 0,
+        audioTrigger: null,
+        backgroundOverlay: null,
+        answerOverlay: null,
+        sourceQuestionNumber: '1/1',
+      },
+      clipStartSeconds: null,
+      clipEndSeconds: null,
+      hasLegacyData: true,
+    });
+    const textEdit = { ...persisted, text: 'Upravené syntetické zadání' };
+
+    expect(hasBlockingIssues(textEdit)).toBe(true);
+    expect(hasSaveBlockingIssues(textEdit, persisted)).toBe(false);
+    expect(hasSaveBlockingIssues(textEdit)).toBe(true);
+    expect(hasSaveBlockingIssues({ ...textEdit, mediaSource: 'other_local' }, persisted)).toBe(true);
+    expect(hasSaveBlockingIssues({ ...textEdit, clipStartSeconds: 1 }, persisted)).toBe(true);
+  });
+
   test('image keeps question image separate, supports optional choices, and exposes answer image', () => {
     const freeImage = slide({ kind: 'image', storedKind: 'image', options: [], correctAnswer: 'Odpověď', questionImage: 'https://images.example.test/question.jpg', answerImage: 'https://images.example.test/answer.jpg' });
     const choiceImage = { ...freeImage, options: ['První', 'Druhá'], correctAnswer: 'Druhá' };
@@ -108,8 +171,8 @@ describe('type-specific question forms and validation', () => {
     expect(validateQuestion(choiceImage)).toEqual([]);
     const html = renderQuestion(choiceImage);
     expect(html).toContain('Obrázek otázky');
-    expect(html).toContain('Výběr z možností');
-    expect(html).toContain('Obrázek ke správné odpovědi');
+    expect(html).toContain('ABCD – jedna možnost');
+    expect(html).toContain('Obrázek odpovědi (soukromý)');
   });
 
   test('validates required audio/video timing and parses human time', () => {

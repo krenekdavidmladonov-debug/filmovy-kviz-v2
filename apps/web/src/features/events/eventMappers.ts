@@ -1,3 +1,4 @@
+import { eventDisposition } from '@filmovy-kviz/quiz-domain';
 import { Timestamp, type DocumentData } from 'firebase/firestore';
 
 import type {
@@ -80,6 +81,9 @@ export function mapEvent(id: string, value: DocumentData): EventRecord {
   }
   return {
     id,
+    description: typeof data.description === 'string' ? data.description : '',
+    disposition: eventDisposition(data),
+    ...(typeof data.liveSessionId === 'string' ? { liveSessionId: data.liveSessionId } : {}),
     title: text(data, 'title'),
     startsAt: date(data.startsAt, 'startsAt'),
     timeZone: text(data, 'timeZone'),
@@ -116,6 +120,8 @@ export function mapPublicEvent(id: string, value: DocumentData): PublicEventReco
     title: text(data, 'title'),
     startsAt: date(data.startsAt, 'startsAt'),
     timeZone: text(data, 'timeZone'),
+    cancelled: data.cancelled === true,
+    cancellationMessage: typeof data.cancellationMessage === 'string' ? data.cancellationMessage : '',
     venueName: text(data, 'venueName'),
     publicLocation: text(data, 'publicLocation'),
     registrationStatus: registrationStatus(data.registrationStatus),

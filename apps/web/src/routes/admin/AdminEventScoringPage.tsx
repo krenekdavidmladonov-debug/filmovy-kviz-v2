@@ -3,9 +3,11 @@ import { Link, useBlocker, useParams } from 'react-router-dom';
 import { loadRounds, watchRoster, watchScores, watchScoringEvent } from '../../features/scoring/api';
 import { emptyScore, type Score } from '../../features/scoring/model';
 import { ScoreRow } from '../../features/scoring/ScoreRow';
+import { useAuth } from '../../auth/AuthProvider';
 import '../../features/scoring/scoring.css';
 
 export function AdminEventScoringPage() {
+  const { can } = useAuth();
   const { eventId = '' } = useParams();
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
   const [liveSnapshotId, setLiveSnapshotId] = useState<string | null>(null);
@@ -69,7 +71,7 @@ export function AdminEventScoringPage() {
       {!scoresLoaded ? <p>Načítám uložené body…</p> : roundId && teams.filter(team => team.accepted || dirty[team.id]).map(team => <ScoreRow
         key={JSON.stringify([eventId, snapshotId, roundId, team.id])} eventId={eventId} snapshotId={snapshotId}
         teamId={team.id} roundId={roundId} name={team.name + (team.accepted ? '' : ' (zrušený tým)')}
-        stored={scores[JSON.stringify([team.id, roundId])] ?? emptyScore} disabled={!allowed || snapshotChanged || !team.accepted || !!error} onDirty={onDirty}
+        stored={scores[JSON.stringify([team.id, roundId])] ?? emptyScore} disabled={!can('event.score') || !allowed || snapshotChanged || !team.accepted || !!error} onDirty={onDirty}
       />)}
       {scoresLoaded && roundId && teams.some(team => !team.accepted && !dirty[team.id]) && <details>
         <summary>Historické zápisy zrušených týmů</summary>

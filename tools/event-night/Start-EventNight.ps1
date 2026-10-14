@@ -11,7 +11,7 @@ Set-StrictMode -Version 2.0
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 . (Join-Path $repoRoot 'tools\local-qa\LocalQa.Common.ps1')
 . (Join-Path $PSScriptRoot 'EventNight.Common.ps1')
-$Host.UI.RawUI.WindowTitle = 'Kvízová platforma - event night'
+$Host.UI.RawUI.WindowTitle = 'JustKvíz - event night'
 $startedWorker = $null
 $stateWritten = $false
 
@@ -24,7 +24,7 @@ function Complete-EventNightWindow {
 
 try {
   Write-Host ''
-  Write-Host 'KVÍZOVÁ PLATFORMA - EVENT NIGHT' -ForegroundColor White
+  Write-Host 'JustKvíz - EVENT NIGHT' -ForegroundColor White
   Write-Host '================================' -ForegroundColor DarkGray
   Write-QaInfo 'Ověřuji demo-only konfiguraci, production build a persistentní snapshot...'
 
@@ -42,6 +42,7 @@ try {
   Set-SafeChildEnvironment $repoRoot $nodeTool $pnpmTool $javaTool $ProjectId
   Set-EventNightEmulatorEnvironment $ProjectId
   $paths = Get-EventNightPaths $repoRoot
+  Assert-EventNightPath $repoRoot $paths.DataDirectory
   New-Item -ItemType Directory -Path $paths.DataDirectory -Force | Out-Null
 
   $state = Get-EventNightState $paths
@@ -73,6 +74,7 @@ try {
     Throw-QaError 'Projektové dependencies nejsou připravené.' 'Spusťte PREPARE_EVENT_NIGHT.cmd; běžný start záměrně nic nestahuje.'
   }
   Assert-EventNightBuildManifest $repoRoot $gitTool $paths
+  Restore-EventNightSnapshot $repoRoot $paths | Out-Null
   Assert-EventNightSnapshot $paths.SnapshotDirectory $paths | Out-Null
   $backup = Backup-EventNightSnapshot $repoRoot $paths 'before-start'
   Write-QaSuccess "Known-good snapshot ověřen a zálohován: $backup"

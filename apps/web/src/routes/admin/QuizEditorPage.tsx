@@ -1,3 +1,5 @@
+import { QuizPractice } from '../../features/editor/QuizPractice';
+import { MediaAuthoringContext } from '../../features/media/MediaUploadField';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useBlocker, useParams, useSearchParams } from 'react-router-dom';
 
@@ -13,8 +15,10 @@ import {
   SystemSectionForm,
 } from '../../features/editor/EditorForms';
 import { EditorOutline } from '../../features/editor/EditorOutline';
+import { moveOutlineQuestion } from '../../features/editor/outlineMoves';
 import {
   createQuizSlide,
+  createQuizRound,
   deleteQuizSlide,
   duplicateQuizRound,
   duplicateQuizSlide,
@@ -22,6 +26,7 @@ import {
   moveQuizRound,
   removeQuizRound,
   reorderQuizQuestion,
+  staleEditorMessage,
   updateQuizMetadata,
   updateQuizRound,
   updateQuizSlide,
@@ -34,9 +39,10 @@ import {
   type SemanticQuizModel,
   type SemanticRound,
 } from '../../features/editor/semanticModel';
-import { editorSaveLabels, editorSaveStatus, needsNavigationDecision } from '../../features/editor/sessionState';
+import { editorSaveLabels, editorSaveStatus } from '../../features/editor/sessionState';
+import { overlayEntries, saveEditorEntries, type EditorEntries, type PendingEditorEntry } from '../../features/editor/workingCopy';
 import type { CreatableQuestionType, EditableSlideKind, EditorQuiz, EditorSlide } from '../../features/editor/types';
-import { hasBlockingIssues } from '../../features/editor/validation';
+import { hasSaveBlockingIssues } from '../../features/editor/validation';
 import { defaultRules, generatedAgendaOptions } from '../../features/presentation/model';
 import { QuizPreflightPanel } from '../../features/preflight/QuizPreflightPanel';
 import type { PreflightFixTarget } from '../../features/preflight/types';
@@ -96,6 +102,7 @@ function newQuestionDraft(type: CreatableQuestionType, round: SemanticRound): Ed
     roundTitle: round.title,
     questionNumber,
     questionCount: round.questions.length + 1,
+    authoringStatus: 'ready', answerMode: type === 'choice' ? 'choice' : 'open',
     options: type === 'choice' ? ['', '', '', ''] : [],
     clipStartSeconds: type === 'audio' || type === 'video' ? 0 : null,
   });
@@ -120,26 +127,42 @@ function selectionForSlide(slideId: string | undefined, model: SemanticQuizModel
 }
 
 function safeErrorMessage(error: unknown): string {
-  if (error instanceof Error && /aborted|revision|newer|stale/iu.test(error.message)) {
+  if ((error as { code?: string })?.code === 'functions/permission-denied') return 'K tomuto kvízu nebo požadované úpravě nemáte oprávnění. Kontaktujte správce přístupu.';
+  if (error instanceof Error && (error.message === staleEditorMessage || /aborted|revision|newer|stale/iu.test(error.message))) {
     return 'Kvíz mezitím upravil někdo jiný. Načtěte aktuální verzi a změnu proveďte znovu.';
   }
   return 'Změnu se nepodařilo uložit. Rozepsané hodnoty zůstaly v editoru.';
 }
 
+const initialAppearance = { backgroundImage: '', backgroundOverlay: 0, imageLayout: 'split' as const };
+
 export function QuizEditorPage() {
   const { quizId } = useParams<{ quizId: string }>();
   const [searchParams] = useSearchParams();
-  const { role } = useAuth();
-  const readOnly = role !== 'admin';
+  const { can } = useAuth();
+  const readOnly = !can('quiz.edit');
   const [quiz, setQuiz] = useState<EditorQuiz | null>(null);
+  const [practicing, setPracticing] = useState(false);
+  const practiceButtonRef = useRef<HTMLButtonElement>(null), restorePracticeFocus = useRef(false);
+  useEffect(() => {
+    if (!practicing && restorePracticeFocus.current && practiceButtonRef.current) {
+      restorePracticeFocus.current = false;
+      practiceButtonRef.current.focus({ preventScroll: true });
+    }
+  }, [practicing]);
   const [selectedKey, setSelectedKey] = useState('quiz');
   const [draft, setDraft] = useState<EditorSlide | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [appearance, setAppearance] = useState<import('@filmovy-kviz/quiz-domain').EditorAppearance>(initialAppearance);
   const [roundTitle, setRoundTitle] = useState('');
   const [dirtySlide, setDirtySlide] = useState(false);
   const [dirtyQuiz, setDirtyQuiz] = useState(false);
   const [dirtyRound, setDirtyRound] = useState(false);
+  const [parked, setParkedState] = useState<EditorEntries>({});
+  const parkedRef = useRef<EditorEntries>({});
+  const setParked = useCallback((entries: EditorEntries) => { parkedRef.current = entries; setParkedState(entries); }, []);
+  const savePending = useRef(false);
   const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(null);
   const [pendingSelection, setPendingSelection] = useState<string | null>(null);
   const [removeRound, setRemoveRound] = useState<SemanticRound | null>(null);
@@ -160,14 +183,15 @@ export function QuizEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
   const handledDeepLink = useRef<string | undefined>(undefined);
-  const dirty = dirtySlide || dirtyQuiz || dirtyRound;
-  const blocker = useBlocker(dirty || uploading);
+  const loadGeneration = useRef(0);
+  const dirty = dirtySlide || dirtyQuiz || dirtyRound || Object.keys(parked).length > 0;
+  const blocker = useBlocker(dirty || uploading || saving);
   const semantic = useMemo(() => quiz === null ? null : buildSemanticQuizModel(quiz), [quiz]);
   const selectedRoundForDraft = semantic === null ? undefined : roundForSelection(selectedKey, semantic)
     ?? (selectedKey === 'draft' ? semantic.rounds.find((round) => round.id === draft?.roundId) : undefined);
   const preflightQuiz = useMemo(() => {
     if (quiz === null) return null;
-    return quizWithDraft(quiz, {
+    return quizWithDraft(overlayEntries(quiz, parked), {
       title,
       description,
       draft,
@@ -176,13 +200,16 @@ export function QuizEditorPage() {
         ? { roundId: selectedRoundForDraft.id, roundTitle }
         : {}),
     });
-  }, [description, dirtyRound, draft, pendingCreate, quiz, roundTitle, selectedRoundForDraft, title]);
+  }, [description, dirtyRound, draft, parked, pendingCreate, quiz, roundTitle, selectedRoundForDraft, title]);
+  const outlineModel = useMemo(() => quiz === null ? null : buildSemanticQuizModel(overlayEntries(quiz,
+    Object.fromEntries(Object.entries(parked).filter(([, entry]) => entry.pendingCreate === null)))), [quiz, parked]);
   const preflightResult = useMemo(() => preflightQuiz === null ? null : runQuizPreflight(preflightQuiz, {
     source: dirty ? 'LOCAL_DRAFT' : 'SAVED_QUIZ',
     hasUnsavedChanges: dirty,
   }), [dirty, preflightNonce, preflightQuiz]);
 
   const reload = useCallback(async (preferredKey = 'quiz', preferredSlideId?: string): Promise<EditorQuiz | null> => {
+    const attempt = ++loadGeneration.current;
     if (!quizId) {
       setError('Kvíz nelze otevřít, protože chybí jeho identifikátor.');
       setLoading(false);
@@ -190,6 +217,7 @@ export function QuizEditorPage() {
     }
     try {
       const loaded = await getEditorQuiz(quizId);
+      if (attempt !== loadGeneration.current) return null;
       if (loaded === null) {
         setError('Kvíz nebyl nalezen.');
         return null;
@@ -198,10 +226,12 @@ export function QuizEditorPage() {
       setQuiz(loaded);
       setTitle(loaded.title);
       setDescription(loaded.description);
+      setAppearance(loaded.defaultAppearance ?? initialAppearance);
       setSelectedKey(preferredSlideId === undefined ? preferredKey : selectionForSlide(preferredSlideId, model, preferredKey));
       setDirtySlide(false);
       setDirtyQuiz(false);
       setDirtyRound(false);
+      setParked({});
       setPendingCreate(null);
       setTouched(new Set());
       setShowReadiness(false);
@@ -210,14 +240,18 @@ export function QuizEditorPage() {
       setError(null);
       return loaded;
     } catch (loadError) {
-      setError(safeErrorMessage(loadError));
+      if (attempt === loadGeneration.current) setError(safeErrorMessage(loadError));
       return null;
     } finally {
-      setLoading(false);
+      if (attempt === loadGeneration.current) setLoading(false);
     }
-  }, [quizId]);
+  }, [quizId, setParked]);
 
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    void reload();
+    // StrictMode and route changes can leave an earlier request in flight.
+    return () => { loadGeneration.current++; };
+  }, [reload]);
 
   useEffect(() => {
     if (semantic === null || quiz?.id !== quizId) return;
@@ -240,7 +274,16 @@ export function QuizEditorPage() {
   }, [quiz?.id, quizId, searchParams, semantic]);
 
   useEffect(() => {
-    if (quiz === null || semantic === null || selectedKey === 'draft') return;
+    if (quiz === null || semantic === null) return;
+    const stored = parkedRef.current[selectedKey];
+    if (stored !== undefined) {
+      setDraft(stored.draft); setRoundTitle(stored.roundTitle);
+      setDirtySlide(stored.dirtySlide); setDirtyRound(stored.dirtyRound); setPendingCreate(stored.pendingCreate);
+      setShowAnswer(false); setTouched(new Set()); setShowReadiness(false);
+      return;
+    }
+    if (selectedKey === 'draft') return;
+    setDirtySlide(false); setDirtyRound(false);
     setShowAnswer(false);
     setTouched(new Set());
     setShowReadiness(false);
@@ -255,7 +298,8 @@ export function QuizEditorPage() {
       const section = semantic.introduction.find((item) => item.key === key);
       if (section?.slide !== undefined) setDraft(section.slide);
       else {
-        const position = semantic.rounds[0]?.firstPosition ?? Math.max(1, quiz.slideCount);
+        const previous = semantic.introduction.slice(0, ['opening','agenda','rules'].indexOf(key)).flatMap(item => item.slide ? [item.slide.position] : []);
+        const position = previous.length ? Math.max(...previous) + 1 : 1;
         setDraft(systemDraft(key, semantic, position));
         if (key !== 'agenda') setPendingCreate({ position, semanticKey: selectedKey });
       }
@@ -291,64 +335,61 @@ export function QuizEditorPage() {
 
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
-      if (!dirty && !uploadPending.current) return;
+      if (!dirty && !uploadPending.current && !savePending.current) return;
       event.preventDefault();
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
 
-  const saveAll = useCallback(async (afterKey = selectedKey): Promise<EditorQuiz | null> => {
-    if (quiz === null || readOnly || semantic === null || uploadPending.current) return null;
-    if (draft?.isQuestion && hasBlockingIssues(draft)) {
-      setShowReadiness(true);
-      setTouched(new Set(['prompt', 'options', 'correctAnswer', 'questionImage', 'mediaSource', 'clipStartSeconds', 'clipEndSeconds']));
-      setError('Před uložením opravte označené údaje.');
-      requestAnimationFrame(() => errorRef.current?.focus());
-      return null;
+  const saveAll = useCallback(async (afterKey = selectedKey, saveAs?: 'draft' | 'ready'): Promise<EditorQuiz | null> => {
+    if (quiz === null || readOnly || semantic === null || uploadPending.current || savePending.current) return null;
+    const entries: Record<string, PendingEditorEntry> = { ...parkedRef.current };
+    delete entries[selectedKey];
+    if (dirtySlide || dirtyRound || saveAs !== undefined) entries[selectedKey] = {
+      draft: draft !== null && saveAs !== undefined ? { ...draft, authoringStatus: saveAs } : draft,
+      dirtySlide: dirtySlide || saveAs !== undefined, dirtyRound, roundTitle,
+      roundId: selectedRoundForDraft?.id, pendingCreate,
+    };
+    for (const [key, entry] of Object.entries(entries)) {
+      const persisted = quiz.slides.find(slide => slide.id === entry.draft?.id);
+      if (entry.dirtySlide && entry.draft?.isQuestion && entry.draft.authoringStatus !== 'draft'
+        && hasSaveBlockingIssues(entry.draft, persisted, !can('quiz.answers.read'))) {
+        setParked(entries); setSelectedKey(key); setShowReadiness(true);
+        setPendingFixFocus({ selectionKey: key, field: 'prompt', questionId: entry.draft.id });
+        setError('Před uložením opravte označené údaje. Ostatní rozepsané změny zůstávají zachované.');
+        requestAnimationFrame(() => errorRef.current?.focus()); return null;
+      }
+      if (entry.dirtyRound && entry.roundTitle.trim() === '') {
+        setParked(entries); setSelectedKey(key); setError('Název kola nesmí být prázdný.'); return null;
+      }
     }
-    if (dirtyQuiz && title.trim() === '') {
-      setError('Název kvízu nesmí být prázdný.');
-      requestAnimationFrame(() => errorRef.current?.focus());
-      return null;
-    }
-    const currentRound = roundForSelection(selectedKey, semantic);
-    if (dirtyRound && roundTitle.trim() === '') {
-      setError('Název kola nesmí být prázdný.');
-      requestAnimationFrame(() => errorRef.current?.focus());
-      return null;
-    }
-    setSaving(true);
-    setError(null);
-    setSaveFailed(false);
+    if (dirtyQuiz && title.trim() === '') { setError('Název kvízu nesmí být prázdný.'); return null; }
+    savePending.current = true; setSaving(true); setError(null); setSaveFailed(false);
     try {
-      let revision = quiz.revision;
-      let createdSlideId: string | undefined;
-      if (dirtySlide && draft !== null) {
-        const result = pendingCreate === null
-          ? await updateQuizSlide(quiz.id, revision, draft)
-          : await createQuizSlide(quiz.id, revision, pendingCreate.position, draft);
-        revision = result.revision;
-        createdSlideId = result.selectedSlideId;
+      const result = await saveEditorEntries(quiz, entries, dirtyQuiz ? { title, description, appearance } : null, {
+        updateSlide: updateQuizSlide, createSlide: createQuizSlide,
+        updateRound: updateQuizRound, updateMetadata: updateQuizMetadata,
+      });
+      setParked(result.remaining);
+      setQuiz(result.quiz);
+      setDirtyQuiz(result.metadataPending);
+      const active = result.remaining[selectedKey];
+      setDirtySlide(active?.dirtySlide ?? false); setDirtyRound(active?.dirtyRound ?? false);
+      setPendingCreate(active?.pendingCreate ?? null);
+      if (selectedKey === 'draft' && result.created[selectedKey]) setSelectedKey(`slide:${result.created[selectedKey]}`);
+      if (result.error !== null) {
+        setSaveFailed(true);
+        setError((result.acknowledged > 0 ? 'Část změn je uložená. Zbývající změny zůstávají rozepsané. ' : '') + safeErrorMessage(result.error));
+        requestAnimationFrame(() => errorRef.current?.focus()); return null;
       }
-      if (dirtyRound && currentRound !== undefined) {
-        const result = await updateQuizRound(quiz.id, revision, currentRound.id, roundTitle.trim());
-        revision = result.revision;
-      }
-      if (dirtyQuiz) {
-        await updateQuizMetadata(quiz.id, revision, title.trim(), description);
-      }
+      const createdId = result.created[selectedKey];
       const key = pendingCreate?.semanticKey ?? afterKey;
-      return await reload(key, pendingCreate?.semanticKey.startsWith('system:') ? undefined : createdSlideId);
-    } catch (saveError) {
-      setSaveFailed(true);
-      setError(safeErrorMessage(saveError));
-      requestAnimationFrame(() => errorRef.current?.focus());
-      return null;
-    } finally {
-      setSaving(false);
-    }
-  }, [description, dirtyQuiz, dirtyRound, dirtySlide, draft, pendingCreate, quiz, readOnly, reload, roundTitle, selectedKey, semantic, title]);
+      const refreshed = await reload(key, pendingCreate?.semanticKey.startsWith('system:') ? undefined : createdId);
+      if (refreshed === null) setError('Změny jsou uložené, ale nový náhled se nepodařilo načíst. Obnovte stránku.');
+      return refreshed ?? result.quiz;
+    } finally { savePending.current = false; setSaving(false); }
+  }, [appearance, can, description, dirtyQuiz, dirtyRound, dirtySlide, draft, pendingCreate, quiz, readOnly, reload, roundTitle, selectedKey, selectedRoundForDraft, semantic, setParked, title]);
 
   useEffect(() => {
     const keyboardSave = (event: KeyboardEvent) => {
@@ -365,20 +406,46 @@ export function QuizEditorPage() {
     if (quiz === null) return;
     setTitle(quiz.title);
     setDescription(quiz.description);
+    setAppearance(quiz.defaultAppearance ?? initialAppearance);
     setDirtySlide(false);
     setDirtyQuiz(false);
     setDirtyRound(false);
+    setParked({});
+    setQuiz({ ...quiz });
+    if (selectedKey === 'draft') {
+      setDraft(null);
+      setSelectedKey(draft?.roundId ? `round:${draft.roundId}` : 'quiz');
+    }
     setPendingCreate(null);
+    setSaveFailed(false);
     setError(null);
   }
 
-  function select(key: string) {
-    if (key === selectedKey || uploadPending.current) return;
-    setPickerRoundId(null);
-    if (needsNavigationDecision(dirty, selectedKey, key)) {
-      setPendingSelection(key);
-      return;
+  async function discardAndReload() {
+    if (uploadPending.current || savePending.current) return;
+    if (!window.confirm('Zahodit všechny zbývající rozepsané změny a načíst aktuální verzi kvízu?')) return;
+    savePending.current = true;
+    setSaving(true);
+    try {
+      if (await reload() === null) setSaveFailed(true);
+    } catch (loadError) {
+      setSaveFailed(true);
+      setError(safeErrorMessage(loadError));
+    } finally {
+      savePending.current = false;
+      setSaving(false);
     }
+  }
+
+  function select(key: string) {
+    if (key === selectedKey || uploadPending.current || savePending.current) return;
+    setPickerRoundId(null);
+    if (pendingCreate !== null && dirtySlide) { setPendingSelection(key); return; }
+    const entries = { ...parkedRef.current };
+    delete entries[selectedKey];
+    if (dirtySlide || dirtyRound) entries[selectedKey] = { draft, dirtySlide, dirtyRound, roundTitle,
+      roundId: selectedRoundForDraft?.id, pendingCreate };
+    setParked(entries);
     setSelectedKey(key);
     if (window.matchMedia('(max-width: 767px)').matches) setActivePanel('content');
   }
@@ -405,7 +472,8 @@ export function QuizEditorPage() {
   }
 
   async function mutate(action: (current: EditorQuiz) => Promise<{ readonly selectedSlideId?: string }>, preferredKey?: string): Promise<boolean> {
-    if (quiz === null || readOnly || dirty || uploadPending.current) return false;
+    if (quiz === null || readOnly || dirty || uploadPending.current || savePending.current) return false;
+    savePending.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -416,12 +484,29 @@ export function QuizEditorPage() {
       requestAnimationFrame(() => errorRef.current?.focus());
       return false;
     } finally {
+      savePending.current = false;
       setSaving(false);
     }
   }
 
+  async function moveInOutline(id: string, roundId: string | undefined, beforeId?: string): Promise<boolean> {
+    if (quiz === null || readOnly || dirty || uploadPending.current || savePending.current) return false;
+    savePending.current = true; setSaving(true); setError(null);
+    try {
+      await moveOutlineQuestion(quiz, id, roundId, beforeId);
+      return await reload(`slide:${id}`) !== null;
+    } catch (moveError) {
+      // Several revision-protected steps may have succeeded; read the actual order.
+      await reload(`slide:${id}`);
+      setError('Přesun nebyl dokončen. Některé kroky už mohou být uložené. ' + safeErrorMessage(moveError));
+      return false;
+    } finally { savePending.current = false; setSaving(false); }
+  }
+
   if (loading && quiz === null) return <QuizLoading label="Načítám editor kvízu…" />;
   if (quiz === null || semantic === null) return <QuizErrorState message={error ?? 'Kvíz se nepodařilo otevřít.'} onRetry={() => void reload()} />;
+
+  if (practicing) return <QuizPractice quiz={quiz} onClose={() => { restorePracticeFocus.current = true; setPracticing(false); }} />;
 
   const selectedRound = roundForSelection(selectedKey, semantic)
     ?? (selectedKey === 'draft' ? semantic.rounds.find((round) => round.id === draft?.roundId) : undefined);
@@ -431,19 +516,21 @@ export function QuizEditorPage() {
   const selectedSection = selectedKey.startsWith('system:')
     ? semantic.introduction.find((item) => item.key === selectedKey.slice('system:'.length))
     : undefined;
-  const previewBase = draft ?? selectedRound?.settingsSlide ?? semantic.introduction.find((item) => item.slide)?.slide ?? quiz.slides[0]!;
-  const previewSlide = selectedSection?.key === 'agenda'
+  const previewBase = draft ?? selectedRound?.settingsSlide ?? semantic.introduction.find((item) => item.slide)?.slide ?? quiz.slides[0];
+  const previewSlide = selectedSection?.key === 'agenda' && previewBase !== undefined
     ? { ...previewBase, kind: 'agenda' as const, storedKind: 'agenda', options: generatedAgendaOptions(semantic.rounds) }
     : previewBase;
   const saveLabel = uploading ? 'Nejdřív dokončete nahrávání média.' : editorSaveLabels[editorSaveStatus(dirty, saving, saveFailed)];
   const structuralDisabled = readOnly || saving || dirty || uploading;
+  const navigationAsDraft = draft?.isQuestion === true && (draft.authoringStatus === 'draft' || hasSaveBlockingIssues(draft, quiz.slides.find(slide => slide.id === draft.id), !can('quiz.answers.read')));
 
   return (
-    <article className="round-first-editor">
+    <MediaAuthoringContext.Provider value={{ quizId: quiz.id, onPending: onUploadPending, canUpload: can('quiz.media.upload'), canAttach: can('quiz.media.attach') }}><article className="round-first-editor">
       {(pendingSelection !== null || blocker.state === 'blocked') && (
         <UnsavedChangesDialog
+          saveLabel={navigationAsDraft ? "Uložit koncept a pokračovat" : "Uložit a pokračovat"}
           busy={saving || uploading}
-          onSave={() => void saveAll(pendingSelection ?? selectedKey).then((loaded) => {
+          onSave={() => void saveAll(pendingSelection ?? selectedKey, navigationAsDraft ? 'draft' : undefined).then((loaded) => {
             if (loaded === null) return;
             if (blocker.state === 'blocked') blocker.proceed();
             else if (pendingSelection !== null) setSelectedKey(pendingSelection);
@@ -452,7 +539,7 @@ export function QuizEditorPage() {
           onDiscard={() => {
             discardDraft();
             if (blocker.state === 'blocked') blocker.proceed();
-            else if (pendingSelection !== null) setSelectedKey(pendingSelection);
+            else if (pendingSelection !== null && pendingSelection !== 'draft') setSelectedKey(pendingSelection);
             setPendingSelection(null);
           }}
           onCancel={() => {
@@ -475,19 +562,24 @@ export function QuizEditorPage() {
 
       <header className="round-editor-header">
         <div className="round-editor-title">
-          <Link className="back-link" to={`/admin/quizzes/${encodeURIComponent(quiz.id)}`}>← Detail kvízu</Link>
+          <Link className="back-link" to="/admin/quizzes">← Knihovna kvízů</Link>
+          <span className="editor-context-label">Editor kvízu</span>
           <strong>{title || quiz.title}</strong>
         </div>
         <div className="round-editor-save">
-          {readOnly && <span className="read-only-badge">Pouze pro čtení — moderátor</span>}
+          {readOnly && <span className="read-only-badge">Pouze pro čtení</span>}
           <span className={`save-state ${dirty ? 'dirty' : ''} ${saveFailed ? 'failed' : ''}`} role="status" aria-live="polite">{saveLabel}</span>
-          <button type="button" className="secondary-button preflight-header-button" onClick={() => setPreflightOpen((value) => !value)}>Připravenost</button>
-          <button type="button" className="primary-button" disabled={readOnly || saving || uploading || !dirty} onClick={() => void saveAll()}>Uložit</button>
+          {dirty && <span className="working-copy-count">Rozpracované položky: {new Set([...Object.keys(parked), ...(dirtySlide || dirtyRound ? [selectedKey] : []), ...(dirtyQuiz ? ['quiz'] : [])]).size}</span>}
+          <button type="button" className="secondary-button preflight-header-button" onClick={() => setPreflightOpen((value) => !value)}>Zkontrolovat kvíz</button><button type="button" ref={practiceButtonRef} className="secondary-button practice-button" disabled={dirty || saving || uploading || (preflightResult?.blockerCount ?? 1) > 0} onClick={() => setPracticing(true)}>Soukromá zkouška</button>
+          <button type="button" className="primary-button" disabled={readOnly || saving || uploading || !dirty} onClick={() => void saveAll()}>Uložit vše</button>
+          {dirty && <button type="button" className="text-button" disabled={saving || uploading} onClick={() => setPendingSelection(selectedKey)}>Zahodit změny…</button>}
+          {draft?.isQuestion && <button type="button" className="secondary-button draft-save-button" disabled={readOnly || saving || uploading} onClick={() => void saveAll(selectedKey, 'draft')}>Uložit koncept</button>}
           <TechnicalDetails><code>Revize: {quiz.revision}<br />Výběr: {selectedKey}</code></TechnicalDetails>
         </div>
       </header>
 
       {error && <div ref={errorRef} tabIndex={-1} className="round-editor-error"><HumanError error={{ title: 'Změnu nelze dokončit', message: error, technicalCode: saveFailed ? 'EDITOR_SAVE_FAILED' : 'EDITOR_ACTION_FAILED' }} onRetry={saveFailed ? () => void saveAll() : undefined} /></div>}
+      {saveFailed && <button type="button" className="secondary-button" disabled={saving || uploading} onClick={() => void discardAndReload()}>Zahodit rozepsané změny a načíst aktuální verzi</button>}
 
       {preflightOpen && preflightResult !== null && (
         <div className="editor-preflight-shell">
@@ -508,16 +600,17 @@ export function QuizEditorPage() {
 
       <section className="round-editor-workspace" data-active-panel={activePanel}>
         <EditorOutline
-          model={semantic}
+          model={outlineModel ?? semantic}
           selectedKey={selectedKey}
           activeDraft={draft}
           disabled={structuralDisabled}
+          onMove={moveInOutline}
           pickerRoundId={pickerRoundId}
           onSelect={select}
           onOpenPicker={setPickerRoundId}
           onClosePicker={() => setPickerRoundId(null)}
           onCreateQuestion={(round, type) => {
-            const next = newQuestionDraft(type, round);
+            const next = { ...newQuestionDraft(type, round), ...(quiz.defaultAppearance ?? initialAppearance) };
             setDraft(next);
             setPendingCreate({ position: next.position, semanticKey: 'draft' });
             setSelectedKey('draft');
@@ -528,24 +621,23 @@ export function QuizEditorPage() {
             setShowReadiness(false);
             setActivePanel('content');
           }}
+          onAddClosing={() => void mutate(current => createQuizSlide(current.id, current.revision, current.slideCount + 1, localDraft('end', current.slideCount + 1, { title: 'Děkujeme za hru' }), 'quiz'))}
           onAddRound={() => {
-            const position = semantic.closing[0]?.position ?? quiz.slideCount + 1;
-            const slide = localDraft('round', position, { title: `Nové ${semantic.rounds.length + 1}. kolo` });
-            void mutate((current) => createQuizSlide(current.id, current.revision, position, slide));
+            void mutate(current => createQuizRound(current.id, current.revision, `Nové ${semantic.rounds.length + 1}. kolo`));
           }}
         />
 
         <main className="round-editor-content editor-panel-content">
           {selectedKey === 'quiz' && (
-            <QuizSettingsForm quiz={quiz} title={title} description={description} disabled={readOnly || saving}
+            <QuizSettingsForm appearance={appearance} onAppearance={value => {setAppearance(value);setDirtyQuiz(true);}} quiz={quiz} title={title} description={description} disabled={readOnly || saving}
               onTitle={(value) => { setTitle(value); setDirtyQuiz(true); }}
               onDescription={(value) => { setDescription(value); setDirtyQuiz(true); }} />
           )}
-          {selectedSection !== undefined && draft !== null && (
+          {selectedSection !== undefined && draft !== null && draft.id === (selectedSection.slide?.id ?? `local-${selectedSection.key === 'opening' ? 'intro' : selectedSection.key}`) && (
             <SystemSectionForm section={selectedSection} slide={draft} model={semantic} disabled={readOnly || saving}
               onChange={(value) => { setDraft(value); setDirtySlide(true); }} />
           )}
-          {selectedKey.startsWith('round:') && selectedRound !== undefined && (
+          {selectedKey.startsWith('round:') && selectedRound !== undefined && draft?.id === selectedRound.settingsSlide?.id && (
             <>
               <RoundSettingsForm round={selectedRound} title={roundTitle} slide={draft ?? undefined} disabled={readOnly || saving}
                 onTitle={(value) => { setRoundTitle(value); setDirtyRound(true); }}
@@ -554,15 +646,19 @@ export function QuizEditorPage() {
                 <button type="button" className="secondary-button" disabled={structuralDisabled || selectedRound.position === 1} onClick={() => void mutate((current) => moveQuizRound(current.id, current.revision, selectedRound.id, -1), `round:${selectedRound.id}`)}>Přesunout nahoru</button>
                 <button type="button" className="secondary-button" disabled={structuralDisabled || selectedRound.position === semantic.rounds.length} onClick={() => void mutate((current) => moveQuizRound(current.id, current.revision, selectedRound.id, 1), `round:${selectedRound.id}`)}>Přesunout dolů</button>
                 <button type="button" className="secondary-button" disabled={structuralDisabled} onClick={() => void mutate((current) => duplicateQuizRound(current.id, current.revision, selectedRound.id))}>Duplikovat včetně otázek</button>
-                <button type="button" className="danger-button" disabled={structuralDisabled} onClick={() => setRemoveRound(selectedRound)}>Odstranit kolo…</button>
+                <button type="button" className="danger-button" disabled={structuralDisabled || !can('quiz.delete')} onClick={() => setRemoveRound(selectedRound)}>Odstranit kolo…</button>
               </div> : <p className="field-help">Toto je bezpečný přehled starších otázek bez přiřazeného kola. Otázky můžete jednotlivě přesunout.</p>}
             </>
           )}
-          {draft?.isQuestion && (
+          {draft?.isQuestion && (selectedKey === 'draft' || selectedKey === `slide:${draft.id}`) && (
             <>
-              <QuestionForm onUploadPending={onUploadPending} quizId={quiz.id} slide={draft} number={questionNumber} disabled={readOnly || saving || uploading} showAllIssues={showReadiness} touched={touched}
+              <QuestionForm answersReadable={can('quiz.answers.read')} answersEditable={can('quiz.answers.edit')} notesReadable={can('quiz.notes.read')} notesEditable={can('quiz.notes.edit')} key={draft.id} defaultAppearance={quiz.defaultAppearance ?? initialAppearance} onUploadPending={onUploadPending} quizId={quiz.id} slide={draft} number={questionNumber} disabled={readOnly || saving || uploading} showAllIssues={showReadiness} touched={touched}
                 onTouch={(field) => setTouched((current) => new Set(current).add(field))}
                 onChange={(value) => { setDraft(value); setDirtySlide(true); setSaveFailed(false); }} />
+              <div className="question-save-actions">
+                {draft.authoringStatus === 'draft' && <><p role="status">Soukromý koncept — do hry se nedostane.</p><button type="button" className="primary-button" disabled={readOnly || saving || uploading} onClick={() => void saveAll(selectedKey, 'ready')}>Dokončit otázku</button></>}
+                <button type="button" className="secondary-button" disabled={readOnly || saving || uploading} onClick={() => { const roundId = selectedRound?.id; void saveAll().then(loaded => { if (loaded && roundId) { setSelectedKey('round:' + roundId); setPickerRoundId(roundId); setActivePanel('structure'); } }); }}>Uložit a přidat další</button>
+              </div>
               {!isLocalQuestion && selectedRound !== undefined && (
                 <div className="semantic-actions question-actions">
                   <button type="button" className="secondary-button" disabled={structuralDisabled || questionNumber === 1} onClick={() => void mutate((current) => reorderQuizQuestion(current.id, current.revision, draft.id, -1))}>Posunout nahoru</button>
@@ -570,7 +666,7 @@ export function QuizEditorPage() {
                   <button type="button" className="secondary-button" disabled={structuralDisabled} onClick={() => void mutate((current) => duplicateQuizSlide(current.id, current.revision, draft.id))}>Duplikovat</button>
                   {semantic.rounds.filter((round) => round.id !== selectedRound.id && round.id !== 'roundless').length > 0 && (
                     <label className="move-to-round">Přesunout do kola
-                      <select disabled={structuralDisabled} defaultValue="" onChange={(event) => {
+                      <select aria-label="Přesunout do kola" disabled={structuralDisabled} defaultValue="" onChange={(event) => {
                         if (event.target.value !== '') void mutate((current) => moveQuizQuestionToRound(current.id, current.revision, draft.id, event.target.value));
                       }}>
                         <option value="" disabled>Vyberte…</option>
@@ -578,7 +674,7 @@ export function QuizEditorPage() {
                       </select>
                     </label>
                   )}
-                  <button type="button" className="danger-button" disabled={structuralDisabled || quiz.slideCount <= 1} onClick={() => {
+                  <button type="button" className="danger-button" disabled={structuralDisabled || !can('quiz.delete') || quiz.slideCount <= 1} onClick={() => {
                     if (window.confirm('Opravdu odstranit tuto otázku?')) void mutate((current) => deleteQuizSlide(current.id, current.revision, draft.id));
                   }}>Odstranit otázku</button>
                 </div>
@@ -593,8 +689,15 @@ export function QuizEditorPage() {
           {dirty && <p className="structure-save-hint">Strukturální operace budou dostupné po uložení nebo zahození rozepsaných změn.</p>}
         </main>
 
-        <EditorPreview slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer} onShowAnswer={setShowAnswer} />
+        {previewSlide === undefined ? (
+          <aside className="round-editor-preview editor-panel-preview editor-empty-preview">
+            <header className="preview-heading"><span>Náhled</span><strong>Zatím není co promítnout</strong></header>
+            <p>Nejdřív přidejte kolo a otázku. Prázdný rozpracovaný kvíz zůstává bezpečně uložený.</p>
+          </aside>
+        ) : (
+          <EditorPreview slide={previewSlide} quizTitle={title || quiz.title} showAnswer={showAnswer && can('quiz.answers.read')} onShowAnswer={value => { if (can('quiz.answers.read')) setShowAnswer(value); }} />
+        )}
       </section>
-    </article>
+    </article></MediaAuthoringContext.Provider>
   );
 }

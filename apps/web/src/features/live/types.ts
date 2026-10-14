@@ -52,6 +52,8 @@ export interface LiveControlSlide {
   readonly backgroundImage?: string;
   readonly questionImage?: string;
   readonly answerImage?: string;
+  readonly imageLayout?: string;
+  readonly answerExplanation?: string;
   readonly mediaSource?: string;
   readonly backgroundOverlay?: number;
   readonly clipStartSeconds?: number;
@@ -96,6 +98,8 @@ export interface PublicLiveState {
   readonly answerRevealed: boolean;
   readonly revealedAnswer?: string;
   readonly answerImage?: string;
+  readonly imageLayout?: string;
+  readonly answerExplanation?: string;
   readonly recapQuestionPosition?: number;
   readonly revision: number;
 }

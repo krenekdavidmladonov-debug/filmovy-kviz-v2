@@ -8,6 +8,10 @@ recapu načtěte **Načíst konečný náhled**, zkontrolujte všechny stránky 
 tabulky a stiskněte **Zahájit vyhlášení**. Před tím neukončujte session.
 Samotný konec kola ani závěrečný slide nic nepublikuje a neprovádí END.
 
+Po dokončení akce otevřete na jejím detailu **Konečné výsledky**. Jde o
+[historický read-only souhrn](HISTORICAL_RESULTS.md) potvrzené verze, nikoli
+obnovení session nebo nové vyhlášení.
+
 Projektor nejprve ukáže neutrální úvod. Každé **Odhalit další umístění** odhalí
 jednu skupinu od posledního dense umístění k prvnímu. Pořadí 1/2/2/3 tedy odhalí
 3 → oba týmy na 2 → vítěze. Ruční stránky po osmi týmech nemění odhalené

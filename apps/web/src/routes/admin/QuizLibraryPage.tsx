@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { useAuth } from '../../auth/AuthProvider';
 import { QuizErrorState } from '../../features/quizzes/QuizErrorState';
 import { QuizLoading } from '../../features/quizzes/QuizLoading';
 import { formatQuizDate, getQuizDataError, quizStatusLabels } from '../../features/quizzes/presentation';
@@ -8,6 +9,7 @@ import { listQuizzes } from '../../features/quizzes/quizRepository';
 import type { QuizSummary } from '../../features/quizzes/types';
 
 export function QuizLibraryPage() {
+  const { can } = useAuth();
   const [quizzes, setQuizzes] = useState<readonly QuizSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,9 +47,12 @@ export function QuizLibraryPage() {
           <h1>Kvízy</h1>
           <p className="lead">Připravené, rozpracované a archivované kvízy na jednom místě.</p>
         </div>
-        <p className="section-count" aria-label="Souhrn knihovny">
-          {quizzes.length} {quizzes.length === 1 ? 'kvíz' : quizzes.length < 5 ? 'kvízy' : 'kvízů'}
-        </p>
+        <div className="quiz-library-actions">
+          {can('quiz.create') && <Link className="primary-button" to="/admin/quizzes/new">+ Nový kvíz</Link>}
+          <p className="section-count" aria-label="Souhrn knihovny">
+            {quizzes.length} {quizzes.length === 1 ? 'kvíz' : quizzes.length < 5 ? 'kvízy' : 'kvízů'}
+          </p>
+        </div>
       </header>
 
       {quizzes.length === 0 ? (
@@ -56,9 +61,10 @@ export function QuizLibraryPage() {
             <h2>Zatím tu nejsou žádné kvízy</h2>
             <p>Jakmile bude kvíz vytvořený, objeví se v této knihovně.</p>
           </div>
-          <button className="secondary-button" type="button" onClick={() => void loadQuizzes()}>
-            Načíst znovu
-          </button>
+          <div className="quiz-empty-actions">
+            {can('quiz.create') && <Link className="primary-button" to="/admin/quizzes/new">+ Nový kvíz</Link>}
+            <button className="secondary-button" type="button" onClick={() => void loadQuizzes()}>Načíst znovu</button>
+          </div>
         </div>
       ) : (
         <div className="quiz-table-wrap">

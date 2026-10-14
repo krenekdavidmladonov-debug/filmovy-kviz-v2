@@ -1,5 +1,6 @@
 export type QuizEditorErrorCode =
   | 'invalid-argument'
+  | 'already-exists'
   | 'not-found'
   | 'failed-precondition'
   | 'aborted';

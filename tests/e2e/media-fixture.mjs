@@ -1,3 +1,4 @@
+import { seedEmulatorMembership } from '../../functions/lib/dev/seed-membership.js';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { initializeApp, deleteApp } from 'firebase/app';
@@ -5,7 +6,7 @@ import { getAuth, connectAuthEmulator, signInWithEmailAndPassword } from 'fireba
 import { getStorage, connectStorageEmulator, ref, uploadBytes } from 'firebase/storage';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
 import { PNG } from 'pngjs';
-import { emailFixture } from './registration-email-fixture.mjs';
+import { mediaEventFixture } from './media-event-fixture.mjs';
 import { requireFullEmulatorEnvironment, localEmulatorEndpoint } from '../../tools/local-emulator-environment.mjs';
 export function syntheticImage() { const image = new PNG({width: 8,height: 4}); for(let i=0;i<image.data.length;i+=4) { image.data[i]=35;image.data[i+1]=180;image.data[i+2]=90;image.data[i+3]=255; } return PNG.sync.write(image); }
 export function syntheticAudio(seconds = 4) {
@@ -17,7 +18,7 @@ export function mediaSlide(kind, extra = {}) { return {kind,title: '',text: kind
 export async function mediaFixture() {
   const env = requireFullEmulatorEnvironment(process.env, 'Media fixture');
   const storageEndpoint = localEmulatorEndpoint(process.env.FIREBASE_STORAGE_EMULATOR_HOST, 'Storage emulator');
-  const f = await emailFixture();
+  const f = await mediaEventFixture();
   const require = createRequire(new URL('../../functions/package.json', import.meta.url));
   const adminApp = require('firebase-admin/app').initializeApp({projectId:env.projectId},'media-'+randomUUID());
   const authAdmin = require('firebase-admin/auth').getAuth(adminApp), bucket = require('firebase-admin/storage').getStorage(adminApp).bucket(env.projectId+'.appspot.com');
@@ -31,9 +32,9 @@ export async function mediaFixture() {
     return {auth,storage,call:async(name,data)=>(await httpsCallable(functions,name)(data)).data};
   }
   const admin=await client(f.loginEmail,f.loginPassword), anonymous=await client();
-  async function roleClient(role) { const email='media-'+randomUUID()+'@example.test',password=randomUUID();const user=await authAdmin.createUser({email,password});users.push(user.uid);await authAdmin.setCustomUserClaims(user.uid,{role});return client(email,password); }
-  const quizId='media-'+randomUUID(),quizRef=f.db.collection('quizzes').doc(quizId);
-  await quizRef.set({title:'Syntetická vlastní média',description:'',status:'draft',revision:0,slideCount:0,roundCount:0,questionCount:0,createdAt:new Date(),updatedAt:new Date()});
+  async function roleClient(role) { const email='media-'+randomUUID()+'@example.test',password=randomUUID();const user=await authAdmin.createUser({email,password});users.push(user.uid);await authAdmin.setCustomUserClaims(user.uid,{role});await seedEmulatorMembership(user.uid, role);return client(email,password); }
+  const {quizId}=await admin.call('createQuiz',{title:'Syntetická vlastní média',requestId:'media-'+randomUUID()});
+  const quizRef=f.db.collection('quizzes').doc(quizId);
   const ids={}; let revision=0;
   for(const kind of ['intro','round','image','audio','recap','end']) {const result=await admin.call('createQuizSlide',{quizId,expectedRevision:revision,position:revision+1,slide:mediaSlide(kind,{title:kind==='round'?'Média':kind==='intro'?'Vlastní média':''})});revision=result.revision;ids[kind]=result.selectedSlideId;}
   const begin=(kind,bytes,contentType,who=admin)=>who.call('beginQuizMediaUpload',{quizId,requestId:randomUUID(),kind,contentType,size:bytes.length});

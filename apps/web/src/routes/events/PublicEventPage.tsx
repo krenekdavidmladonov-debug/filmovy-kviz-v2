@@ -33,7 +33,7 @@ export function PublicEventPage() {
   if (loading) return <section className="event-public-state">Načítám akci…</section>;
   if (!event) return <section className="event-public-state"><h1>Akce není dostupná</h1><Link to="/events">Zpět na akce</Link></section>;
   const now = Date.now();
-  const open = event.registrationPublished
+  const open = !event.cancelled && event.registrationPublished
     && event.registrationStatus !== 'full'
     && event.registrationOpensAt !== undefined
     && event.registrationClosesAt !== undefined
@@ -53,6 +53,7 @@ export function PublicEventPage() {
   return <article className="public-event-detail">
     <Link className="back-link" to="/events">← Zpět na akce</Link>
     <header><p className="eyebrow">Veřejná registrace</p><h1>{event.title}</h1><p className="lead">{event.venueName} · {new Intl.DateTimeFormat('cs-CZ', { dateStyle: 'full', timeStyle: 'short', timeZone: event.timeZone }).format(event.startsAt)}</p><p>{event.publicLocation}</p></header>
+    {event.cancelled && <section className="event-section" role="status"><h2>Akce byla zrušena</h2>{event.cancellationMessage && <p>{event.cancellationMessage}</p>}</section>}
     <section className="event-section registration-summary"><h2>{open ? 'Registrace je otevřená' : event.registrationStatus === 'full' ? 'Kapacita je naplněna' : 'Registrace není otevřená'}</h2><p>Týmy: {event.acceptedTeams} / {event.teamCapacity} · Lidé: {event.acceptedPeople} / {event.peopleCapacity}</p><p>Velikost týmu: {event.teamSizeMin}–{event.teamSizeMax} členů.</p></section>
     {created ? <section className="event-section registration-success" role="status"><h2>{created.status === 'cancelled' ? 'Registrace je zrušená' : 'Děkujeme, tým byl přihlášen.'}</h2><p><strong>{created.teamName}</strong> · {created.memberCount} lidí · {event.title}</p><p>{created.status === 'cancelled' ? 'Tým již není aktivně přihlášen. Odkaz zobrazí stav registrace.' : 'Tento odkaz si uschovejte. Umožňuje registraci upravit nebo zrušit.'}</p><Link className="primary-button" to={managementPath}>Spravovat registraci</Link></section>
       : open ? <section className="event-section"><h2>Přihlásit tým</h2>{error && <p className="round-editor-error" role="alert">{error}</p>}<RegistrationForm values={{ ...values, memberCount: values.memberCount || event.teamSizeMin }} minimum={event.teamSizeMin} maximum={event.teamSizeMax} pending={pending} submitLabel="Přihlásit tým" onChange={setValues} onSubmit={() => void submit()} /></section>

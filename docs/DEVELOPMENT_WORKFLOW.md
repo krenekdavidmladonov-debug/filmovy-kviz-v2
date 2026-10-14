@@ -55,7 +55,20 @@ Do not run full migration verification for ordinary feature work.
 - **HIGH** — substantial features, trusted Functions, PDF, registration transactions, and scoring.
 - **XHIGH** — architecture or security redesign, a serious production incident, or major migration redesign.
 
-XHIGH is not the default. Choose the lowest level appropriate to the risk and ambiguity of the task.
+Choose the lowest level appropriate to the risk and ambiguity of the task. Under the owner-directed coordination policy agreed on 2026-10-12, worker agents use LOW, MEDIUM, or HIGH; XHIGH, MAX, and ULTRA are reserved for the lead. The owner's preferred lead setting is GPT-6 Astra Ultra or GPT-6.1 Sol Ultra. This is a preference, not evidence of the model actually selected in a chat; the lead must not claim to have changed its own setting without tool confirmation.
+
+## Coordinated agent development
+
+The lead owns priorities, architecture decisions, task assignment, review, integration, and release preparation. The owner communicates with the lead rather than supervising individual workers. See [DEVELOPMENT_STATUS.md](DEVELOPMENT_STATUS.md) for the dated baseline, current evidence, and next work.
+
+- Start workers with an explicit model and reasoning effort. Default to GPT-6.1 Sol MEDIUM for normal implementation and bounded audits; use LOW for small documentation work and HIGH for trusted Functions or complex security work. Workers do not independently increase their effort or create more workers.
+- Give every task an exact base commit, objective, owned files or isolated worktree, dependencies, forbidden operations, acceptance criteria, and required checks. A branch name alone is not an implementation baseline.
+- Begin an uncertain or resumed project with read-only inspection. Distinguish code already implemented, code integrated into `main`, code tested at a particular SHA, and code actually deployed. Do not infer any one of these from another.
+- Keep concurrent writes in separate worktrees or explicitly disjoint files. The lead performs integrations serially and preserves existing user work. Workers report conflicts rather than resolving ownership by overwriting another worker.
+- Workers may perform their assigned local edits and checks. They may not deploy, access production, send real email, push, merge remote PRs, delete user data, or change unrelated files unless the lead passes through the necessary user authorization and explicitly assigns that action.
+- A worker returns changed files, the behavior fixed, exact checks and results, and remaining limits. The lead reviews the diff and rejects stale, unverified, or out-of-scope conclusions before accepting the task.
+- Merge through the existing PR workflow after the applicable checks. Agent completion is not a release approval. Cloud deployment still requires explicit owner approval in the current conversation under `AGENTS.md`, with the exact target and candidate prepared for review first.
+- Scale concurrency to the available slots and independent work. Do not create an indefinite monitor or claim unattended background work unless an appropriate automation has actually been configured at the owner's request.
 
 ## Worktree convention
 

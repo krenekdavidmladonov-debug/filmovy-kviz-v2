@@ -1,0 +1,26 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /quiz-assets/{quizId}/{assetId}/source {
+      function upload() { return firestore.get(/databases/(default)/documents/quizzes/$(quizId)/mediaAssets/$(assetId)).data; }
+      function member() { return firestore.get(/databases/(default)/documents/memberships/$(request.auth.uid)).data; }
+      // The server mints this exact grant only after scope authorization in its
+      // membership transaction. Scope/permission changes increment version and
+      // revoke pending grants. Use two distinct Firestore documents at most;
+      // an additional quiz-root lookup exceeds the Storage cross-service limit.
+      allow create: if request.auth != null && request.auth.token.email_verified == true
+        && member().uid == request.auth.uid && member().status == 'active'
+        && request.auth.token.auth_time > member().sessionValidAfter
+        && 'quiz.media.upload' in member().permissions
+        && upload().membershipVersion == member().version
+        && upload().createdBy == request.auth.uid && upload().quizId == quizId && upload().assetId == assetId
+        && upload().status == 'uploading' && request.time < upload().uploadExpiresAt
+        && request.resource.size == upload().size && request.resource.contentType == upload().contentType
+        && request.resource.size > 0
+        && ((upload().kind == 'image' && request.resource.size <= 10485760 && request.resource.contentType in ['image/png','image/jpeg','image/webp'])
+          || (upload().kind == 'audio' && request.resource.size <= 26214400 && request.resource.contentType in ['audio/mpeg','audio/wav']));
+      allow get, list, update, delete: if false;
+    }
+    match /{path=**} { allow read, write: if false; }
+  }
+}

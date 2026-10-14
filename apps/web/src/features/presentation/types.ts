@@ -54,6 +54,8 @@ export interface SlideRenderInput {
   readonly backgroundImage?: string;
   readonly questionImage?: string;
   readonly answerImage?: string;
+  readonly imageLayout?: string;
+  readonly answerExplanation?: string;
   readonly mediaSource?: string;
   readonly backgroundOverlay?: number | null;
   readonly clipStartSeconds?: number | null;
@@ -73,6 +75,8 @@ export interface NormalizedSlideRenderModel {
   readonly backgroundImage?: string;
   readonly questionImage?: string;
   readonly answerImage?: string;
+  readonly imageLayout?: string;
+  readonly answerExplanation?: string;
   readonly mediaSource?: string;
   readonly backgroundOverlay: number;
   readonly clipStartSeconds: number;

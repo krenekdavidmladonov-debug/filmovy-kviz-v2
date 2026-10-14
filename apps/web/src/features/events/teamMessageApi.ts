@@ -1,3 +1,4 @@
+import { teamEmailEnabled } from './teamEmailCapability';
 import { FunctionsError, httpsCallable } from 'firebase/functions';
 import { getFirebaseServices } from '../../services/firebase/client';
 
@@ -6,7 +7,10 @@ export interface TeamMessagePreview extends TeamMessageCopy { eventTitle: string
 export interface TeamMessageReceipt extends TeamMessageCopy { campaignId: string; eventId: string; eventTitle: string; total: number; createdAt: string }
 export interface TeamMessageStatus extends TeamMessageReceipt { pending: number; sent: number; failed: number }
 export interface TeamMessageRequest extends TeamMessageCopy { eventId: string; requestId: string; previewFingerprint: string; confirmed: true }
-const invoke = async <T>(name: string, data: object) => (await httpsCallable<object, T>(getFirebaseServices().functions, name)(data)).data;
+const invoke = async <T>(name: string, data: object) => {
+  if (!teamEmailEnabled) throw new Error('Týmové e-maily nejsou v tomto sestavení zapnuté.');
+  return (await httpsCallable<object, T>(getFirebaseServices().functions, name)(data)).data;
+};
 export const previewTeamMessage = (eventId: string, copy: TeamMessageCopy) => invoke<TeamMessagePreview>('previewEventTeamMessage', { eventId, ...copy });
 export const createTeamMessage = (data: TeamMessageRequest) => invoke<TeamMessageReceipt>('createEventTeamMessage', data);
 export const listTeamMessages = (eventId: string) => invoke<TeamMessageReceipt[]>('listEventTeamMessages', { eventId });

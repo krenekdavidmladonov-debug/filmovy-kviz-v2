@@ -26,7 +26,7 @@ RFC Message-ID and boundary derive from project + intent path; Date derives from
 - Queue/Firestore infrastructure can exhaust its own retry retention during sustained outages. Monitoring must flag old pending/processing intents; this foundation does not claim guaranteed eventual delivery during indefinite outages and performs no automatic historical backfill.
 - Email snapshots can arrive out of order. Old completion cannot replace a newer registration summary.
 
-## Future configuration — names only, no values
+## Local activation preparation — names only, no values
 
 | Name | Storage / binding |
 | --- | --- |
@@ -34,19 +34,19 @@ RFC Message-ID and boundary derive from project + intent path; Date derives from
 | GMAIL_OAUTH_CLIENT_SECRET | Secret Manager; Gmail worker only |
 | GMAIL_OAUTH_REFRESH_TOKEN | Secret Manager; Gmail worker only |
 | EMAIL_TOKEN_KEYRING | Secret Manager; create/replay callable and Gmail worker only |
-| GMAIL_SENDER_EMAIL | String parameter: dedicated Workspace sender |
-| GMAIL_REPLY_TO | Optional string parameter: one mailbox |
-| EMAIL_PUBLIC_ORIGIN | String parameter: exact V2 staging origin |
+| GMAIL_SENDER_EMAIL | Invocation environment: dedicated authorized Gmail sender (consumer or Workspace) |
+| GMAIL_REPLY_TO | Optional invocation environment: one mailbox |
+| EMAIL_PUBLIC_ORIGIN | Invocation environment: exact V2 staging origin |
 
 EMAIL_TOKEN_KEYRING is a JSON object with activeKeyId and keys, a mapping of key IDs to canonical base64-encoded 32-byte AES keys. Keys are generated and provisioned by an authorized operator later, never committed. Retain old key entries for existing envelopes/receipts; seal new messages with activeKeyId. Rotation cannot delete old keys merely because mail was sent: create-response recovery also depends on them. No plaintext fallback exists.
 
-Local Functions discovery omits cloud secret bindings only when emulator signals are present. Actual fixture use additionally requires demo project plus explicit local Firestore host. A cloud project with an emulator host still fails the fixture guard. The real Gmail/Tasks path refuses emulator execution; local tests explicitly inject a fake HTTP provider.
+Deployed staging remains email-disabled. The local activation candidate is default-off: no parameter declarations or secret bindings when off. Exact V2 staging activation requires `REGISTRATION_EMAIL_MODE=staging`, canonical UTC `REGISTRATION_EMAIL_ACTIVATED_AT` and one `REGISTRATION_EMAIL_ALLOWED_RECIPIENT`; mismatched projects/emulator signals fail closed. On mode binds the create callable keyring and four private-worker secrets by string names; values are resolved only at invocation. Other recipients create no email intents/envelopes. The worker rejects old/pre-cutoff, other-recipient and team-message intents before lease claim or secret/provider resolution. Historical team-message intents may exist while workers were excluded: there is no backfill, queue sweep or authorization to send them. Actual fixture use additionally requires demo project plus explicit local Firestore host. A cloud project with an emulator host still fails the fixture guard. The real Gmail/Tasks path refuses emulator execution; local tests explicitly inject a fake HTTP provider.
 
 ## OAuth and staging deployment checklist — future authorized task only
 
-1. Confirm the dedicated Workspace sender mailbox, optional Reply-To, sender name policy, send-only consent and retention/abuse controls. No new account is created by this code.
+1. Confirm the dedicated authorized Gmail sender mailbox (consumer or Workspace), optional Reply-To, sender name policy, send-only consent and retention/abuse controls. No new account is created by this code.
 2. Configure an appropriate OAuth 2.0 client and exact controlled redirect URI in the existing authorized project. Enable Gmail API. Use the dedicated mailbox with offline access and only gmail.send; retain the refresh token securely. OAuth consent/login is an operator step, not an application admin flow or CI job.
-3. Provision the four named secrets and three parameters; never paste values into Git, logs, PRs or this report. Confirm keyring rotation/backup and preserve old keys/receipts.
+3. Provision the four named secrets and the documented invocation environment, including activation cutoff/single recipient; never paste values into Git, logs, PRs or this report. Confirm keyring rotation/backup and preserve old keys/receipts.
 4. Review required Functions/Cloud Tasks/Eventarc APIs and existing billing/quota readiness. No service was purchased/enabled in this task. Confirm least-privilege per-resource task enqueue, service-account act-as, private worker invocation and secret access. The endpoint must remain non-public; no public/allUsers invoker is configured. No IAM change is made here.
 5. Verify the exact reviewed merge SHA and green post-merge CI. Obtain separate explicit deployment authorization, then select only the V2 targets required by this implementation. The create callable and worker need coordinated key configuration.
 6. Confirm the trigger enqueues successfully, the queue invokes the private worker, and an explicitly authorized synthetic staging registration goes pending → processing → sent. Actual Gmail sending and staging data writes require separate authorization. Verify receipt replay, transient recovery and safe admin status without exposing capabilities.
@@ -61,4 +61,4 @@ Unit tests cover MIME/diacritics/raw encoding, headers, scope, success, 429/5xx/
 
 Official references: [Gmail MIME sending](https://developers.google.com/workspace/gmail/api/guides/sending), [users.messages.send](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/send), [OAuth offline access](https://developers.google.com/identity/protocols/oauth2/web-server#offline), [Firebase task functions](https://firebase.google.com/docs/functions/task-functions).
 
-Project estimate: **88%**.
+Current evidence and limits are in [COMPLETION_MATRIX.md](COMPLETION_MATRIX.md). The local activation preparation passed the checks in [EMAIL_ACTIVATION_VALIDATION.md](EMAIL_ACTIVATION_VALIDATION.md); it is not deployed and real OAuth and actual sending remain unperformed. See [EMAIL_ACTIVATION_PLAN.md](EMAIL_ACTIVATION_PLAN.md). External OAuth apps in Testing commonly have seven-day refresh-token expiry for this scope; plan an appropriate consent status before relying on ongoing delivery. [OAuth web-server flow](https://developers.google.com/identity/protocols/oauth2/web-server), [OAuth overview](https://developers.google.com/identity/protocols/oauth2), [Functions environment configuration](https://firebase.google.com/docs/functions/config-env).

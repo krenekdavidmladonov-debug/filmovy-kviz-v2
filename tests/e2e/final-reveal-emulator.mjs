@@ -1,3 +1,4 @@
+import { seedEmulatorMembership } from '../../functions/lib/dev/seed-membership.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { doc, getDocFromServer, getDocs, collection, setDoc } from 'firebase/firestore';
@@ -16,9 +17,9 @@ try {
   await deny(f.anonymous.call('previewFinalResults', { eventId: f.eventId, sessionId: f.sessionId }), 'unauthenticated');
   const grant = await f.referee();
   await deny(f.anonymous.call('controlFinalReveal', { ...grant, sessionId: f.sessionId, action: 'start', token: 'management' }), 'unauthenticated');
-  await f.authAdmin.setCustomUserClaims(f.moderator.uid, { role: 'user' });
+  await seedEmulatorMembership(f.moderator.uid, 'user');
   await deny(f.previewFinal(), 'permission-denied');
-  await f.authAdmin.setCustomUserClaims(f.moderator.uid, { role: 'moderator' }); groups++;
+  await seedEmulatorMembership(f.moderator.uid, 'moderator'); groups++;
 
   await f.score(0, 2, null); p = await f.previewFinal();
   assert.equal(p.complete, false); assert(p.missing.some(m => m.teamId === f.teamIds[0] && m.roundId === 'r3'));
@@ -85,7 +86,7 @@ try {
   assert.equal((await f.db.collection(`sessions/${f.sessionId}/finalVersions`).get()).size, 2);
   await f.call('controlFinalReveal', win); assertFinalPayload(await f.rawPublic(), [], 'intro');
   await deny(f.call('controlFinalReveal', { ...win, requestId: randomUUID() }), 'aborted');
-  await deny(f.call('previewFinalResults', { eventId: 'foreign', sessionId: f.sessionId }), 'failed-precondition');
+  await deny(f.call('previewFinalResults', { eventId: 'foreign', sessionId: f.sessionId }), 'not-found');
   s = await f.session(); await f.call('endLiveSession', { sessionId: f.sessionId, expectedRevision: s.revision });
   assert.equal((await f.rawPublic()).status, 'ended'); assert(!(await f.rawPublic()).finalReveal);
   assert.equal((await f.session()).finalReveal.visible, false);
@@ -97,10 +98,10 @@ try {
       const q = await other.previewFinal(); assert.equal(q.includedRounds.length, 1);
       await other.startFinal(q); const r = await other.command('reveal'); assert.equal(r.winnerRevealed, true);
       assert.equal((await other.rawPublic()).finalReveal.rank, 1);
-      // Archive accepts only a closed event. Model the completed event with its still-visible session in this emulator fixture.
-      if (action === 'archiveEvent') await other.db.doc('events/' + other.eventId).update({ lifecycleStatus: 'completed' });
+      // Archive accepts only a closed event; finish it through the real server path.
+      if (action === 'archiveEvent') { const session = await other.session(); await other.admin.call('endLiveSession', { sessionId: other.sessionId, expectedRevision: session.revision }); }
       const event = (await other.db.doc('events/' + other.eventId).get()).data();
-      await other.admin.call(action, { eventId: other.eventId, expectedRevision: event.revision });
+      await other.admin.call(action, { eventId: other.eventId, expectedRevision: event.revision, ...(action === 'cancelEvent' ? { endLive: true } : {}) });
       assert.equal((await other.rawPublic()).status, 'ended'); assert(!(await other.rawPublic()).finalReveal);
       await deny(other.command('resume'), 'failed-precondition');
     } finally { await other.close(); }

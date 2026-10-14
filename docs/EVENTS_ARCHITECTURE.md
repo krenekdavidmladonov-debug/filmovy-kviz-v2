@@ -99,11 +99,12 @@ Readiness is server-derived. No request accepts `isReady` or `lifecycleStatus: r
 
 - title, start timestamp, time zone;
 - venue name and public location;
-- coarse registration/availability status;
+- registration publication/status and opening/closing window;
 - team-size minimum/maximum;
+- aggregate accepted and maximum team/people counts under `capacity` (added by the registration slice);
 - projection revision and update timestamp.
 
-It excludes exact team/people capacities, quiz assignment/snapshot data, answers, organizer secrets, contacts, registration data, emails, tokens, and every private extension. The Function replaces the full known projection on create/update/lock. Anonymous clients may read/query it and cannot write it. It is presentation data, never event authority.
+It excludes quiz assignment/snapshot data, answers, organizer secrets, contacts, individual registration records, emails, tokens, and every private extension. Exact aggregate capacity counts are intentionally public; this supersedes the original foundation's coarse-capacity-only design. The Function replaces the full known projection on create/update/lock. Anonymous clients may read/query it and cannot write it. It is presentation data, never event authority.
 
 ## Next slice
 

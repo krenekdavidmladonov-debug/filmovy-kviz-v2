@@ -10,7 +10,7 @@
 .results-canvas th:last-child, .results-canvas td:last-child { width: 15%; text-align: right; }
 .results-canvas tbody th { text-align: left; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .results-canvas footer { margin-top: auto; padding-top: 1cqw; font-size: 1.1cqw; color: #9ca3af; }
-.interim-panel { max-width: 1100px; margin: 1rem auto; padding: 1rem; border: 1px solid var(--color-border, #d1d5db); border-radius: 12px; }
+.interim-panel { max-width: 1100px; margin: 1rem auto; padding: 1rem; border: 1px solid var(--color-border); border-radius: 12px; }
 .interim-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin: .75rem 0; }
 .interim-panel select { max-width: 100%; }
 .interim-panel .results-frame { max-width: 960px; }

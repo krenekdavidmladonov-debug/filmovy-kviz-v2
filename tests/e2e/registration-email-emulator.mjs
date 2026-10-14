@@ -21,6 +21,58 @@ try {
   const managed = value => ({ eventId, registrationId: value.registrationId, token: value.managementToken });
   const list = value => fixture.intents(value.registrationId);
   const record = async value => (await eventRef.collection('registrations').doc(value.registrationId).get()).data();
+  const persistedState = async () => {
+    const documents = [await eventRef.get(), await fixture.db.collection('publicEvents').doc(eventId).get()];
+    for (const name of ['registrations', 'registrationNames', 'registrationOperations', 'emailIntents', 'emailSecrets']) {
+      documents.push(...(await eventRef.collection(name).get()).docs);
+    }
+    return documents.sort((a, b) => a.ref.path.localeCompare(b.ref.path)).map(doc => ({
+      path: doc.ref.path, data: doc.data(), updateTime: [doc.updateTime.seconds, doc.updateTime.nanoseconds],
+    }));
+  };
+  phase = 'pre-activation creation receipt without token envelope';
+  const historicalKey = key(), historicalName = 'Historický cloudový tým';
+  const historicalTeam = await create(historicalName, historicalKey);
+  const historicalIntent = (await list(historicalTeam))[0];
+  const historicalRef = eventRef.collection('registrations').doc(historicalTeam.registrationId);
+  const historicalSecret = eventRef.collection('emailSecrets').doc(historicalIntent.id);
+  check((await historicalSecret.get()).exists, 'Fixture first creates a real emulator envelope');
+  // Reproduce the cloud/pre-activation persisted shape without changing runtime gates:
+  // the create receipt, token verifier, reservation and counters remain unchanged.
+  const historicalData = await record(historicalTeam);
+  delete historicalData.emailDelivery;
+  const historyBatch = fixture.db.batch();
+  historyBatch.set(historicalRef, historicalData);
+  historyBatch.delete(historicalSecret);
+  historyBatch.delete(historicalIntent.ref);
+  await historyBatch.commit();
+  const historicalBefore = await persistedState();
+  const historicalReplays = await Promise.all([create(historicalName, historicalKey), create(historicalName, historicalKey)]);
+  check(historicalReplays.every(value => value.registrationId === historicalTeam.registrationId && value.managementToken === historicalTeam.managementToken), 'Absent historical envelope recovers the exact existing registration and token');
+  assert.deepEqual(await persistedState(), historicalBefore);
+  await denied(publicCall('createEventRegistration', { eventId, requestKey: historicalKey, ...input('Changed historical payload') }), 'already-exists');
+  assert.deepEqual(await persistedState(), historicalBefore);
+  for (const corrupt of [{}, { envelope: { version: 1, keyId: 'demo-fixture-v1', nonce: '', ciphertext: '', tag: '' } }]) {
+    await historicalSecret.set(corrupt);
+    const before = await persistedState();
+    await denied(create(historicalName, historicalKey), 'internal');
+    assert.deepEqual(await persistedState(), before);
+  }
+  await historicalSecret.delete();
+  await eventRef.update({ capabilityVersion: (historicalData.capabilityVersion ?? 0) + 1 });
+  const revokedBefore = await persistedState();
+  await denied(create(historicalName, historicalKey), 'permission-denied');
+  assert.deepEqual(await persistedState(), revokedBefore);
+  const rotated = await adminCall('adminUpdateEventTeam', { action: 'reissueLink', eventId, registrationId: historicalTeam.registrationId, expectedRevision: historicalData.revision ?? 0, requestId: randomUUID() });
+  check(typeof rotated.managementToken === 'string' && rotated.managementToken !== historicalTeam.managementToken, 'Reissue rotates the current management capability');
+  secrets.push(rotated.managementToken);
+  const rotatedBefore = await persistedState();
+  await denied(create(historicalName, historicalKey), 'not-found');
+  check((await publicCall('getEventRegistration', { ...managed(historicalTeam), token: rotated.managementToken })).registrationId === historicalTeam.registrationId, 'Current reissued token remains valid');
+  assert.deepEqual(await persistedState(), rotatedBefore);
+  check((await list(historicalTeam)).length === 0 && !(await historicalSecret.get()).exists, 'Historical replay never creates email intents or envelopes');
+  console.log('PASS: pre-activation receipt replay has no writes; changed payload, corrupt envelope, revoked capability and rotated token denied');
+
   phase = 'create atomicity and concurrent/lost-response replay';
   const retryKey = key();
   const [team, replay] = await Promise.all([create('Emailový tým', retryKey), create('Emailový tým', retryKey)]);

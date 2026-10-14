@@ -29,7 +29,7 @@ Every callable uses an expected revision. Stale event operations abort. Lock add
 
 Snapshots intentionally contain private correct answers because future live/recap must use stable event content. They are never copied into `publicEvents`, never read by `/events`, and never available to anonymous or ordinary authenticated users. Existing `publicSessions` publication and answer-reveal rules are unchanged.
 
-The public sanitizer is a construction allowlist, not a deletion filter. Unit and emulator tests assert that exact capacities, quiz assignment, snapshot references, answer-like fields, and contacts do not enter the projection.
+The public sanitizer is a construction allowlist, not a deletion filter. The registration slice explicitly added exact aggregate accepted/maximum team and people counts under `capacity`; `tests/events.test.ts` checks this complete public shape. Quiz assignment, snapshot references, answer-like fields, individual registrations and contacts remain excluded. No client can write the projection.
 
 ## Deferred private data
 

@@ -1,0 +1,15 @@
+{
+  "projectId": "filmovy-kviz-v2-staging",
+  "mode": "DRY_RUN_ONLY",
+  "collaborationEnabled": false,
+  "contentWrites": 0,
+  "authWrites": 0,
+  "memberships": [
+    { "uid": "OT395koGquNshAMFT3Oj98xuU9A3", "email": "admin-staging@example.test", "role": "manager", "permissionPreset": "manager", "quizScope": "all", "eventScope": "all", "status": "active", "createOnly": true },
+    { "uid": "qnw4VgkI1kgN0sWliZ4kIDTTrvw1", "email": "moderator-staging@example.test", "role": "moderator", "permissionPreset": "legacy-moderator-compatible", "permissions": ["quiz.read", "quiz.answers.read", "quiz.notes.read", "event.read", "event.live", "event.score", "event.contacts", "event.answers.read", "event.notes.read", "event.export"], "quizScope": "all", "eventScope": "all", "status": "active", "createOnly": true }
+  ],
+  "unprivilegedIdentityUnchanged": "nR4Kr4i6xSV44Q3YBhCADUelGhm2",
+  "personalOwner": "ČEKÁ NA NASTAVENÍ OSOBNÍHO ÚČTU",
+  "requiresFreshExactIdentityVerificationBeforeApply": true,
+  "requiresIndependentReviewAndCompleteDeploymentBeforeInvitations": true
+}

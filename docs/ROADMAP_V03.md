@@ -1,6 +1,10 @@
 # V0.3 roadmap
 
-Project status at this baseline: **79%**. This percentage reflects implemented product foundations, not production readiness.
+This is a historical V0.3 planning baseline, not the current backlog or a current completion percentage. Use [the completion matrix](COMPLETION_MATRIX.md) and [current development status](DEVELOPMENT_STATUS.md) for remaining work and exact evidence.
+
+The planned PDF, registration, referee/scoring, ranking/history, owned media, JustKvíz branding, staging and local restart foundations below have since been implemented and verified within their documented scopes. The bounded staging registration-email deployment and one owner-confirmed delivery also completed on 2026-10-14; its queue remains paused. These results do not authorize general email dispatch, production migration or a public launch. Physical venue acceptance remains separate.
+
+## Historical baseline
 
 ## Implemented
 

@@ -11,7 +11,7 @@ Set-StrictMode -Version 2.0
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 . (Join-Path $PSScriptRoot 'LocalQa.Common.ps1')
-$Host.UI.RawUI.WindowTitle = 'Kvízová platforma - lokální QA'
+$Host.UI.RawUI.WindowTitle = 'JustKvíz - lokální QA'
 
 $startedWorkers = @()
 $stateWasWritten = $false
@@ -25,7 +25,7 @@ function Complete-LauncherWindow {
 
 try {
   Write-Host ''
-  Write-Host 'KVÍZOVÁ PLATFORMA - LOKÁLNÍ HUMAN QA' -ForegroundColor White
+  Write-Host 'JustKvíz - LOKÁLNÍ HUMAN QA' -ForegroundColor White
   Write-Host '=======================================' -ForegroundColor DarkGray
   Write-QaInfo 'Ověřuji bezpečnost a lokální nástroje...'
 

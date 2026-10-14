@@ -11,7 +11,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 . (Join-Path $repoRoot 'tools\local-qa\LocalQa.Common.ps1')
 . (Join-Path $repoRoot 'tools\event-night\EventNight.Common.ps1')
 . (Join-Path $PSScriptRoot 'TonightRepair.Common.ps1')
-$Host.UI.RawUI.WindowTitle = 'Kvízová platforma - opravy na večer'
+$Host.UI.RawUI.WindowTitle = 'JustKvíz - opravy na večer'
 
 function Complete-TonightRepairWindow {
   if (-not $NonInteractive) {
@@ -22,7 +22,7 @@ function Complete-TonightRepairWindow {
 
 try {
   Write-Host ''
-  Write-Host 'KVÍZOVÁ PLATFORMA - OPRAVY NA VEČER' -ForegroundColor White
+  Write-Host 'JustKvíz - OPRAVY NA VEČER' -ForegroundColor White
   Write-Host '====================================' -ForegroundColor DarkGray
   Assert-SafeLocalConfiguration $repoRoot $ProjectId
   if ($ProjectId -ne $script:EventNightProjectId) {
@@ -90,7 +90,7 @@ try {
 
   $repairUrl = "$script:TonightRepairBaseUrl/admin/quizzes/$([Uri]::EscapeDataString([string]$repair.candidate.quizId))/readiness/repair"
   Write-Host ''
-  Write-QaSuccess 'Kvízová platforma běží lokálně.'
+  Write-QaSuccess 'JustKvíz běží lokálně.'
   Write-Host ''
   Write-Host "Kvíz: $($repair.candidate.title)"
   Write-Host "Zbývající problémy: $($repair.readiness.blockers)"

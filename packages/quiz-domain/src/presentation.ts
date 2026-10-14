@@ -5,7 +5,7 @@ export function generatedAgendaOptions(rounds: readonly { readonly title: string
 export function isSafeHttpUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && !parsed.username && !parsed.password;
   } catch {
     return false;
   }
@@ -16,6 +16,7 @@ export function youtubeVideoId(source: string): string | undefined {
   if (/^[\w-]{11}$/u.test(trimmed)) return trimmed;
   try {
     const parsed = new URL(trimmed);
+    if (!isSafeHttpUrl(trimmed)) return undefined;
     const host = parsed.hostname.toLowerCase().replace(/^www\./u, '');
     if (host === 'youtu.be') {
       const id = parsed.pathname.split('/').filter(Boolean)[0];
@@ -30,5 +31,14 @@ export function youtubeVideoId(source: string): string | undefined {
   } catch {
     return undefined;
   }
+  return undefined;
+}
+
+/** Direct file sources only, never HTML/iframe input or a server-side URL proxy. */
+export function directMediaKind(source: string): 'audio' | 'video' | undefined {
+  if (!isSafeHttpUrl(source)) return undefined;
+  const path = new URL(source).pathname.toLowerCase();
+  if (/\.(mp3|wav|ogg|m4a)$/.test(path)) return 'audio';
+  if (/\.(mp4|webm|ogv)$/.test(path)) return 'video';
   return undefined;
 }

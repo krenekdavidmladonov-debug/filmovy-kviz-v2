@@ -1,13 +1,15 @@
+import { assertCapability, assertEventOperational } from '../events/guards.js';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type DocumentSnapshot } from 'firebase-admin/firestore';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
+import { accessActor, securedOnCall, runAccessTransaction } from '../access/authorization.js';
 
 import { buildPublicEventProjection } from '../events/model.js';
 import { enqueueRegistrationEmail } from '../email/intent.js';
-import type { TokenEnvelope } from '../email/token-vault.js';
-import { registrationTokenVault, registrationEmailSecrets } from '../email/config.js';
+import { emulatorTokenVault, type TokenEnvelope } from '../email/token-vault.js';
+import { emailEmulatorRuntime, registrationEmailActivation, registrationEmailRecipientEligible, registrationEmailSecrets } from '../email/runtime.js';
 import { capacityAfter, effectiveRegistrationStatus, hasCapacity } from './domain.js';
 import type { RegistrationCapacity, RegistrationInput } from './types.js';
 import { manualTeamInput, registrationInput, registrationWindow, requestId, requestToken } from './validation.js';
@@ -43,6 +45,7 @@ function integer(value: unknown, minimum: number, message: string): number {
 function eventState(snapshot: DocumentSnapshot): EventState {
   if (!snapshot.exists) throw new HttpsError('not-found', 'Event was not found.');
   const data = record(snapshot.data(), 'Event is malformed.');
+  assertEventOperational(data);
   const teamCapacity = integer(data.teamCapacity, 1, 'Event capacity is malformed.');
   const peopleCapacity = integer(data.peopleCapacity, 1, 'Event capacity is malformed.');
   const acceptedTeams = data.acceptedTeams === undefined ? 0 : integer(data.acceptedTeams, 0, 'Event counters are malformed.');
@@ -63,9 +66,7 @@ function eventState(snapshot: DocumentSnapshot): EventState {
 }
 
 function requireAdmin(auth: CallableRequest<unknown>['auth']): string {
-  if (auth === undefined) throw new HttpsError('unauthenticated', 'Authentication is required.');
-  if (auth.token.role !== 'admin') throw new HttpsError('permission-denied', 'Administrator access is required.');
-  return auth.uid;
+  return accessActor(auth).uid;
 }
 
 function requirePublicCaller(auth: CallableRequest<unknown>['auth']): void {
@@ -152,7 +153,7 @@ function safeResponse(id: string, data: Record<string, unknown>, managementToken
   };
 }
 
-export const configureEventRegistration = onCall(callableOptions, async (request) => {
+export const configureEventRegistration = securedOnCall('configureEventRegistration', callableOptions, async (request) => {
   const uid = requireAdmin(request.auth);
   const eventId = requestId(request.data, 'eventId');
   const expectedRevision = record(request.data).expectedRevision;
@@ -162,7 +163,7 @@ export const configureEventRegistration = onCall(callableOptions, async (request
   const window = registrationWindow(request.data);
   const eventRef = db.collection('events').doc(eventId);
   const publicRef = db.collection('publicEvents').doc(eventId);
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const current = eventState(await transaction.get(eventRef));
     if (current.revision !== expectedRevision) throw new HttpsError('aborted', 'Event changed. Reload and try again.');
     const now = Timestamp.now();
@@ -189,21 +190,26 @@ export const configureEventRegistration = onCall(callableOptions, async (request
   });
 });
 
-export const createEventRegistration = onCall({ ...callableOptions, secrets: registrationEmailSecrets }, async (request) => {
+export const createEventRegistration = onCall({ ...callableOptions, secrets: registrationEmailSecrets() }, async (request) => {
   requirePublicCaller(request.auth);
   const eventId = requestId(request.data, 'eventId');
   const input = registrationInput(request.data);
-  const rawToken = randomBytes(32).toString('base64url');
   const eventRef = db.collection('events').doc(eventId);
   // New clients retain this random retry capability in memory until success.
   // Legacy clients keep the existing unique-name retry behavior.
   const retryKey = record(request.data).requestKey === undefined ? undefined : requestToken({ token: record(request.data).requestKey });
+  // The random 256-bit client retry capability derives a one-way management capability.
+  // Default-off cloud has no vault or queued message. Explicit staging opt-in binds only the keyring.
+  const rawToken = retryKey ? createHash('sha256').update(JSON.stringify(['registration-management-v1', eventId, retryKey])).digest('base64url') : randomBytes(32).toString('base64url');
   const operationRef = retryKey === undefined ? undefined : eventRef.collection('registrationOperations').doc('create_' + tokenHash(retryKey));
   const registrationRef = eventRef.collection('registrations').doc();
   const intentId = randomUUID();
   const intentRef = eventRef.collection('emailIntents').doc(intentId);
-  const vault = registrationTokenVault();
-  const envelope = vault.seal(rawToken, intentRef.path);
+  const activation = registrationEmailActivation();
+  const eligible = registrationEmailRecipientEligible(input.contactEmail);
+  const vault = !eligible ? undefined : activation ? (await import('../email/config.js')).registrationTokenVault()
+    : emailEmulatorRuntime() ? emulatorTokenVault() : undefined;
+  const envelope = vault?.seal(rawToken, intentRef.path);
   const fingerprint = tokenHash(JSON.stringify(input));
   const nameRef = eventRef.collection('registrationNames').doc(nameKey(input.normalizedTeamName));
   const publicRef = db.collection('publicEvents').doc(eventId);
@@ -214,10 +220,21 @@ export const createEventRegistration = onCall({ ...callableOptions, secrets: reg
       const receipt = record(previous.data());
       if (receipt.fingerprint !== fingerprint) throw new HttpsError('already-exists', 'requestKey was used with different content.');
       const saved = await transaction.get(eventRef.collection('registrations').doc(receipt.registrationId as string));
-      const savedIntentRef = eventRef.collection('emailIntents').doc(receipt.intentId as string);
-      const protectedLink = await transaction.get(eventRef.collection('emailSecrets').doc(savedIntentRef.id));
-      const savedEnvelope = record(protectedLink.data()).envelope as TokenEnvelope;
-      return safeResponse(saved.id, record(saved.data()), vault.open(savedEnvelope, savedIntentRef.path));
+      assertCapability(event.data, record(saved.data()));
+      let recovered = rawToken;
+      if (vault || activation) {
+        const savedIntentRef = eventRef.collection('emailIntents').doc(receipt.intentId as string);
+        const protectedLink = await transaction.get(eventRef.collection('emailSecrets').doc(savedIntentRef.id));
+        // Pre-activation receipts have no envelope. Their verified requestKey still
+        // derives the original token; an existing malformed envelope must fail closed.
+        if (protectedLink.exists) {
+          const savedEnvelope = record(protectedLink.data()).envelope as TokenEnvelope;
+          const replayVault = vault ?? (await import('../email/config.js')).registrationTokenVault();
+          recovered = replayVault.open(savedEnvelope, savedIntentRef.path);
+        }
+      }
+      verifyToken(record(saved.data()).managementTokenHash, recovered);
+      return safeResponse(saved.id, record(saved.data()), recovered);
     }
     const existingName = await transaction.get(nameRef);
     const now = Timestamp.now();
@@ -239,13 +256,14 @@ export const createEventRegistration = onCall({ ...callableOptions, secrets: reg
       contactEmail: input.contactEmail,
       status: 'accepted',
       managementTokenHash: tokenHash(rawToken),
+      capabilityVersion: event.data.capabilityVersion ?? 0,
       createdAt: now,
       updatedAt: now,
       cancelledAt: null,
       cancelledBy: null,
     };
     transaction.create(registrationRef, registrationData);
-    transaction.create(eventRef.collection('emailSecrets').doc(intentId), { envelope, createdAt: now });
+    if (envelope) transaction.create(eventRef.collection('emailSecrets').doc(intentId), { envelope, createdAt: now });
     enqueueRegistrationEmail(transaction, eventRef, registrationRef, intentId, 'registration-confirmed', event.data, registrationData, now);
     if (operationRef) transaction.create(operationRef, { kind: 'create', fingerprint, registrationId: registrationRef.id, intentId, createdAt: now });
     transaction.create(nameRef, { registrationId: registrationRef.id, createdAt: now });
@@ -265,11 +283,15 @@ export const getEventRegistration = onCall(callableOptions, async (request) => {
   const eventId = requestId(request.data, 'eventId');
   const registrationId = requestId(request.data, 'registrationId');
   const token = requestToken(request.data);
-  const snapshot = await db.collection('events').doc(eventId).collection('registrations').doc(registrationId).get();
-  if (!snapshot.exists) throw new HttpsError('not-found', 'Registration was not found.');
-  const data = record(snapshot.data());
-  verifyToken(data.managementTokenHash, token);
-  return safeResponse(snapshot.id, data);
+  return db.runTransaction(async tx => {
+    const event = eventState(await tx.get(db.doc('events/' + eventId)));
+    const snapshot = await tx.get(db.doc('events/' + eventId + '/registrations/' + registrationId));
+    if (!snapshot.exists) throw new HttpsError('not-found', 'Registration was not found.');
+    const data = record(snapshot.data());
+    assertCapability(event.data, data);
+    verifyToken(data.managementTokenHash, token);
+    return safeResponse(snapshot.id, data);
+  });
 });
 
 export const updateEventRegistration = onCall(callableOptions, async (request) => {
@@ -290,6 +312,7 @@ export const updateEventRegistration = onCall(callableOptions, async (request) =
     const registrationSnapshot = await transaction.get(registrationRef);
     if (!registrationSnapshot.exists) throw new HttpsError('not-found', 'Registration was not found.');
     const current = record(registrationSnapshot.data());
+    assertCapability(event.data, current);
     verifyToken(current.managementTokenHash, token);
     const previous = operationRef === undefined ? undefined : await transaction.get(operationRef);
     if (previous?.exists) {
@@ -315,11 +338,16 @@ export const updateEventRegistration = onCall(callableOptions, async (request) =
     const capacity = capacityAfter(event.capacity, 0, peopleDelta);
     const next = { ...event, capacity };
     const registrationStatus = statusAt(next, now);
+    const revision = current.revision === undefined ? 0 : current.revision;
+    if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0 || revision === Number.MAX_SAFE_INTEGER) {
+      throw new HttpsError('failed-precondition', 'Registration revision is malformed.');
+    }
     transaction.update(registrationRef, {
       teamName: input.teamName,
       normalizedTeamName: input.normalizedTeamName,
       memberCount: input.memberCount,
       contactEmail: input.contactEmail,
+      revision: revision + 1,
       updatedAt: now,
     });
     enqueueRegistrationEmail(transaction, eventRef, registrationRef, intentId, 'registration-updated', event.data, { ...current, ...input }, now);
@@ -349,12 +377,12 @@ async function cancelRegistration(
   const registrationRef = eventRef.collection('registrations').doc(registrationId);
   const publicRef = db.collection('publicEvents').doc(eventId);
   const intentId = randomUUID();
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const event = eventState(await transaction.get(eventRef));
     const registrationSnapshot = await transaction.get(registrationRef);
     if (!registrationSnapshot.exists) throw new HttpsError('not-found', 'Registration was not found.');
     const current = record(registrationSnapshot.data());
-    if (token !== undefined) verifyToken(current.managementTokenHash, token);
+    if (token !== undefined) { assertCapability(event.data, current); verifyToken(current.managementTokenHash, token); }
     if (current.status === 'cancelled') return safeResponse(registrationId, current);
     if (current.status !== 'accepted') throw new HttpsError('failed-precondition', 'Registration cannot be cancelled.');
     const memberCount = integer(current.memberCount, 1, 'Registration is malformed.');
@@ -390,7 +418,7 @@ export const cancelEventRegistration = onCall(callableOptions, async (request) =
   );
 });
 
-export const adminCancelEventRegistration = onCall(callableOptions, async (request) => {
+export const adminCancelEventRegistration = securedOnCall('adminCancelEventRegistration', callableOptions, async (request) => {
   const uid = requireAdmin(request.auth);
   return cancelRegistration(
     requestId(request.data, 'eventId'),
@@ -408,7 +436,7 @@ function assertManualTeamAllowed(event: EventState): void {
   }
 }
 
-export const adminAddEventTeam = onCall(callableOptions, async (request) => {
+export const adminAddEventTeam = securedOnCall('adminAddEventTeam', callableOptions, async (request) => {
   const uid = requireAdmin(request.auth);
   const eventId = requestId(request.data, 'eventId');
   const operationId = requestId(request.data, 'requestId');
@@ -419,7 +447,7 @@ export const adminAddEventTeam = onCall(callableOptions, async (request) => {
   const registrationRef = eventRef.collection('registrations').doc('manual_' + tokenHash(`${uid}:${operationId}`));
   const fingerprint = tokenHash(JSON.stringify(input));
   const nameRef = eventRef.collection('registrationNames').doc(nameKey(input.normalizedTeamName));
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const event = eventState(await transaction.get(eventRef));
     const previous = await transaction.get(registrationRef);
     if (previous.exists) {
@@ -450,7 +478,8 @@ export const adminAddEventTeam = onCall(callableOptions, async (request) => {
   });
 });
 
-export const adminUpdateEventTeam = onCall(callableOptions, async (request) => {
+export const adminUpdateEventTeam = securedOnCall('adminUpdateEventTeam', callableOptions, async (request) => {
+  if (record(request.data).action === 'reissueLink') return reissueRegistrationLink(request);
   const uid = requireAdmin(request.auth);
   const eventId = requestId(request.data, 'eventId');
   const registrationId = requestId(request.data, 'registrationId');
@@ -459,7 +488,7 @@ export const adminUpdateEventTeam = onCall(callableOptions, async (request) => {
   const input = manualTeamInput(request.data);
   const eventRef = db.collection('events').doc(eventId);
   const registrationRef = eventRef.collection('registrations').doc(registrationId);
-  return db.runTransaction(async (transaction) => {
+  return runAccessTransaction(db, async (transaction) => {
     const event = eventState(await transaction.get(eventRef));
     const snapshot = await transaction.get(registrationRef);
     if (!snapshot.exists) throw new HttpsError('not-found', 'Registration was not found.');
@@ -488,3 +517,22 @@ export const adminUpdateEventTeam = onCall(callableOptions, async (request) => {
     return safeResponse(registrationId, { ...current, ...input });
   });
 });
+
+async function reissueRegistrationLink(request: CallableRequest) {
+  const uid = requireAdmin(request.auth), eventId = requestId(request.data, 'eventId'), registrationId = requestId(request.data, 'registrationId');
+  const operationId = requestId(request.data, 'requestId'), expected = record(request.data).expectedRevision;
+  if (!Number.isSafeInteger(expected) || Number(expected) < 0) throw new HttpsError('invalid-argument', 'Neplatná revize týmu.');
+  const ref = db.doc('events/' + eventId + '/registrations/' + registrationId);
+  const receipt = db.doc('events/' + eventId + '/registrationOperations/link_' + tokenHash(uid + ':' + registrationId + ':' + operationId));
+  const secret = randomBytes(32).toString('base64url');
+  return runAccessTransaction(db, async tx => {
+    const event = eventState(await tx.get(db.doc('events/' + eventId)));
+    const current = (await tx.get(ref)).data(), old = await tx.get(receipt);
+    if (!current || current.status !== 'accepted' || current.source === 'manual') throw new HttpsError('failed-precondition', 'Odkaz lze vydat přijatému online týmu.');
+    if (old.exists) return { managementToken: null, registrationId };
+    if ((current.revision ?? 0) !== expected) throw new HttpsError('aborted', 'Tým se mezitím změnil.');
+    tx.update(ref, { managementTokenHash: tokenHash(secret), capabilityVersion: event.data.capabilityVersion ?? 0, revision: Number(expected) + 1, updatedAt: Timestamp.now(), updatedBy: uid });
+    tx.create(receipt, { kind: 'reissueLink', at: Timestamp.now(), registrationId });
+    return { managementToken: secret, registrationId };
+  });
+}

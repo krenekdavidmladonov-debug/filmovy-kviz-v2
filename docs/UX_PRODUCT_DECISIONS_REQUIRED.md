@@ -4,6 +4,8 @@ Status: **HUMAN DECISION REGISTER**
 
 Date: 2026-09-02
 
+Historical discovery record. Later implemented contracts supersede the resolved choices here: [explicit Save all and conflict recovery](EDITOR_WORKING_COPY.md), [round-first complete editor](COMPLETE_EDITOR_RELEASE.md), [event preparation](EVENT_MANAGEMENT.md), [preflight](QUIZ_PREFLIGHT.md), and [JustKvíz branding](JUSTKVIZ_REBRAND.md). Do not request those decisions again or treat every old recommendation as missing work. Use [the current completion matrix](COMPLETION_MATRIX.md) for applicable remaining decisions and evidence.
+
 ## How to use this document
 
 - **P0 — before redesign implementation:** changes information architecture, safety, persistence, or primary workflows.

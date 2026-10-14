@@ -131,7 +131,7 @@ export function YouTubePlayer({
   useEffect(() => { onPlaybackStateRef.current = onPlaybackState; }, [onPlaybackState]);
   useEffect(() => { onCurrentTimeRef.current = onCurrentTime; }, [onCurrentTime]);
   useEffect(() => {
-    if (currentTimeRequest === undefined || playerRef.current === undefined) return;
+    if (currentTimeRequest === undefined || currentTimeRequest <= 0 || playerRef.current === undefined) return;
     try {
       const seconds = playerRef.current.getCurrentTime();
       if (Number.isFinite(seconds) && seconds >= 0) onCurrentTimeRef.current?.(seconds);

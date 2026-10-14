@@ -1,4 +1,4 @@
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation, useNavigation } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
 import { AdminLoading } from './AdminLoading';
@@ -6,6 +6,7 @@ import { AdminLoading } from './AdminLoading';
 export function RequireStaff() {
   const { currentUser, role, loading } = useAuth();
   const location = useLocation();
+  const navigation = useNavigation();
 
   if (loading) {
     return <AdminLoading />;
@@ -19,5 +20,8 @@ export function RequireStaff() {
     return <Navigate to="/admin/no-access" replace />;
   }
 
-  return <Outlet />;
+  return <>
+    {navigation.state !== 'idle' && <div className="admin-navigation-progress" role="status">Otevírám stránku…</div>}
+    <Outlet />
+  </>;
 }

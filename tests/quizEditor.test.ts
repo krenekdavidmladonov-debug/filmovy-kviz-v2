@@ -6,9 +6,10 @@ import {
   applyKnownSlideUpdate,
   assertRevision,
   mergeEditorMedia,
+  quizCreationIdentity,
   sortedSlides,
 } from '../functions/src/editor/model';
-import { validateSlideInput } from '../functions/src/editor/validation';
+import { requestedQuizCreation, validateSlideInput } from '../functions/src/editor/validation';
 import { requestedPreflightRepair } from '../functions/src/editor/repair';
 
 function slideInput(overrides: Record<string, unknown> = {}) {
@@ -85,6 +86,73 @@ describe('quiz editor lossless model', () => {
     expect(Object.hasOwn(updated, 'correctAnswer')).toBe(true);
   });
 
+  test('round-trips the imported 0/0 timing sentinel without losing private or opaque fields', () => {
+    const originalMedia = [{
+      role: 'prompt', kind: 'video', value: 'synthetic-video-reference', opaqueVendorField: 'keep',
+    }];
+    const originalLegacy = {
+      source: 'synthetic-import', raw: { answerHint: 'private sentinel', unknownArray: [1, 2, 3] },
+    };
+    const current = {
+      position: 2,
+      kind: 'question',
+      isQuestion: true,
+      roundId: 'imported-round',
+      title: 'Importovaná otázka',
+      text: 'Původní syntetické zadání',
+      moderatorNote: 'Soukromá poznámka',
+      options: ['A', 'B', 'C', 'D'],
+      correctAnswer: 'Soukromá odpověď',
+      media: originalMedia,
+      presentation: {
+        videoStart: 0,
+        videoEnd: 0,
+        sourceQuestionNumber: '1/1',
+        futurePresentationField: { preserve: true },
+      },
+      clipStartSeconds: 0,
+      legacy: originalLegacy,
+      futureTopLevel: { preserve: true },
+    };
+
+    const mapped = mapEditorSlide('imported-slide', current);
+    expect(mapped.clipStartSeconds).toBeNull();
+    expect(mapped.clipEndSeconds).toBeNull();
+    const explicitNullEnd = mapEditorSlide('not-the-import-sentinel', {
+      ...current,
+      clipEndSeconds: null,
+    });
+    expect(explicitNullEnd.clipStartSeconds).toBe(0);
+    expect(explicitNullEnd.clipEndSeconds).toBe(0);
+
+    const updated = applyKnownSlideUpdate(current, validateSlideInput({
+      kind: mapped.kind,
+      title: mapped.title,
+      text: 'Upravené syntetické zadání',
+      moderatorNote: mapped.moderatorNote,
+      options: mapped.options,
+      correctAnswer: mapped.correctAnswer,
+      media: mapped.media,
+      presentation: mapped.presentation,
+      backgroundImage: mapped.backgroundImage,
+      questionImage: mapped.questionImage,
+      answerImage: mapped.answerImage,
+      mediaSource: mapped.mediaSource,
+      backgroundOverlay: mapped.backgroundOverlay,
+      clipStartSeconds: mapped.clipStartSeconds,
+      clipEndSeconds: mapped.clipEndSeconds,
+    }));
+
+    expect(updated.text).toBe('Upravené syntetické zadání');
+    expect(updated.correctAnswer).toBe(current.correctAnswer);
+    expect(updated.media).toEqual(originalMedia);
+    expect(updated.legacy).toEqual(originalLegacy);
+    expect(updated.futureTopLevel).toEqual({ preserve: true });
+    expect(updated.presentation).toEqual(current.presentation);
+    expect(updated.clipStartSeconds).toBe(0);
+    expect(Object.hasOwn(updated, 'clipEndSeconds')).toBe(false);
+  });
+
   test('keeps unmentioned mixed media, deletes an explicit empty patch, and appends safely', () => {
     const result = mergeEditorMedia([
       { role: 'prompt', kind: 'audio', value: 'audio-ref', opaque: 1 },
@@ -152,6 +220,31 @@ describe('quiz editor lossless model', () => {
       kind: 'video-timing', clipStartSeconds: 1.5, clipEndSeconds: 7,
     })).toEqual({ kind: 'video-timing', clipStartSeconds: 1.5, clipEndSeconds: 7 });
   });
+
+  test('validates and normalizes only the narrow create-quiz request shape', () => {
+    expect(requestedQuizCreation({ title: '  Nový syntetický kvíz  ', requestId: 'request-1' })).toEqual({
+      title: 'Nový syntetický kvíz',
+      requestId: 'request-1',
+    });
+    expect(() => requestedQuizCreation({ title: '   ', requestId: 'request-1' })).toThrow('title');
+    expect(() => requestedQuizCreation({ title: 'Kvíz', requestId: 'bad/request' })).toThrow('requestId');
+    expect(() => requestedQuizCreation({
+      title: 'Kvíz', requestId: 'request-1', status: 'ready',
+    })).toThrow('creation request');
+  });
+
+  test('derives an idempotent quiz identity without mixing title into the document id', () => {
+    const first = quizCreationIdentity('admin-uid', 'stable-request', 'První název');
+    const retry = quizCreationIdentity('admin-uid', 'stable-request', 'První název');
+    const conflictingRetry = quizCreationIdentity('admin-uid', 'stable-request', 'Jiný název');
+    const separateRequest = quizCreationIdentity('admin-uid', 'other-request', 'První název');
+
+    expect(retry).toEqual(first);
+    expect(conflictingRetry.quizId).toBe(first.quizId);
+    expect(conflictingRetry.fingerprint).not.toBe(first.fingerprint);
+    expect(separateRequest.quizId).not.toBe(first.quizId);
+    expect(first.quizId).toMatch(/^quiz_[a-f0-9]{64}$/u);
+  });
 });
 
 describe('quiz editor tolerant Firestore mapper', () => {
@@ -181,5 +274,33 @@ describe('quiz editor tolerant Firestore mapper', () => {
       title: 'Syntetický kvíz', description: '', slideCount: 1, questionCount: 0, roundCount: 0,
     }, [slide]);
     expect(quiz.revision).toBe(0);
+  });
+});
+
+
+describe('private authoring drafts and independent answers', () => {
+  test('persists a safe incomplete draft without losing opaque legacy fields', () => {
+    const input = validateSlideInput(slideInput({kind:'audio', authoringStatus:'draft', answerMode:'choice', options:['','',''], correctAnswer:'', text:'', mediaSource:'https://example.test/clip.wav', clipStartSeconds:0, clipEndSeconds:null}));
+    const updated = applyKnownSlideUpdate({position:1, legacy:{raw:{keep:42}}}, input);
+    expect(updated).toMatchObject({authoringStatus:'draft', answerMode:'choice', legacy:{raw:{keep:42}}});
+    expect(() => applyKnownSlideUpdate(updated, {...input,authoringStatus:'ready'})).toThrow('Otázka není dokončená');
+  });
+  test.each([{authoringStatus:'published'}, {answerMode:'anything'}, {imageLayout:'anything'}, {answerExplanation:{}}, {authoringStatus:'draft',clipStartSeconds:9,clipEndSeconds:2}, {authoringStatus:'draft',options:[{}]}])('draft marker never permits malformed data %j', fields => {
+    expect(() => validateSlideInput(slideInput(fields))).toThrow();
+  });
+  test.each(['image','audio','video'])('ready %s can have choices or an open answer and round-trips explanation/layout', kind => {
+    for (const answerMode of ['choice','open'] as const) {
+      const fields = {kind,authoringStatus:'ready',answerMode,options:answerMode==='choice'?['First','Second']:[],correctAnswer:'Second',questionImage:'https://example.test/prompt.png',mediaSource:kind==='audio'?'https://example.test/a.wav':kind==='video'?'https://example.test/v.webm':'',clipStartSeconds:1,clipEndSeconds:3,imageLayout:'stacked',answerExplanation:'After reveal'};
+      const updated=applyKnownSlideUpdate({position:1},validateSlideInput(slideInput(fields)));
+      expect(mapEditorSlide('q',updated)).toMatchObject({answerMode,authoringStatus:'ready',imageLayout:'stacked',answerExplanation:'After reveal'});
+    }
+  });
+  test('new choices accept 2–6 values, reject ambiguous or excessive values, preserve absent legacy contract', () => {
+    for (const count of [2,3,4,5,6]) {
+      const options=Array.from({length:count},(_,i)=>'Value '+i);
+      expect(applyKnownSlideUpdate({position:1},validateSlideInput(slideInput({authoringStatus:'ready',answerMode:'choice',options,correctAnswer:options.at(-1)})))).toMatchObject({options});
+    }
+    for (const options of [['same','same'],['a',''],['a','b','c','d','e','f','g']]) expect(() => applyKnownSlideUpdate({position:1},validateSlideInput(slideInput({authoringStatus:'ready',answerMode:'choice',options,correctAnswer:options[0]})))).toThrow();
+    expect(applyKnownSlideUpdate({position:1},validateSlideInput(slideInput()))).not.toHaveProperty('authoringStatus');
   });
 });

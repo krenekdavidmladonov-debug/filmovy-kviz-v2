@@ -1,8 +1,10 @@
-# Filmový Kvíz V2
+# JustKvíz
 
 [![CI](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/actions/workflows/ci.yml)
 
-Clean replacement for the Filmový Kvíz application. The current foundation includes a React web client, trusted Firebase Functions, emulator-only staff authentication, tested Firestore authorization rules, a live/projector foundation, and a lossless round-first quiz editor for migrated V1 content.
+JustKvíz is the V2 application for preparing and running quizzes, replacing the original Filmový Kvíz application. The locally integrated code includes a React client, trusted Firebase Functions, personal accounts with scoped memberships, a lossless round-first editor with private drafts and media, shared in-memory edits and Save all, event lifecycle management, scoring, projector publication and confirmed historical results.
+
+Current validation evidence and remaining work are recorded in [DEVELOPMENT_STATUS.md](docs/DEVELOPMENT_STATUS.md). The [restart release plan](docs/RESTART_RELEASE_PLAN.md) defines the proposed staging scope and approval prerequisites; local integration does not establish current cloud readiness or authorize deployment.
 
 ## RYCHLÉ SPUŠTĚNÍ PRO HUMAN QA
 
@@ -37,28 +39,39 @@ pnpm seed:quizzes
 pnpm dev
 ```
 
-The application is available at `http://localhost:5173`. Administrative routes:
+The application is available at `http://localhost:5173`. Current routes include:
 
 - `/admin/login` — email/password sign-in against Authentication Emulator
-- `/admin` — protected staff dashboard
-- `/admin/quizzes` — read-only quiz library
+- `/admin` — dashboard for an account with current active membership
+- `/admin/users` — membership and invitation administration requiring `users.manage`
+- `/admin/quizzes` — scoped quiz library
+- `/admin/quizzes/new` — quiz creation requiring `quiz.create`
 - `/admin/quizzes/:quizId` — read-only rounds and questions
-- `/admin/quizzes/:quizId/edit` — focused round-first editor; admin write and moderator read-only
-- `/admin/live/:sessionId` — authenticated moderator live control
-- `/admin/no-access` — authenticated account without a staff role
+- `/admin/quizzes/:quizId/edit` — round-first editor; writes require current edit permissions and quiz scope
+- `/admin/quizzes/:quizId/readiness` — private quiz readiness; `/admin/quizzes/:quizId/readiness/repair` requires edit and answer permissions
+- `/admin/live/:sessionId` — live control requiring `event.live` and the applicable resource scope
+- `/admin/no-access` — authenticated account without usable application access
+- `/account` and `/invite/:inviteId` — personal account setup and invitation acceptance; invitations have a separate activation gate
 - `/projector/:sessionId` — public read-only sanitized projector
 - `/events` — sanitized public event list
-- `/admin/events` — trusted event administration and immutable quiz preparation
+- `/events/:eventId` — public registration; management links open `/events/:eventId/registration/manage`
+- `/admin/events` and `/admin/events/new` — scoped event list and permitted event creation
+- `/admin/events/:eventId` — event detail, immutable quiz preparation and permitted lifecycle actions
+- `/admin/events/:eventId/registrations` — team administration with contact and operation-specific permissions
+- `/admin/events/:eventId/scoring` — internal round scoring with current event access and score permissions for writes
+- `/admin/events/:eventId/print` — PDF Print Center with export and document-specific permissions
+- `/admin/events/:eventId/results` — confirmed final results of a completed event, read-only
+- `/referee/:eventId` — minimal event-scoped bearer access for referees
 
-The seed is idempotent and creates only local Authentication Emulator users:
+`pnpm seed:auth` prepares only local Authentication Emulator accounts and explicit Firestore memberships. Current access requires an active membership, concrete permissions and resource scope. The seed retains legacy custom claims for compatibility; those claims grant no application authority.
 
-| Account | Password | Custom claim |
+| Account | Password | Seeded membership |
 | --- | --- | --- |
-| `admin@example.test` | `LocalQuiz123!` | `role: "admin"` |
-| `moderator@example.test` | `LocalQuiz123!` | `role: "moderator"` |
-| `user@example.test` | `LocalQuiz123!` | none |
+| `admin@example.test` | `LocalQuiz123!` | `manager`, all current permissions, all quiz/event scopes |
+| `moderator@example.test` | `LocalQuiz123!` | `moderator`, explicit quiz reads and event live/scoring/contact/export permissions, all quiz/event scopes |
+| `user@example.test` | `LocalQuiz123!` | No active membership; an existing membership is suspended |
 
-The seed script refuses to run unless `FIREBASE_AUTH_EMULATOR_HOST` points to local port `9099` and the project ID starts with `demo-`. The Vite development build also refuses to initialize Firebase unless emulator mode is enabled. Production access is not part of this workflow.
+The seed refuses non-local Auth/Firestore emulator hosts and requires a `demo-*` project ID. The standard local launcher uses Auth port `9099` and Firestore port `8080`; the scripts accept explicit valid loopback ports. Keep emulator mode enabled for this workflow. The separate guarded staging configuration is described in the release plan; production access is outside this workflow.
 
 `pnpm seed:quizzes` creates three fixed emulator-only quizzes with rounds and private questions. It refuses non-local Firestore hosts and non-`demo-*` projects. Fixed document IDs and deterministic values make repeated runs safe. With both Auth and Firestore emulators running, `pnpm seed:emulators` runs both seeds.
 
@@ -71,7 +84,7 @@ pnpm test:rules
 pnpm test:unit
 ```
 
-The tests use `@firebase/rules-unit-testing` against the real local Firestore rules runtime. They verify anonymous users, authenticated users without claims, moderators, admins, and unknown paths.
+The tests use `@firebase/rules-unit-testing` against the real local Firestore rules runtime. They verify public/private boundaries, current memberships and scopes, denial for claim-only or inactive accounts, direct-write denial and unknown paths.
 
 ## Quality checks
 
@@ -83,7 +96,7 @@ pnpm lint
 pnpm build
 pnpm test:rules
 pnpm test:unit
-# or all checks:
+# Typecheck, lint, and build together (tests run separately):
 pnpm check
 ```
 
@@ -107,6 +120,12 @@ Start with [docs/README.md](docs/README.md). The round-first editor documentatio
 - [developer guide](docs/ROUND_FIRST_EDITOR_DEVELOPER_GUIDE.md);
 - [testing and local operations](docs/ROUND_FIRST_EDITOR_TESTING.md).
 
+Integrated contracts and release context: [complete editor](docs/COMPLETE_EDITOR_RELEASE.md), [shared working copy](docs/EDITOR_WORKING_COPY.md), [outline movement](docs/EDITOR_OUTLINE.md), [personal access](docs/PERSONAL_ACCESS.md), [event management](docs/EVENT_MANAGEMENT.md), [historical results](docs/HISTORICAL_RESULTS.md) and [restart release plan](docs/RESTART_RELEASE_PLAN.md). Release receipts and older staging runbooks remain historical evidence.
+
 ## Important safety boundary
 
 Do not deploy or connect this repository to the existing production Firebase project without explicit authorization. Never add credentials or service-account keys to Git. See [docs/SECURITY.md](docs/SECURITY.md) and [AGENTS.md](AGENTS.md).
+
+On 2026-10-12 the owner approved aligning [AGENTS.md](AGENTS.md) with the integrated authorization model: active server-managed membership, concrete permissions and applicable resource scope, enforced by Security Rules and server code. Legacy claims alone grant no authority. The owner also authorized read-only V2 staging preflight; this does not establish cloud readiness or authorize deployment. See [DEVELOPMENT_STATUS.md](docs/DEVELOPMENT_STATUS.md) for the current scope and results.
+
+Current public branding and release scope: [JustKvíz rebrand](docs/JUSTKVIZ_REBRAND.md). The existing staging URL and technical identifiers remain unchanged.

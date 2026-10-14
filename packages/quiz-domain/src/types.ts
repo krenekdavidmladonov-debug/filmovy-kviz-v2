@@ -25,6 +25,12 @@ export interface EditorPresentation {
 }
 
 export interface EditorSlide {
+  readonly automaticAgenda?: boolean;
+  readonly authoringStatus?: 'draft' | 'ready';
+  readonly answerMode?: 'open' | 'choice';
+  readonly imageLayout?: 'split' | 'stacked';
+  readonly answerExplanation?: string;
+
   readonly id: string;
   readonly position: number;
   readonly storedKind: string;
@@ -55,6 +61,8 @@ export type CreatableQuestionType = 'choice' | 'free' | 'image' | 'audio' | 'vid
 export type SemanticQuestionType = CreatableQuestionType | 'legacy-pl' | 'legacy';
 export type EditorValidationCategory = 'STRUCTURE' | 'ANSWER' | 'MEDIA' | 'TIMING' | 'IMAGE' | 'LEGACY';
 export type EditorValidationCode =
+  | 'QUESTION_DRAFT'
+  | 'CHOICE_OPTIONS_INVALID'
   | 'QUESTION_PROMPT_MISSING'
   | 'QUESTION_RENDERER_UNSUPPORTED'
   | 'ANSWER_MISSING'
@@ -83,7 +91,13 @@ export interface EditorValidationIssue {
   readonly severity: 'error' | 'warning';
 }
 
+export interface EditorAppearance {
+  readonly backgroundImage: string;
+  readonly backgroundOverlay: number;
+  readonly imageLayout: 'split' | 'stacked';
+}
 export interface EditorQuiz {
+  readonly defaultAppearance?: EditorAppearance;
   readonly id: string;
   readonly title: string;
   readonly description: string;

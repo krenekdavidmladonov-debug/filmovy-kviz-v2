@@ -25,10 +25,11 @@ async function login(page: Page, baseURL: string | undefined): Promise<void> {
 }
 
 async function discardBySelectingRoot(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Základní údaje' }).click();
+  await page.getByRole('button', { name: 'Zahodit změny…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Máte neuložené změny.' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Pokračovat bez uložení' }).click();
+  await page.getByRole('button', { name: 'Základní údaje' }).click();
   await expect(page.getByRole('heading', { name: 'Základní údaje' })).toBeVisible();
 }
 
@@ -77,7 +78,7 @@ test('round-first editor supports semantic editing and responsive panel navigati
   await page.getByRole('button', { name: 'Použít aktuální čas jako začátek' }).click();
   await expect(page.getByLabel('Začátek ukázky *')).toHaveValue('0:06.5');
   await page.getByLabel('Konec ukázky *').fill('neplatný čas');
-  await page.getByRole('button', { name: 'Uložit', exact: true }).click();
+  await page.getByRole('button', { name: 'Uložit vše', exact: true }).click();
   await expect(page.getByText('Před uložením opravte označené údaje.')).toBeVisible();
   await discardBySelectingRoot(page);
 
@@ -100,7 +101,7 @@ test('round-first editor supports semantic editing and responsive panel navigati
   await expect(page.locator('.round-editor-preview')).toContainText('Nová syntetická volná otázka');
   await expect(page.locator('.outline-question.selected')).toContainText('Nová syntetická volná otázka');
   await expect(page.locator('.outline-question')).toHaveCount(initialQuestionCount + 1);
-  await page.getByRole('button', { name: 'Uložit', exact: true }).click();
+  await page.getByRole('button', { name: 'Uložit vše', exact: true }).click();
   await expect(page.getByText('Uloženo', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Volná odpověď' })).toBeVisible();
 

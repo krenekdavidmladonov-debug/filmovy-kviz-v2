@@ -60,3 +60,16 @@ test('STOP and source changes abort delayed fetch and revoke old image URLs',asy
   await act(async()=>root.render(<AssetImage source="https://example.test/legacy.png" alt="Legacy"/>));
   expect(host.querySelector('img')?.src).toBe('https://example.test/legacy.png');
 });
+
+test('returning to an owned image never reuses its revoked URL while the new fetch is pending',async()=>{
+  await act(async()=>root.render(<AssetImage source={source} alt="Owned"/>));
+  const previous=host.querySelector('img')!.src;
+  await act(async()=>root.render(<AssetImage source="https://example.test/image.png" alt="Direct"/>));
+  expect(revokeMock).toHaveBeenCalledWith(previous);
+  let finish!:(blob:Blob)=>void;vi.mocked(readQuizMediaBlob).mockImplementationOnce(()=>new Promise<Blob>(resolve=>{finish=resolve;}));
+  await act(async()=>root.render(<AssetImage source={source} alt="Owned"/>));
+  expect(host.querySelector('img')).toBeNull();
+  await act(async()=>finish(new Blob(['new'])));
+  expect(host.querySelector('img')!.src).not.toBe(previous);
+  expect(host.textContent).not.toContain('není dostupný');
+});

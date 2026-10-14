@@ -7,8 +7,9 @@ export default defineConfig({
   root, plugins: [react(), {
     name: 'event-form-isolated-fixtures',
     enforce: 'pre',
-    resolveId(source) {
+    resolveId(source, importer) {
       if (['auth/AuthProvider', 'events/eventApi', 'events/eventRepository', 'quizzes/quizRepository', 'editor/editorRepository'].some((name) => source.endsWith(name))) return mocks;
+      if (source === './api' && importer?.replaceAll('\\', '/').endsWith('/features/referee/RefereeAccessPanel.tsx')) return mocks;
     },
     configureServer(server) { server.middlewares.use((req, res, next) => {
       if (req.url?.startsWith('/admin/events/')) req.url = '/tests/browser/events-form-ux.harness.html';

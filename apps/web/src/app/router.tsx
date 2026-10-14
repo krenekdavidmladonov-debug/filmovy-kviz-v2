@@ -1,5 +1,7 @@
+import { lazyAdminRoute } from './lazyAdminRoute';
+import { PermissionGate } from '../features/access/PermissionGate';
 import { RefereePage } from '../routes/referee/RefereePage';
-import { lazy, Suspense, type ReactNode } from 'react';
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { AdminPage } from '../routes/admin/AdminPage';
@@ -13,75 +15,14 @@ import { ManageRegistrationPage } from '../routes/events/ManageRegistrationPage'
 import { NotFoundPage } from '../routes/NotFoundPage';
 import { AdminShell } from './AdminShell';
 import { AppLayout } from './AppLayout';
-
-const QuizLibraryPage = lazy(async () => {
-  const module = await import('../routes/admin/QuizLibraryPage');
-  return { default: module.QuizLibraryPage };
-});
-
-const QuizDetailPage = lazy(async () => {
-  const module = await import('../routes/admin/QuizDetailPage');
-  return { default: module.QuizDetailPage };
-});
-
-const QuizEditorPage = lazy(async () => {
-  const module = await import('../routes/admin/QuizEditorPage');
-  return { default: module.QuizEditorPage };
-});
-
-const QuizPreflightPage = lazy(async () => {
-  const module = await import('../routes/admin/QuizPreflightPage');
-  return { default: module.QuizPreflightPage };
-});
-
-const QuizRepairPage = lazy(async () => {
-  const module = await import('../routes/admin/QuizRepairPage');
-  return { default: module.QuizRepairPage };
-});
-
-const AdminEventScoringPage = lazy(async () => {
-  const module = await import('../routes/admin/AdminEventScoringPage');
-  return { default: module.AdminEventScoringPage };
-});
-
-const AdminEventsPage = lazy(async () => {
-  const module = await import('../routes/admin/AdminEventsPage');
-  return { default: module.AdminEventsPage };
-});
-
-const AdminEventCreatePage = lazy(async () => {
-  const module = await import('../routes/admin/AdminEventCreatePage');
-  return { default: module.AdminEventCreatePage };
-});
-
-const AdminEventDetailPage = lazy(async () => {
-  const module = await import('../routes/admin/AdminEventDetailPage');
-  return { default: module.AdminEventDetailPage };
-});
-
-const AdminPrintCenterPage = lazy(async () => {
-  const module = await import('../routes/admin/AdminPrintCenterPage');
-  return { default: module.AdminPrintCenterPage };
-});
-
-const AdminEventRegistrationsPage = lazy(async () => {
-  const module = await import('../routes/admin/AdminEventRegistrationsPage');
-  return { default: module.AdminEventRegistrationsPage };
-});
-
-const LiveControlPage = lazy(async () => {
-  const module = await import('../routes/admin/LiveControlPage');
-  return { default: module.LiveControlPage };
-});
+import { AccountPage } from '../routes/AccountPage';
+import { UsersAccessPage } from '../routes/admin/UsersAccessPage';
+import '../styles/access.css';
 
 const ProjectorPage = lazy(async () => {
   const module = await import('../routes/projector/ProjectorPage');
   return { default: module.ProjectorPage };
 });
-
-function LazyAdminRoute({ children }: { readonly children: ReactNode }) {
-  return <Suspense fallback={<AdminLoading />}>{children}</Suspense>;
-}
 
 function LazyProjectorRoute() {
   return <Suspense fallback={<section className="projector-stage projector-message"><h1>Načítám projektor…</h1></section>}><ProjectorPage /></Suspense>;
@@ -94,23 +35,27 @@ export const router = createBrowserRouter([
   {
     path: 'admin',
     element: <RequireStaff />,
+    HydrateFallback: AdminLoading,
     children: [
-      { path: 'live/:sessionId', element: <LazyAdminRoute><LiveControlPage /></LazyAdminRoute> },
-      { path: 'quizzes/:quizId/edit', element: <LazyAdminRoute><QuizEditorPage /></LazyAdminRoute> },
+      { path: 'live/:sessionId', lazy: lazyAdminRoute(() => import('../routes/admin/LiveControlPage').then(module => module.LiveControlPage), ['event.live']) },
+      { path: 'quizzes/:quizId/edit', lazy: lazyAdminRoute(() => import('../routes/admin/QuizEditorPage').then(module => module.QuizEditorPage), ['quiz.read']) },
       {
         element: <AdminShell />,
         children: [
           { index: true, element: <AdminPage /> },
-          { path: 'quizzes', element: <LazyAdminRoute><QuizLibraryPage /></LazyAdminRoute> },
-          { path: 'quizzes/:quizId', element: <LazyAdminRoute><QuizDetailPage /></LazyAdminRoute> },
-          { path: 'quizzes/:quizId/readiness', element: <LazyAdminRoute><QuizPreflightPage /></LazyAdminRoute> },
-          { path: 'quizzes/:quizId/readiness/repair', element: <LazyAdminRoute><QuizRepairPage /></LazyAdminRoute> },
-          { path: 'events', element: <LazyAdminRoute><AdminEventsPage /></LazyAdminRoute> },
-          { path: 'events/new', element: <LazyAdminRoute><AdminEventCreatePage /></LazyAdminRoute> },
-          { path: 'events/:eventId/scoring', element: <LazyAdminRoute><AdminEventScoringPage /></LazyAdminRoute> },
-          { path: 'events/:eventId', element: <LazyAdminRoute><AdminEventDetailPage /></LazyAdminRoute> },
-          { path: 'events/:eventId/print', element: <LazyAdminRoute><AdminPrintCenterPage /></LazyAdminRoute> },
-          { path: 'events/:eventId/registrations', element: <LazyAdminRoute><AdminEventRegistrationsPage /></LazyAdminRoute> },
+          { path: 'users', element: <PermissionGate requires={['users.manage']}><UsersAccessPage /></PermissionGate> },
+          { path: 'quizzes', lazy: lazyAdminRoute(() => import('../routes/admin/QuizLibraryPage').then(module => module.QuizLibraryPage), ['quiz.read']) },
+          { path: 'quizzes/new', lazy: lazyAdminRoute(() => import('../routes/admin/QuizCreatePage').then(module => module.QuizCreatePage), ['quiz.create']) },
+          { path: 'quizzes/:quizId', lazy: lazyAdminRoute(() => import('../routes/admin/QuizDetailPage').then(module => module.QuizDetailPage), ['quiz.read']) },
+          { path: 'quizzes/:quizId/readiness', lazy: lazyAdminRoute(() => import('../routes/admin/QuizPreflightPage').then(module => module.QuizPreflightPage), ['quiz.read', 'quiz.answers.read']) },
+          { path: 'quizzes/:quizId/readiness/repair', lazy: lazyAdminRoute(() => import('../routes/admin/QuizRepairPage').then(module => module.QuizRepairPage), ['quiz.edit', 'quiz.answers.edit']) },
+          { path: 'events', lazy: lazyAdminRoute(() => import('../routes/admin/AdminEventsPage').then(module => module.AdminEventsPage), ['event.read']) },
+          { path: 'events/new', lazy: lazyAdminRoute(() => import('../routes/admin/AdminEventCreatePage').then(module => module.AdminEventCreatePage), ['event.create']) },
+          { path: 'events/:eventId/scoring', lazy: lazyAdminRoute(() => import('../routes/admin/AdminEventScoringPage').then(module => module.AdminEventScoringPage), ['event.read']) },
+          { path: 'events/:eventId/results', lazy: lazyAdminRoute(() => import('../routes/admin/AdminEventResultsPage').then(module => module.AdminEventResultsPage), ['event.read']) },
+          { path: 'events/:eventId', lazy: lazyAdminRoute(() => import('../routes/admin/AdminEventDetailPage').then(module => module.AdminEventDetailPage), ['event.read']) },
+          { path: 'events/:eventId/print', lazy: lazyAdminRoute(() => import('../routes/admin/AdminPrintCenterPage').then(module => module.AdminPrintCenterPage), ['event.export']) },
+          { path: 'events/:eventId/registrations', lazy: lazyAdminRoute(() => import('../routes/admin/AdminEventRegistrationsPage').then(module => module.AdminEventRegistrationsPage), ['event.contacts']) },
         ],
       },
       { path: '*', element: <NotFoundPage /> },
@@ -122,6 +67,8 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/events" replace /> },
       { path: 'admin/login', element: <AdminLoginPage /> },
       { path: 'admin/no-access', element: <AdminNoAccessPage /> },
+      { path: 'account', element: <AccountPage /> },
+      { path: 'invite/:inviteId', element: <AccountPage /> },
       { path: 'events', element: <EventsPage /> },
       { path: 'events/:eventId', element: <PublicEventPage /> },
       { path: 'events/:eventId/registration/manage', element: <ManageRegistrationPage /> },

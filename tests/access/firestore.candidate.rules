@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function member() { return get(/databases/$(database)/documents/memberships/$(request.auth.uid)).data; }
+    function active() {
+      return request.auth != null && request.auth.token.email_verified == true
+        && member().uid == request.auth.uid && member().status == 'active'
+        && request.auth.token.auth_time > member().sessionValidAfter;
+    }
+    function permitted(permission) { return active() && permission in member().permissions; }
+    function quizScope(quizId) {
+      let scope = member().quizzes;
+      return scope.mode == 'all' || (scope.mode == 'selected' && quizId in scope.ids)
+        || (scope.mode == 'own' && get(/databases/$(database)/documents/quizzes/$(quizId)).data.createdBy == request.auth.uid);
+    }
+    function eventScope(eventId) {
+      let scope = member().events;
+      return scope.mode == 'all' || (scope.mode == 'selected' && eventId in scope.ids)
+        || (scope.mode == 'own' && get(/databases/$(database)/documents/events/$(eventId)).data.createdBy == request.auth.uid);
+    }
+    function eventVisible(eventId) {
+      let event = get(/databases/$(database)/documents/events/$(eventId)).data;
+      return exists(/databases/$(database)/documents/events/$(eventId)) && (!('disposition' in event) || !(event.disposition in ['trash', 'deleting']));
+    }
+    function sessionRead(session) {
+      return ('eventId' in session && permitted('event.read') && eventScope(session.eventId) && eventVisible(session.eventId))
+        || (!('eventId' in session) && permitted('quiz.read') && quizScope(session.quizId));
+    }
+    function fullQuizRead(quizId) {
+      return permitted('quiz.read') && permitted('quiz.answers.read') && permitted('quiz.notes.read') && quizScope(quizId);
+    }
+    function fullEventRead(eventId) {
+      return permitted('event.read') && permitted('event.contacts') && permitted('event.answers.read') && permitted('event.notes.read') && eventScope(eventId) && eventVisible(eventId);
+    }
+    function assignedSnapshot(eventId, snapshotId) {
+      let event = get(/databases/$(database)/documents/events/$(eventId)).data;
+      return 'quizAssignment' in event && event.quizAssignment is map
+        && 'snapshotId' in event.quizAssignment && event.quizAssignment.snapshotId == snapshotId;
+    }
+    function fullSnapshotRead(snapshotId) {
+      let snapshot = get(/databases/$(database)/documents/quizSnapshots/$(snapshotId)).data;
+      return 'eventId' in snapshot && fullEventRead(snapshot.eventId) && assignedSnapshot(snapshot.eventId, snapshotId);
+    }
+    match /memberships/{uid} { allow get: if request.auth != null && request.auth.uid == uid; allow list, write: if false; }
+    match /quizzes/{quizId}/{document=**} {
+      allow read: if fullQuizRead(quizId);
+      allow write: if false;
+    }
+    // Existing clients with ALL sensitive-field permissions retain complete authorized reads.
+    // Event-only members use the scoped snapshot API; it grants no source-quiz permission.
+    match /events/{eventId} { allow read: if fullEventRead(eventId); allow write: if false; }
+    match /events/{eventId}/registrations/{registrationId} { allow read: if fullEventRead(eventId); allow write: if false; }
+    match /quizSnapshots/{snapshotId} {
+      allow read: if fullSnapshotRead(snapshotId); allow write: if false;
+      match /slides/{slideId} { allow read: if fullSnapshotRead(snapshotId); allow write: if false; }
+      match /rounds/{roundId} { allow read: if fullSnapshotRead(snapshotId); allow write: if false; }
+    }
+    match /sessions/{sessionId} {
+      allow read: if active() && sessionRead(resource.data);
+      allow write: if false;
+      match /finalVersions/{versionId} {
+        allow read: if active() && sessionRead(get(/databases/$(database)/documents/sessions/$(sessionId)).data);
+        allow write: if false;
+      }
+      match /interimVersions/{versionId} {
+        allow read: if active() && sessionRead(get(/databases/$(database)/documents/sessions/$(sessionId)).data);
+        allow write: if false;
+      }
+    }
+    match /events/{eventId}/scores/{scoreId} {
+      allow read: if permitted('event.read') && eventScope(eventId) && eventVisible(eventId);
+      allow write: if false;
+      match /history/{entryId} {
+        allow read: if permitted('event.read') && eventScope(eventId) && eventVisible(eventId);
+        allow write: if false;
+      }
+    }
+    match /publicSessions/{sessionId} { allow get: if true; allow list, write: if false; }
+    match /publicEvents/{eventId} { allow read: if true; allow write: if false; }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {spawn} from 'node:child_process';
+import path from 'node:path';
+const sha=process.env.EVENT_RELEASE_SHA;assert.match(sha??'',/^[a-f0-9]{40}$/);
+const receipt=JSON.parse(readFileSync(`.local-data/event-management/release-${sha}/receipt.json`,'utf8'));
+assert.equal(receipt.sha,sha);assert.equal(receipt.projectId,'filmovy-kviz-v2-staging');
+for(const [file,hash] of Object.entries(receipt.frontendHashes)) assert.equal(createHash('sha256').update(readFileSync(path.join(receipt.hosting,file))).digest('hex'),hash);
+const server=spawn(process.execPath,['apps/web/node_modules/vite/bin/vite.js','preview','--outDir',receipt.hosting,'--host','127.0.0.1','--port','5199','--strictPort'],{stdio:'inherit'});
+process.on('SIGTERM',()=>server.kill());process.on('SIGINT',()=>server.kill());server.on('exit',code=>process.exit(code??1));

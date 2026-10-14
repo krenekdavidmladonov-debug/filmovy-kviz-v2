@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {execFileSync,spawn,spawnSync} from 'node:child_process';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import path from 'node:path';
+assert.equal(process.env.VITE_FIREBASE_USE_EMULATORS,'true');
+assert.match(process.env.VITE_FIREBASE_PROJECT_ID??'',/^demo-/);
+assert.equal(process.env.VITE_ENABLE_TEAM_EMAIL,'false');
+const root=process.cwd(),output=path.resolve(root,'.local-data/complete-editor/hosting');
+assert(output.startsWith(path.resolve(root,'.local-data/complete-editor')+path.sep));
+const vite=path.resolve(root,'apps/web/node_modules/vite/bin/vite.js');
+const built=spawnSync(process.execPath,[vite,'build','apps/web','--outDir',output,'--emptyOutDir'],{stdio:'inherit'});
+if(built.status!==0)process.exit(built.status??1);
+mkdirSync(path.dirname(output),{recursive:true});
+writeFileSync(path.resolve(output,'../build.json'),JSON.stringify({sha:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),dirty:execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()!=='',builtAt:new Date().toISOString(),project:process.env.VITE_FIREBASE_PROJECT_ID,teamEmailEnabled:false,mode:'Vite production build served locally'},null,2));
+const child=spawn(process.execPath,[vite,'preview','apps/web','--outDir',output,'--host','127.0.0.1','--port','5198','--strictPort'],{stdio:'inherit'});
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>child.kill(signal));
+child.on('exit',code=>{process.exitCode=code??0;});

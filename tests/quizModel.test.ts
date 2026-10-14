@@ -2,6 +2,7 @@ import { Timestamp } from 'firebase/firestore';
 import { describe, expect, test } from 'vitest';
 
 import { mapQuizQuestion, mapQuizSummary } from '../apps/web/src/features/quizzes/quizMappers';
+import { mapEditorSlide } from '../apps/web/src/features/editor/editorMappers';
 
 const validQuizData = {
   title: 'Testovací kvíz',
@@ -16,6 +17,16 @@ const validQuizData = {
 };
 
 describe('quiz Firestore mapping', () => {
+  test('private editor exposes only the exact server-managed automatic agenda marker', () => {
+    const data = { kind: 'agenda', position: 1, options: ['Původní ruční položka'] };
+    expect(mapEditorSlide('agenda', { ...data, automaticAgenda: true }).automaticAgenda).toBe(true);
+    for (const automaticAgenda of [false, undefined, 'true', 1, null, {}]) {
+      const mapped = mapEditorSlide('agenda', { ...data, automaticAgenda });
+      expect(mapped).not.toHaveProperty('automaticAgenda');
+      expect(mapped.options).toEqual(data.options);
+    }
+    expect(mapEditorSlide('agenda', data)).not.toHaveProperty('automaticAgenda');
+  });
   test('maps a valid quiz summary', () => {
     const quiz = mapQuizSummary('quiz-1', validQuizData);
 

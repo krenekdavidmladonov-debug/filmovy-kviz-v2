@@ -63,7 +63,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['tests/**/*.{ts,tsx}', 'tools/migration-v1/test/**/*.ts', 'tools/event-night/**/*.ts', 'playwright.config.ts', 'vitest.config.ts', 'vitest.rules.config.ts'],
+    files: ['tests/**/*.{ts,tsx}', 'tools/migration-v1/test/**/*.ts', 'tools/event-night/**/*.ts', 'playwright.config.ts', 'vitest.config.ts', 'vitest.rules.config.ts', 'vitest.access-rules.config.ts'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
       parserOptions: {
@@ -77,6 +77,12 @@ export default tseslint.config(
     languageOptions: {
       globals: globals.node,
     },
+  },
+  {
+    // Firebase CLI guard must load synchronously through Node --require.
+    files: ['tools/event-management/deploy-guard.cjs', 'tools/staging/restart-deploy-guard.cjs', 'tools/staging/restart-deploy-policy.cjs'],
+    languageOptions: { sourceType: 'commonjs', globals: globals.node },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
     files: ['tests/**/*.mjs'],

@@ -13,5 +13,5 @@
     "types": ["node"],
     "jsx": "react-jsx"
   },
-  "include": ["tests/**/*.ts", "tests/**/*.tsx", "tools/migration-v1/test/**/*.ts", "tools/event-night/**/*.ts", "apps/web/src/vite-env.d.ts", "playwright.config.ts", "vitest.config.ts", "vitest.rules.config.ts"]
+  "include": ["tests/**/*.ts", "tests/**/*.tsx", "tools/migration-v1/test/**/*.ts", "tools/event-night/**/*.ts", "apps/web/src/vite-env.d.ts", "playwright.config.ts", "vitest.config.ts", "vitest.rules.config.ts", "vitest.access-rules.config.ts"]
 }

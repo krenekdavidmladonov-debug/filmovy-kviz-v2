@@ -64,6 +64,7 @@ export function requestedEventConfiguration(data: unknown): EventConfigurationIn
   const startsAtText = boundedString(value.startsAt, 'startsAt', 100);
   const configuration: EventConfigurationInput = {
     title: boundedString(value.title, 'title', 300),
+    description: (() => { const description = value.description ?? ''; if (typeof description !== 'string' || description.length > 2000 || /[\p{Cf}]/u.test(description)) throw new HttpsError('invalid-argument', 'Popis je neplatný.'); return description.trim(); })(),
     startsAt: new Date(startsAtText),
     timeZone: boundedString(value.timeZone, 'timeZone', 100),
     venue: {

@@ -134,8 +134,8 @@ function issueLocation(item: RepairQueueItem): string {
 export function QuizRepairPage() {
   const { quizId } = useParams<{ quizId: string }>();
   const navigate = useNavigate();
-  const { role } = useAuth();
-  const readOnly = role !== 'admin';
+  const { can } = useAuth();
+  const readOnly = !can('quiz.edit') || !can('quiz.answers.edit');
   const [quiz, setQuiz] = useState<EditorQuiz | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);

@@ -2,7 +2,7 @@
 
 ## Goals
 
-Filmový Kvíz V2 is a small but real application for preparing and running pub quizzes. The architecture favors clear boundaries and operational reliability over unnecessary layers.
+JustKvíz is a small but real application for preparing and running pub quizzes. The architecture favors clear boundaries and operational reliability over unnecessary layers.
 
 ## Repository layout
 
@@ -67,7 +67,7 @@ The guided repair layer lives at `/admin/quizzes/:quizId/readiness/repair`. It c
 
 The first Events Foundation slice adds `/admin/events`, event create/detail/configuration, and immutable quiz preparation. Event mutations are admin-only callable Functions with expected revisions; moderators have operational read-only access. Locking imports the same quiz-domain mapper and preflight engine used by the editor, then atomically copies the exact private slide stream and round metadata into a new `quizSnapshots` document tree and attaches it to the event. Relock creates another snapshot and is allowed only while server-owned scoring state has not started. `publicEvents` is a whole-document allowlist projection with safe aggregate capacities and registration window but no quiz references, team identities, answers, or contacts.
 
-Event Registrations V1 adds trusted public create/get/edit/cancel operations and an admin-only configuration/cancellation boundary. Every capacity or unique-name mutation shares a Firestore transaction with event counters. Registration documents hold only a management-token verifier. Transactional email extends this with a separately protected ciphertext envelope, atomic private intents, replay receipts and a safe organizer delivery summary; see [TRANSACTIONAL_EMAIL.md](TRANSACTIONAL_EMAIL.md). Cloud-ready Gmail delivery uses a private Cloud Tasks worker fed by committed intents; real OAuth/key values and deployment remain unconfigured. Local verification injects a fake Gmail HTTP transport. Internal round scoring is implemented through the staff-only saveEventScore callable; see EVENT_SCORING.md.
+Event Registrations V1 adds trusted public create/get/edit/cancel operations and an admin-only configuration/cancellation boundary. Every capacity or unique-name mutation shares a Firestore transaction with event counters. Registration documents hold only a management-token verifier. Transactional email extends this with a separately protected ciphertext envelope, atomic private intents, replay receipts and a safe organizer delivery summary; see [TRANSACTIONAL_EMAIL.md](TRANSACTIONAL_EMAIL.md). Gmail delivery uses a private Cloud Tasks worker fed by committed intents. Source discovery defaults off without email secret bindings or parameter declarations. Explicit V2 staging mode accepts one configured recipient and a creation cutoff; both dispatch and the actual delivery lease transaction reject older, other-recipient and organizational intents before credentials/provider access. The create callable alone binds the token keyring; the worker also binds the three Gmail OAuth secrets. Existing encrypted receipts remain validated on replay. The separately approved five-Function staging activation is complete: one selected-recipient message was accepted and its arrival/sender confirmed by the owner; the queue remains `PAUSED`. The frozen 70-target restart inventory remains a separate default-off release contract. [Actual activation evidence](EMAIL_ACTIVATION_EXECUTION.md) records deployment, identities, configuration and the bounded send; it does not authorize broader rollout or queue resume. Local verification continues to inject a fake Gmail HTTP transport. Internal round scoring is implemented through the staff-only saveEventScore callable; see EVENT_SCORING.md.
 
 Event team tools add two admin-only manual-team callables over that same registration ledger (not a parallel team store), plus shared manual-team and public-link/QR UI. See `EVENT_TEAM_TOOLS.md` for idempotency and delivery scope.
 
@@ -77,7 +77,7 @@ The PDF Print Center adds `/admin/events/:eventId/print` and a binary HTTPS Func
 
 ## Firebase services
 
-- Authentication: staff sign-in; role authorization via custom claims.
+- Authentication: staff sign-in; authorization through current server-managed membership, permissions and resource scopes.
 - Firestore: operational and public projection data.
 - Storage: quiz media, with metadata/access controlled by Firestore and Rules.
 - Functions: validation, explicit staff authorization, revision-checked live transactions, sanitized publication, and other trusted operations.
@@ -95,7 +95,7 @@ No production project identifiers or credentials are stored in this repository.
 
 The quality gate includes static checks, production builds, unit/migration tests, Firestore Rules emulator tests, and Auth/Firestore/Functions emulator E2E flows for live control, editor CRUD, guided repair, and trusted event/snapshot workflows. Separate local-only migrated-data checks open all 4 offline V1 quizzes and 315 slides through the editor read shape, round-trip one representative of each observed slide kind, and run whole-quiz readiness over all 263 questions without printing private values. The real export is never available to CI. Event-night repair reports and progress live only below Git-ignored `.local-data/tonight-repair/` and contain semantic references/counts, never question copy, options, answers, media URLs, notes, or raw legacy values.
 
-Internal scoring lives at /admin/events/:eventId/scoring, linked from the event detail. It uses the existing registration roster and immutable snapshot round IDs. Revision-checked score changes, append-only history, idempotency receipts, and the first scoring.started transition share one transaction. Current staff claims are rechecked on every callable invocation. Private subscriptions preserve local drafts; there is no publication or BroadcastChannel path. See EVENT_SCORING.md for the data and lifecycle contract.
+Internal scoring lives at /admin/events/:eventId/scoring, linked from the event detail. It uses the existing registration roster and immutable snapshot round IDs. Revision-checked score changes, append-only history, idempotency receipts, and the first scoring.started transition share one transaction. Current membership and event scope are rechecked on every callable invocation and inside the score transaction. Private subscriptions preserve local drafts; there is no publication or BroadcastChannel path. See EVENT_SCORING.md for the data and lifecycle contract.
 
 ## Referee access
 
@@ -114,3 +114,16 @@ Admin-only preview/confirmation creates an immutable emailCampaigns record and r
 ## Owned media foundation
 
 Quiz-scoped image/audio uploads use private asset metadata, create-only Storage grants and a current-role/current-publication HTTP read gateway. Immutable event snapshots keep stable asset references and generations; no cleanup runs. The existing MediaPlayer lifecycle selects YouTube or native audio while retaining the one-player budget. See [MEDIA_STORAGE.md](MEDIA_STORAGE.md) for boundaries and future deployment checks.
+
+Media authoring extends the shared picker/gateway/renderer to question, private answer and background roles. Explicit empty fields detach without deleting legacy data or snapshot assets. See MEDIA_AUTHORING_RELEASE.md for the complete contract and deployment scope.
+
+
+Complete editor extends the same private ordered stream with explicit draft/ready authoring, independent answer mode, default appearance, atomic round/recap creation and private in-memory rehearsal. Drafts block preflight, snapshot lock and live publication. See [COMPLETE_EDITOR_RELEASE.md](COMPLETE_EDITOR_RELEASE.md) for field compatibility, authorization, verification and the integrated deployment manifest.
+
+## Current personal access boundary
+
+[PERSONAL_ACCESS.md](PERSONAL_ACCESS.md) supersedes the historical admin/moderator descriptions above. Private repositories use scoped server views; raw data is available only with all sensitive permissions. Every existing staff callable and gateway enforces current membership independently. Preset labels do not authorize access. AuthProvider watches its own server membership and remounts private views on identity/version changes. See the release document for the explicit deployment inventory and invitation activation gate.
+
+## Event management extension
+
+See [EVENT_MANAGEMENT.md](EVENT_MANAGEMENT.md) for the independent disposition overlay, scoped permission mapping, shared transactional guards, capability revocation and exact server-side deletion ownership/allowlist. No content backfill or Storage cleanup is introduced. Cloud team email remains disabled.
