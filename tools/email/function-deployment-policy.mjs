@@ -99,11 +99,12 @@ function buildPointer(value) {
 // actual Function config+source+service pointer projection, queue PAUSED and all
 // prerequisite/IAM checks. A caller bypassing authorize is not guarded by import.
 export function createFunctionDeploymentPolicy(input, operatorReference, now = Date.now()) {
-  keys(input,['approval','descriptor','before','targets','sourceBinding']);
-  const {approval,descriptor,before,targets,sourceBinding} = JSON.parse(canonical(input));
+  const recovering = input?.approval?.mode === 'APPROVED_EMAIL_FIVE_FUNCTIONS_RECOVERY';
+  keys(input,['approval','descriptor','before','targets','sourceBinding',...(recovering ? ['recovery'] : [])]);
+  const {approval,descriptor,before,targets,sourceBinding,recovery} = JSON.parse(canonical(input));
   keys(approval,['mode','projectId','region','artifactSourceSha','artifactReceiptSha256','archiveSha256',
-    'descriptorSha256','beforeSha256','targetsSha256','approvalReference','operatorReference','issuedAt','expiresAt']);
-  need(approval.mode === 'APPROVED_EMAIL_FIVE_FUNCTIONS' && approval.projectId === FUNCTION_PROJECT
+    'descriptorSha256','beforeSha256','targetsSha256','approvalReference','operatorReference','issuedAt','expiresAt',...(recovering ? ['recoverySha256'] : [])]);
+  need(['APPROVED_EMAIL_FIVE_FUNCTIONS','APPROVED_EMAIL_FIVE_FUNCTIONS_RECOVERY'].includes(approval.mode) && approval.projectId === FUNCTION_PROJECT
     && approval.region === FUNCTION_REGION && approval.artifactSourceSha === ARTIFACT_SOURCE
     && approval.artifactReceiptSha256 === ARTIFACT_RECEIPT, 'FUNCTION_POLICY_SCOPE');
   for (const field of ['archiveSha256','descriptorSha256','beforeSha256','targetsSha256']) {
@@ -126,6 +127,32 @@ export function createFunctionDeploymentPolicy(input, operatorReference, now = D
   keys(descriptor.secretVersions,SECRET_NAMES);
   for (const version of Object.values(descriptor.secretVersions)) need(typeof version === 'string' && /^[1-9]\d*$/u.test(version), 'FUNCTION_POLICY_SECRET');
   need(Array.isArray(before) && before.length === 5 && Array.isArray(targets) && targets.length === 5, 'FUNCTION_POLICY_TARGET');
+  if (recovering) {
+    keys(recovery,['failedReceiptSha256','failedOperationName','originalJournalSha256','originalRequestSha256','originalRequestBody']);
+    need(approval.recoverySha256 === deploymentInputHash(recovery)
+      && recovery.failedReceiptSha256 === '5b10cce331162d6d8e7fd151e4d6688e6a476818b0a29f97b331dd871b8b9906'
+      && /^[a-f0-9]{64}$/u.test(recovery.originalJournalSha256)
+      && recovery.originalRequestSha256 === deploymentInputHash(recovery.originalRequestBody)
+      && typeof recovery.failedOperationName === 'string' && recovery.failedOperationName.startsWith(PREFIX + '/operations/')
+      && /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u.test(recovery.failedOperationName.slice((PREFIX + '/operations/').length)), 'FUNCTION_POLICY_RECOVERY');
+    const failed = before[0].body;
+    keys(failed,['name','environment','buildConfig','serviceConfig','labels']);
+    need(failed.name === resource(FUNCTION_ORDER[0]) && failed.environment === 'GEN_2' && failed.serviceConfig === null, 'FUNCTION_POLICY_RECOVERY');
+    const healthyShape = {...failed,serviceConfig:recovery.originalRequestBody.serviceConfig};
+    bodyShape(healthyShape,FUNCTION_ORDER[0]); buildPointer(before[0].sourceRevision);
+    const original = JSON.parse(canonical(recovery.originalRequestBody));
+    need(equal(original.buildConfig.source,{storageSource:sourceBinding.storageSource}), 'FUNCTION_POLICY_SOURCE');
+    delete original.buildConfig.source;
+    const env = before[2].body?.serviceConfig?.environmentVariables;
+    need(env?.GCLOUD_PROJECT === FUNCTION_PROJECT && typeof env?.FIREBASE_CONFIG === 'string', 'FUNCTION_POLICY_CONFIG');
+    original.serviceConfig.environmentVariables = {...original.serviceConfig.environmentVariables,GCLOUD_PROJECT:FUNCTION_PROJECT,FIREBASE_CONFIG:env.FIREBASE_CONFIG,
+      FUNCTION_REGION:FUNCTION_REGION,FUNCTION_TARGET:FUNCTION_ORDER[0],LOG_EXECUTION_ID:'true',FUNCTION_SIGNATURE_TYPE:'http',
+      EVENTARC_CLOUD_EVENT_SOURCE:resource(FUNCTION_ORDER[0])};
+    need(equal(targets[0].body,original) && equal(failed.labels,original.labels), 'FUNCTION_POLICY_RECOVERY');
+    for (const key of ['runtime','entryPoint','environmentVariables','serviceAccount',...BUILD_PRESERVE]) {
+      need(equal(failed.buildConfig[key] ?? null,original.buildConfig[key] ?? null), 'FUNCTION_POLICY_PRESERVE');
+    }
+  }
   need(typeof descriptor.buildServiceAccount === 'string'
     && /^projects\/(?:filmovy-kviz-v2-staging|177615774316)\/serviceAccounts\/[^\s/@]+@[^\s/]+\.gserviceaccount\.com$/u.test(descriptor.buildServiceAccount)
     && before.some(prior => prior.body?.buildConfig?.serviceAccount === descriptor.buildServiceAccount), 'FUNCTION_POLICY_BUILD');
@@ -133,11 +160,14 @@ export function createFunctionDeploymentPolicy(input, operatorReference, now = D
     const id = FUNCTION_ORDER[index], prior = before[index], desired = targets[index];
     keys(prior,['id','exists','state','observedAt','sourceRevision','body']);
     keys(desired,['id','method','updateMask','body']);
-    need(prior.id === id && desired.id === id && prior.exists === (index >= 2)
-      && prior.state === (index < 2 ? 'NOT_FOUND' : 'ACTIVE')
-      && desired.method === (index < 2 ? 'POST' : 'PATCH'), 'FUNCTION_POLICY_CLASSIFICATION');
+    const failedWorker = recovering && index === 0;
+    need(prior.id === id && desired.id === id && prior.exists === (failedWorker || index >= 2)
+      && prior.state === (failedWorker ? 'FAILED' : index < 2 ? 'NOT_FOUND' : 'ACTIVE')
+      && desired.method === (failedWorker || index >= 2 ? 'PATCH' : 'POST'), 'FUNCTION_POLICY_CLASSIFICATION');
     const observed = utc(prior.observedAt); need(observed <= now && now - observed <= 5 * 60_000, 'FUNCTION_POLICY_STALE');
-    if (index < 2) need(prior.body === null && prior.sourceRevision === null && desired.updateMask === null, 'FUNCTION_POLICY_CLASSIFICATION');
+    if (failedWorker) need(equal(desired.updateMask,['buildConfig.runtime','buildConfig.entryPoint','buildConfig.source.storageSource',
+      'buildConfig.environmentVariables','serviceConfig'].sort()), 'FUNCTION_POLICY_MASK');
+    else if (index < 2) need(prior.body === null && prior.sourceRevision === null && desired.updateMask === null, 'FUNCTION_POLICY_CLASSIFICATION');
     else {
       bodyShape(prior.body,id);
       buildPointer(prior.sourceRevision);
@@ -163,7 +193,7 @@ export function createFunctionDeploymentPolicy(input, operatorReference, now = D
     bodyShape(desired.body,id);
     need(desired.body.buildConfig.source === undefined, 'FUNCTION_POLICY_SOURCE');
     const config = desired.body.serviceConfig, env = config.environmentVariables;
-    need((env.GCLOUD_PROJECT === undefined || env.GCLOUD_PROJECT === FUNCTION_PROJECT)
+    need(env.GCLOUD_PROJECT === FUNCTION_PROJECT
       && (env.FUNCTION_REGION === undefined || env.FUNCTION_REGION === FUNCTION_REGION)
       && (env.FUNCTION_TARGET === undefined || env.FUNCTION_TARGET === id), 'FUNCTION_POLICY_CONFIG');
     if (index < 2) {
@@ -188,6 +218,8 @@ export function createFunctionDeploymentPolicy(input, operatorReference, now = D
         && env.GMAIL_SENDER_EMAIL === descriptor.senderEmail && desired.body.labels['deployment-taskqueue'] === 'true', 'FUNCTION_POLICY_CONFIG');
     }
     if (id === 'dispatchRegistrationEmail') {
+      if (recovering) need(env.GCLOUD_PROJECT === FUNCTION_PROJECT
+        && env.FIREBASE_CONFIG === before[2].body.serviceConfig.environmentVariables.FIREBASE_CONFIG, 'FUNCTION_POLICY_CONFIG');
       const expected = {eventType:'google.cloud.firestore.document.v1.created',retryPolicy:'RETRY_POLICY_RETRY',
         serviceAccountEmail:accounts[id],triggerRegion:descriptor.triggerRegion,eventFilters:[
           {attribute:'database',value:'(default)'},{attribute:'namespace',value:'(default)'},
@@ -220,11 +252,11 @@ export function createFunctionDeploymentPolicy(input, operatorReference, now = D
           need(phase === 'poll' && polls < 120 && at - lastPoll >= 5000, 'FUNCTION_POLICY_PHASE');
           polls++; lastPoll = at; phase = 'poll-pending'; return {kind:'operation-read',id};
         }
-        const targetUrl = index < 2 ? ORIGIN + PREFIX + '/functions?functionId=' + id
+        const targetUrl = target.method === 'POST' ? ORIGIN + PREFIX + '/functions?functionId=' + id
           : ORIGIN + resource(id) + '?updateMask=' + target.updateMask.join(',');
         need(phase === 'write' && at - beforeObserved <= 5 * 60_000 && request.method === target.method && request.url === targetUrl
           && equal(request.body,target.body), 'FUNCTION_POLICY_REQUEST');
-        phase = 'write-pending'; return {kind:index < 2 ? 'function-create' : 'function-update',id};
+        phase = 'write-pending'; return {kind:target.method === 'POST' ? 'function-create' : 'function-update',id};
       },at);
     },
     acceptBefore(snapshot, at = Date.now()) {
@@ -245,6 +277,7 @@ export function createFunctionDeploymentPolicy(input, operatorReference, now = D
           && snapshot.target === resource(FUNCTION_ORDER[index]) && typeof snapshot.done === 'boolean'
           && snapshot.failed === false && (operation === null || operation === snapshot.name), 'FUNCTION_POLICY_OPERATION');
         need(operation !== null || !usedOperations.has(snapshot.name), 'FUNCTION_POLICY_OPERATION');
+        need(!recovering || snapshot.name !== recovery.failedOperationName, 'FUNCTION_POLICY_OPERATION');
         if (snapshot.done) { buildPointer(snapshot.build); acceptedBuild = snapshot.build; }
         else need(snapshot.build === null, 'FUNCTION_POLICY_BUILD');
         usedOperations.add(snapshot.name);
@@ -264,7 +297,7 @@ export function createFunctionDeploymentPolicy(input, operatorReference, now = D
         // source/provenance form the evidence chain; this is NOT a remote rehash.
         const actual = JSON.parse(canonical(snapshot.body)), wanted = JSON.parse(canonical(targets[index].body));
         delete actual.buildConfig.source; delete wanted.buildConfig.source;
-        need(index < 2 || (snapshot.build !== before[index].sourceRevision
+        need((index < 2 && !(recovering && index === 0)) || (snapshot.build !== before[index].sourceRevision
           && snapshot.body.buildConfig.source.storageSource.generation !== before[index].body.buildConfig.source.storageSource.generation), 'FUNCTION_POLICY_SOURCE');
         need(snapshot.id === id && snapshot.state === 'ACTIVE' && equal(actual,wanted)
           && snapshot.service === PREFIX + '/services/' + FUNCTION_ORDER[index].toLowerCase(), 'FUNCTION_POLICY_READBACK');

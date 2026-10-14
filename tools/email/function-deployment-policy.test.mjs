@@ -36,7 +36,7 @@ function fixture() {
   const targets = FUNCTION_ORDER.map((id,index) => {
     const body = index < 2 ? {name:PREFIX + '/functions/' + id,environment:'GEN_2',labels:id === 'deliverEmailTask' ? {'deployment-taskqueue':'true'} : {},
       buildConfig:{runtime:'nodejs22',entryPoint:id,environmentVariables:{GOOGLE_NODE_RUN_SCRIPTS:''},serviceAccount:builder},
-      serviceConfig:{environmentVariables:{...common},secretEnvironmentVariables:[],serviceAccountEmail:''}} : clone(before[index].body);
+      serviceConfig:{environmentVariables:{...common,GCLOUD_PROJECT:FUNCTION_PROJECT},secretEnvironmentVariables:[],serviceAccountEmail:''}} : clone(before[index].body);
     delete body.buildConfig.source;
     body.serviceConfig.environmentVariables = {...body.serviceConfig.environmentVariables,...common};
     const suffix = index === 0 ? 'worker' : index === 1 ? 'dispatch' : 'create';
@@ -65,7 +65,7 @@ function fresh(policy,input,index,at = NOW) {
 function wire(input,index) {
   const target = input.targets[index], body = clone(target.body);
   body.buildConfig.source = {storageSource:clone(input.sourceBinding.storageSource)};
-  return req(target.method,index < 2 ? URL + PREFIX + '/functions?functionId=' + target.id
+  return req(target.method,target.method === 'POST' ? URL + PREFIX + '/functions?functionId=' + target.id
     : URL + PREFIX + '/functions/' + target.id + '?updateMask=' + target.updateMask.join(','),body);
 }
 function op(index,done = true) {
@@ -181,4 +181,37 @@ test('managed source readback rejects counterfeit build, source, provenance, set
   policy.authorize(req('GET',URL + PREFIX + '/functions/' + FUNCTION_ORDER[2]),NOW);
   const unchanged = readback(input,2); unchanged.build = input.before[2].sourceRevision;
   assert.throws(() => policy.acceptReadback(unchanged,NOW),/^Error: FUNCTION_POLICY_SOURCE$/u);
+});
+
+function recoveryFixture() {
+  const input = fixture(), original = wire(input,0).body;
+  delete original.serviceConfig.environmentVariables.GCLOUD_PROJECT;
+  input.before[0] = {id:FUNCTION_ORDER[0],exists:true,state:'FAILED',observedAt:iso(NOW),
+    sourceRevision:'projects/177615774316/locations/europe-west1/builds/failed',
+    body:{...clone(original),buildConfig:{...clone(original.buildConfig),source:{storageSource:managed(FUNCTION_ORDER[0],'1')}},serviceConfig:null}};
+  input.recovery = {failedReceiptSha256:'5b10cce331162d6d8e7fd151e4d6688e6a476818b0a29f97b331dd871b8b9906',
+    failedOperationName:PREFIX+'/operations/failed',originalJournalSha256:'d'.repeat(64),originalRequestSha256:deploymentInputHash(original),originalRequestBody:original};
+  input.targets[0].method='PATCH'; input.targets[0].updateMask=['buildConfig.runtime','buildConfig.entryPoint','buildConfig.source.storageSource','buildConfig.environmentVariables','serviceConfig'].sort();
+  Object.assign(input.targets[0].body.serviceConfig.environmentVariables,{FIREBASE_CONFIG:input.before[2].body.serviceConfig.environmentVariables.FIREBASE_CONFIG,
+    FUNCTION_REGION:FUNCTION_REGION,FUNCTION_TARGET:FUNCTION_ORDER[0],LOG_EXECUTION_ID:'true',FUNCTION_SIGNATURE_TYPE:'http',EVENTARC_CLOUD_EVENT_SOURCE:PREFIX+'/functions/'+FUNCTION_ORDER[0]});
+  input.targets[1].body.serviceConfig.environmentVariables.FIREBASE_CONFIG=input.before[2].body.serviceConfig.environmentVariables.FIREBASE_CONFIG;
+  input.approval.mode='APPROVED_EMAIL_FIVE_FUNCTIONS_RECOVERY'; input.approval.recoverySha256=deploymentInputHash(input.recovery);
+  return rebind(input);
+}
+test('pinned FAILED worker restores whole original service config then exact remaining four targets',()=>{
+  const input=recoveryFixture(),policy=create(input); for(let index=0;index<5;index++)complete(policy,input,index);
+  assert.equal(policy.status(NOW).complete,true);
+});
+test('recovery rejects changed original config, failure binding, masks, old operation and unchanged source',()=>{
+  for(const change of [x=>{x.recovery.failedReceiptSha256='a'.repeat(64);},x=>{x.targets[0].updateMask=['serviceConfig.environmentVariables'];},
+    x=>{x.targets[0].body.serviceConfig.availableMemory='999Mi';},x=>{x.before[0].state='ACTIVE';},x=>{delete x.targets[1].body.serviceConfig.environmentVariables.GCLOUD_PROJECT;}]){
+    const input=recoveryFixture();change(input);input.approval.recoverySha256=deploymentInputHash(input.recovery);rebind(input);
+    assert.throws(()=>create(input),/^Error: FUNCTION_POLICY_/u);
+  }
+  const input=recoveryFixture(),policy=create(input);fresh(policy,input,0);policy.authorize(wire(input,0),NOW);
+  assert.throws(()=>policy.acceptOperation({...op(0),name:input.recovery.failedOperationName},NOW),/^Error: FUNCTION_POLICY_OPERATION$/u);
+  const old=create(input);fresh(old,input,0);old.authorize(wire(input,0),NOW);old.acceptOperation({...op(0),build:input.before[0].sourceRevision},NOW);
+  old.authorize(req('GET',URL+PREFIX+'/functions/'+FUNCTION_ORDER[0]),NOW);
+  const value=readback(input,0);value.build=input.before[0].sourceRevision;
+  assert.throws(()=>old.acceptReadback(value,NOW),/^Error: FUNCTION_POLICY_SOURCE$/u);
 });
