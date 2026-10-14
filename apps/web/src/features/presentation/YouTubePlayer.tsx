@@ -8,6 +8,7 @@ import type { MediaPlaybackCommand, MediaPlaybackState } from './types';
 interface YouTubePlayerInstance {
   cueVideoById(options: { videoId: string; startSeconds?: number; endSeconds?: number }): void;
   loadVideoById(options: { videoId: string; startSeconds?: number; endSeconds?: number }): void;
+  playVideo(): void;
   pauseVideo(): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   getCurrentTime(): number;
@@ -100,6 +101,7 @@ export function YouTubePlayer({
   onPlaybackState,
   currentTimeRequest,
   onCurrentTime,
+  allowManualAutoplay = false,
 }: {
   readonly source: string;
   readonly command: MediaPlaybackCommand;
@@ -112,6 +114,7 @@ export function YouTubePlayer({
   readonly onPlaybackState?: (generation: number, state: Extract<MediaPlaybackState, 'ready' | 'playing'>) => void;
   readonly currentTimeRequest?: number;
   readonly onCurrentTime?: (seconds: number) => void;
+  readonly allowManualAutoplay?: boolean;
 }) {
   const reactId = useId();
   const hostRef = useRef<HTMLDivElement>(null);
@@ -124,6 +127,7 @@ export function YouTubePlayer({
   const onCurrentTimeRef = useRef(onCurrentTime);
   const [machine, dispatch] = useReducer(reduceMediaMachine, initialMediaMachineState);
   const [visibleError, setVisibleError] = useState<string>();
+  const [blockedEpoch, setBlockedEpoch] = useState<number>();
   const videoId = youtubeVideoId(source);
 
   useEffect(() => { onFinishedRef.current = onFinished; }, [onFinished]);
@@ -148,6 +152,7 @@ export function YouTubePlayer({
     let mountedPlayer: YouTubePlayerInstance | undefined;
     const active = () => !cancelled && activeEpochRef.current === epoch;
     setVisibleError(undefined);
+    setBlockedEpoch(undefined);
     hostRef.current?.replaceChildren();
     if (videoId === undefined || hostRef.current === null) {
       const message = 'Zdroj není podporovaný YouTube odkaz ani video ID.';
@@ -196,6 +201,7 @@ export function YouTubePlayer({
             if (!active()) return;
             if (event.data === YT.PlayerState.PLAYING) {
               setVisibleError(undefined);
+              setBlockedEpoch(undefined);
               dispatch({ type: 'playing', generation });
               onPlaybackStateRef.current?.(generation, 'playing');
             }
@@ -206,6 +212,7 @@ export function YouTubePlayer({
           },
           onError: () => {
             if (!active()) return;
+            setBlockedEpoch(undefined);
             const message = 'YouTube médium se nepodařilo přehrát.';
             dispatch({ type: 'error', generation, message });
             setVisibleError(message);
@@ -213,10 +220,17 @@ export function YouTubePlayer({
           },
           onAutoplayBlocked: () => {
             if (!active()) return;
-            const message = 'Prohlížeč zablokoval přehrání. Spusťte médium znovu ručně.';
-            dispatch({ type: 'error', generation, message });
+            const message = 'Prohlížeč zablokoval automatické přehrání. Spusťte video ručně na tomto zařízení.';
+            if (!allowManualAutoplay) {
+              dispatch({ type: 'error', generation, message });
+              setVisibleError(message);
+              onErrorRef.current?.(generation, message);
+              return;
+            }
+            dispatch({ type: 'ready', generation });
+            onPlaybackStateRef.current?.(generation, 'ready');
+            setBlockedEpoch(epoch);
             setVisibleError(message);
-            onErrorRef.current?.(generation, message);
           },
         },
       });
@@ -240,12 +254,17 @@ export function YouTubePlayer({
       }
       hostRef.current?.replaceChildren();
     };
-  }, [command, endSeconds, generation, startSeconds, videoId]);
+  }, [allowManualAutoplay, command, endSeconds, generation, startSeconds, videoId]);
 
   return (
     <div className={className ?? 'youtube-player-shell'} data-media-lifecycle={machine.lifecycle} data-player-id={reactId}>
       <div ref={hostRef} className="youtube-player-host" />
-      {visibleError && <p className="projector-media-error" role="status">Médium není dostupné. Moderátor může pokračovat textovou otázkou.</p>}
+      {visibleError && <p className="projector-media-error" role="status">{visibleError}</p>}
+      {blockedEpoch !== undefined && (command === 'play' || command === 'replay') && <button type="button" className="secondary-button" onClick={() => {
+        if (activeEpochRef.current !== blockedEpoch) return;
+        try { playerRef.current?.playVideo(); }
+        catch { setVisibleError('Video se nepodařilo spustit. Zkuste ovládání přehrávače nebo pokračujte otázkou.'); }
+      }}>Spustit video ručně</button>}
     </div>
   );
 }
