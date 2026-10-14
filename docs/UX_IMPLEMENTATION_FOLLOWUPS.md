@@ -1,5 +1,7 @@
 # UX implementation follow-ups
 
+Historical discovery register. The current implementation supersedes several proposals below: [JustKvíz branding](JUSTKVIZ_REBRAND.md), [dark theme](JUSTKVIZ_DARK_MODE.md), [owned question/answer/background media](MEDIA_AUTHORING_RELEASE.md), [complete authoring/default appearance](COMPLETE_EDITOR_RELEASE.md) and [immutable event quiz preparation](EVENT_MANAGEMENT.md) are implemented. Do not reassign them from this list. [Current completion evidence](COMPLETION_MATRIX.md) is authoritative for the remaining delivery scope. Projector presence acknowledgements, cross-device draft preview, external media probes and offline synchronization are separate optional extensions, not silently added acceptance requirements.
+
 The first UX foundation intentionally preserves current product behavior. The items below need either a product decision or a separate technical slice before the interface can represent them honestly.
 
 The minimum quiz-creation foundation is now implemented: admins get **Nový kvíz** in the populated and empty library, creation writes one titled empty private draft through an idempotent trusted Function, and success continues in the existing round-first editor. Moderator creation remains disabled, and no placeholder or public content is generated.

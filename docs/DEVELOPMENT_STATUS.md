@@ -2,6 +2,25 @@
 
 This is the dated coordination record for resuming Filmový Kvíz V2 / JustKvíz. It supplements the development workflow; it is not release approval or evidence of the current cloud environment. Historical roadmaps and audits must be checked against an exact commit before assigning implementation work.
 
+## Current project closure — 2026-10-14
+
+The owner resumed autonomous work with all three workers after successful staging email delivery. Inspection started from clean `2b0672a7d44e187cac6dbf498eef7bfa73b72286`; dedicated branch `codex/final-project-closure` preserves every existing worktree. The email queue remains PAUSED and the one-message budget is consumed. This phase does not repeat OAuth, provisioning, deployment or the completed email smoke.
+
+| Owner | Disjoint task | Acceptance / state |
+| --- | --- | --- |
+| GPT-6.1 Sol HIGH | Trusted-boundary gap audit and independent corrective review | No additional runtime defect confirmed in reviewed paths. Creation recovery review found and closed the legacy-ID upgrade case; final review PASS. Architecture/security/email status prose corrected without changing authority. |
+| GPT-6.1 Sol MEDIUM | Quiz creation recovery UI, focused unit and seeded browser regression | Implemented submitted title/request preservation, safe replay, deliberate fresh attempt, actor isolation and legacy-ID adoption. Six focused tests PASS; lead actual browser regression PASS. |
+| GPT-6.1 Sol LOW | Completion matrix, launch readiness, pilot runbook and publication preparation | Replace obsolete callback/API blockers with actual deployment/delivery evidence; preserve historical results and identify only real operating inputs. |
+| Lead | Integration, isolated demo QA, current PR publication/CI and historical roadmap reconciliation | Existing PR39 is OPEN/DRAFT, head `819f351`, base `0d452d8`, mergeable; new candidate publication awaits the corrective change and verification. |
+
+The remaining operational boundary is a deliberately scoped V2 pilot on actual equipment and any later decision to expand invitations, recipients or public exposure. Old roadmap percentages and already implemented “future” features are not outstanding implementation requirements. Exact final evidence will be appended after the new regression and publication.
+
+The corrective code is committed as `313df9f9573f45a8447aebdfee3963f413f52429`. Lead `pnpm check` passed typecheck/lint/build, all 50 isolated demo Rules tests passed, and the new actual Chromium/Functions regression passed (one case, 10.7 s): a consumed legacy ID is retained, a committed-but-lost response survives reload and returns the same quiz, and an intentional new attempt follows a library check. Actor-scoped storage and late-response protection were independently reviewed. Storage denial retains same-page recovery only; an unavailable browser store cannot guarantee restoration after a reload. The first full check caught three nullable-index type errors in the new browser test; those assertions were corrected without weakening them, then check passed. The original failure log remains retained; unchanged Rules were not rerun for this test-only typing correction.
+
+Exact receipts live under `.local-data/project-closure-20261014`: check `check-retry-result.json` SHA256 `3c4176a6778e25b1dc9616a5fc19a54836c07aa61f4543b4e1351050580123af`, Rules `rules-result.json` SHA256 `28e4592a29ac4f00b1c9cc7fc725d3ec642e18547cd9522e58d06f2e18bb42fe`, browser `browser-result.json` SHA256 `8cf0e4b71d9297aed52db9deab84f3b30d1f05ea0b522eea6e4fd6ed3aef844a`. The browser runner required the successful check's exact source hashes and compiled Functions/domain digests before copying its fresh isolated runtime. Emulators and browser requests were loopback/demo only, mail mode off, with isolated CLI/ADC configuration. The approximately 981 kB bundle warning remains. This correction changes the quiz creation frontend only; existing server schemas, authorization, deployed email and its paused queue remain unchanged.
+
+LOW independently verified the three retained logs/receipts, all five final source hashes and the isolated Functions/domain build. Verification receipt `qa-verification.json` SHA256 `1c97bbd31ba4ca48f07d475ba0fae704e49e518879c6c4d59c7133b42818437e` records PASS without repeating the suites. The author unit result and HIGH code review remain separately attributed evidence.
+
 ## Current OAuth continuation — 2026-10-14
 
 Current outcome supersedes the historical pending/stopped steps below: the approved staging email phase is complete. Recovery receipt `eb9c2bd6199513161023189470f5c17f98c9a789a1dc0b66deaf25e1583c7771` confirms all five Functions ACTIVE (86 adapter requests, five writes); final independent deployment readback verifies two private services, exact trigger/transport, four numeric secret versions and PAUSED queue. Exact software commit is `b72f3e33d4b3ecc9d7a46770e676aff551a33de0`; frozen runtime package remains `f19c54dab8afaaf88a4d2b5a44d066174fe8165e`.

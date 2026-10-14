@@ -1,5 +1,15 @@
 # Successor publication and CI scope
 
+## Project closure successor — 2026-10-14
+
+The next successor is being prepared on `codex/final-project-closure` after the owner requested completion of the remaining project work. Corrective code `313df9f9573f45a8447aebdfee3963f413f52429` preserves quiz creation attempts after a committed-but-lost response, including old session-storage IDs and actor isolation. Six focused tests, lead check, 50 demo Rules tests and the actual new Chromium/emulator case passed; [current status](DEVELOPMENT_STATUS.md#current-project-closure--2026-10-14) binds receipts and the retained initial test-type failure.
+
+Fresh read-only GitHub/remote-ref inspection still finds existing PR39 OPEN/DRAFT, branch `codex/restart-release-aafeaa9`, head `819f351f93e1b69de7f132e3ebd3c79541c53858`, base `main` at `0d452d8efe4cce9eb003fcce713d3b63c15bb0a4`, same repository and no conflict. Publication will use only a normal fast-forward of that existing head after a clean candidate is frozen. Both workflows remain synthetic/demo only with read-only repository permissions, no cloud deployment, real email or secret input. The new creation regression is included by the existing seeded editor browser command and unit include; API/Function policies remain in the offline guard command.
+
+The historical body below described the earlier candidate. The actual staging email deployment and one owner-confirmed message have since completed; its queue remains PAUSED. Publication cannot resume that queue, send another message or certify a physical venue. The current Hosting frontend remains `ddb862f` until a separate exact Hosting release is completed. The new candidate SHA and remote outcomes will be recorded after publication; no new remote success is inferred from the local checks.
+
+## Earlier published successor
+
 Prepared from inspection base `e418eab0b774027e866f4989c9929c0cb787aa9e` on `codex/activation-execution-readiness`, compared with the previously published PR head `ddb862f946a7621e4ff9dbfb30f8976ad8d0e3ac`. Publication and independent CI review are now complete for **`819f351f93e1b69de7f132e3ebd3c79541c53858`**. The existing PR remains OPEN/DRAFT; no merge or deployment occurred. The final record below supersedes the original preparation steps, retained for traceability.
 
 ## Existing PR and normal fast-forward

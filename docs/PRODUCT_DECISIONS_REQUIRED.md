@@ -1,5 +1,7 @@
 # Remaining product decisions after projector behavior foundation
 
+This register records the earlier projector/migration foundation. Its deferred list is historical: [event registrations](REGISTRATIONS.md), [private PDF](PRINT_CENTER.md), [scoring](EVENT_SCORING.md), [referee access](REFEREE_ACCESS.md), [final reveal](FINAL_REVEAL.md) and [owned media](MEDIA_AUTHORING_RELEASE.md) now have implemented contracts and acceptance evidence. Current remaining work is tracked in [COMPLETION_MATRIX.md](COMPLETION_MATRIX.md). Legacy-content interpretation remains relevant only to a separately authorized migration/content review; it does not block a newly authored V2 pilot. No new production data was inspected to update this register.
+
 The projector foundation resolved the behavior needed to implement and test the first live flow. This file now lists only decisions that remain genuinely unresolved. None blocks local technical validation of the foundation, and all unresolved V1 values stay private in `legacy.raw`.
 
 ## Content review required before a real event

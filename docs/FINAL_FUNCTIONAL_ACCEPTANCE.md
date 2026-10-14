@@ -1,5 +1,7 @@
 # Závěrečná funkční akceptace — 2026-10-13
 
+Aktualizace 2026-10-14: níže uvedené „nový remote CI neběžel“ popisuje okamžik původního lokálního ověření. Následný publikovaný kandidát `819f351` prošel skutečným CI včetně všech sedmi Save-all případů; [publikační evidence](SUCCESSOR_PUBLICATION.md) váže úplné logy a checkout. Nová kontrola při dokončování projektu našla samostatnou chybu návratu po ztracené odpovědi při vytvoření kvízu. Její oprava a nová cílená regrese se sledují v [aktuálním stavu](DEVELOPMENT_STATUS.md#current-project-closure--2026-10-14); nepřepisují historické výsledky této akceptace.
+
 Inspekční a aplikační základ: **`4a71cf0a1bf36d5e782a1327db58acb7d011091d`**. Read-only inspekci následoval leadem provedený lokální Save all browser běh popsaný níže. Aplikační zdroj se nezměnil; nový test a CI workflow jsou připnuté samostatnými file hashes. Toto je mapa konkrétního pokrytí, nikoli procento dokončení. Worker nespouštěl browser, emulátory ani cloud.
 
 Historické výsledky z [RESTART_VALIDATION.md](RESTART_VALIDATION.md), [COMPLETION_VALIDATION.md](COMPLETION_VALIDATION.md) a [COMPLETION_MATRIX.md](COMPLETION_MATRIX.md) zůstávají platné pro uvedené zdroje a rozsahy. Frozen aplikace `ddb862f` a schválená online QA nejsou důkazem všech následujících toků na novém HEAD. Funkce níže jsou již implementované; jejich nový audit není požadavkem na reimplementaci.
