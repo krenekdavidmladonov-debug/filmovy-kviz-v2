@@ -1,3 +1,4 @@
+import type { SlideDesign, ResultTemplates, PrintTemplate } from './design.js';
 export const editableSlideKinds = [
   'intro', 'agenda', 'rules', 'recap', 'end', 'title', 'info', 'round', 'roundheader', 'round-header', 'section',
   'question', 'text', 'classic', 'free', 'image', 'picture', 'photo',
@@ -25,6 +26,11 @@ export interface EditorPresentation {
 }
 
 export interface EditorSlide {
+  /** Local mutation intent, never stored in the private source. */
+  readonly resetAppearance?: true;
+  readonly hidden?: boolean;
+  readonly design?: SlideDesign;
+  readonly answerDesign?: SlideDesign;
   readonly automaticAgenda?: boolean;
   readonly authoringStatus?: 'draft' | 'ready';
   readonly answerMode?: 'open' | 'choice';
@@ -97,6 +103,9 @@ export interface EditorAppearance {
   readonly imageLayout: 'split' | 'stacked';
 }
 export interface EditorQuiz {
+  readonly printTemplate?: PrintTemplate;
+  readonly defaultDesign?: SlideDesign;
+  readonly resultTemplates?: ResultTemplates;
   readonly defaultAppearance?: EditorAppearance;
   readonly id: string;
   readonly title: string;

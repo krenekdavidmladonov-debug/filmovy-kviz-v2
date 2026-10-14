@@ -2,7 +2,7 @@ import fontkit from '@pdf-lib/fontkit';
 import { brand } from '@filmovy-kviz/quiz-domain';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, rgb, type PDFFont, type PDFPage, type PDFImage } from 'pdf-lib';
 import { PrintCenterError } from './errors.js';
 import { PRINT_LIMITS } from './limits.js';
 import { answerDisplay } from './snapshot-mapper.js';
@@ -15,6 +15,9 @@ const INK = rgb(0.08, 0.08, 0.08);
 const MUTED = rgb(0.38, 0.38, 0.38);
 const RULE = rgb(0.72, 0.72, 0.72);
 const LIGHT = rgb(0.94, 0.94, 0.94);
+const NAVY = rgb(0.1, 0.16, 0.25);
+const GOLD = rgb(0.66, 0.46, 0.13);
+const BOTTOM = 76;
 const FIXED_DATE = new Date('2000-01-01T00:00:00.000Z');
 
 interface FontFace {
@@ -35,6 +38,7 @@ interface Layout {
   height: number;
   y: number;
   startedAt: number;
+  logo?: PDFImage;
 }
 
 let fontBytesPromise: Promise<[Uint8Array, Uint8Array, Uint8Array, Uint8Array]> | undefined;
@@ -153,57 +157,79 @@ function wrapText(text: string, font: FontFace, size: number, maxWidth: number):
 }
 
 function drawHeader(layout: Layout, event: PrintEvent, documentTitle: string, team?: PrintTeam): void {
-  drawText(layout, event.title, MARGIN, layout.y, 16, true);
-  layout.y -= 23;
-  drawText(layout, documentTitle, MARGIN, layout.y, 11, true, MUTED);
-  if (team) {
-    const label = `Tým: ${team.name}`;
-    const lines = wrapText(label, layout.fonts.bold, 11, layout.width - MARGIN * 2);
-    for (const line of lines.slice(0, 2)) {
-      layout.y -= 16;
-      drawText(layout, line, MARGIN, layout.y, 11, true);
-    }
-  } else if (documentTitle === 'Hrací arch') {
-    layout.y -= 22;
-    drawText(layout, 'Tým:', MARGIN, layout.y, 11, true);
-    layout.page.drawLine({ start: { x: MARGIN + 38, y: layout.y - 2 }, end: { x: layout.width - MARGIN, y: layout.y - 2 }, thickness: 0.7, color: RULE });
+  const template = event.quiz.printTemplate ?? {};
+  const available = layout.width - MARGIN * 2;
+  if (template.showLogo !== false) {
+    if (layout.logo) {
+      const factor = Math.min(110 / layout.logo.width, 24 / layout.logo.height);
+      layout.page.drawImage(layout.logo, { x: MARGIN, y: layout.y - 5, width: layout.logo.width * factor, height: layout.logo.height * factor });
+    } else drawText(layout, template.logoText || brand.name, MARGIN, layout.y, 13, true, NAVY);
+    drawText(layout, documentTitle === 'Hrací arch' ? 'ODPOVĚDNÍ LIST' : 'PRO POŘADATELE', layout.width - MARGIN - 116, layout.y + 1, 8, true, MUTED);
+    layout.y -= 31;
   }
-  layout.y -= 18;
-  layout.page.drawLine({ start: { x: MARGIN, y: layout.y }, end: { x: layout.width - MARGIN, y: layout.y }, thickness: 1, color: INK });
-  layout.y -= 18;
+  for (const line of wrapText(template.title || event.title, layout.fonts.bold, 17, available)) {
+    drawText(layout, line, MARGIN, layout.y, 17, true, NAVY);
+    layout.y -= 23;
+  }
+  drawText(layout, documentTitle, MARGIN, layout.y - 2, 10, true, MUTED);
+  layout.y -= 22;
+  if (documentTitle === 'Hrací arch') {
+    const label = team ? `Tým: ${team.name}` : 'Tým:';
+    for (const line of wrapText(label, layout.fonts.bold, 11, available)) {
+      drawText(layout, line, MARGIN, layout.y - 10, 11, true);
+      layout.y -= 16;
+    }
+    if (!team) layout.page.drawLine({ start: { x: MARGIN + 40, y: layout.y + 3 }, end: { x: layout.width - MARGIN - 68, y: layout.y + 3 }, thickness: .65, color: RULE });
+    drawText(layout, 'Stůl: ______', layout.width - MARGIN - 61, layout.y - 12, 8, false, MUTED);
+    layout.y -= 23;
+    const instructions = template.instructions || 'Zapisujte čitelně. Čísla odpovědí odpovídají otázkám v daném kole.';
+    for (const line of wrapText(instructions, layout.fonts.regular, 9, available)) {
+      drawText(layout, line, MARGIN, layout.y, 9, false, MUTED);
+      layout.y -= 13;
+    }
+  }
+  layout.y -= 8;
+  const hex = template.accentColor?.replace('#', '');
+  const expanded = hex?.length === 3 ? hex.split('').map(char => char + char).join('') : hex;
+  const accent = expanded && /^[a-f\d]{6}$/iu.test(expanded) ? rgb(parseInt(expanded.slice(0, 2), 16) / 255, parseInt(expanded.slice(2, 4), 16) / 255, parseInt(expanded.slice(4, 6), 16) / 255) : GOLD;
+  layout.page.drawLine({ start: { x: MARGIN, y: layout.y }, end: { x: MARGIN + 45, y: layout.y }, thickness: 2.5, color: accent });
+  layout.page.drawLine({ start: { x: MARGIN + 53, y: layout.y }, end: { x: layout.width - MARGIN, y: layout.y }, thickness: .5, color: RULE });
+  layout.y -= 24;
 }
 
 function ensureSpace(layout: Layout, required: number, nextPage: () => void): void {
-  if (layout.y - required < MARGIN + 22) nextPage();
+  if (layout.y - required < BOTTOM) nextPage();
+}
+
+function drawRoundHeader(layout: Layout, round: PrintEvent['quiz']['rounds'][number], continuation = false): void {
+  const lines = wrapText(`${round.number}. KOLO  /  ${round.title}${continuation ? ' (pokračování)' : ''}`, layout.fonts.bold, 11, layout.width - MARGIN * 2 - 20);
+  const height = lines.length * 15 + 16;
+  layout.page.drawRectangle({ x: MARGIN, y: layout.y - height + 8, width: layout.width - MARGIN * 2, height, color: LIGHT });
+  lines.forEach((line, index) => drawText(layout, line, MARGIN + 10, layout.y - 11 - index * 15, 11, true, NAVY));
+  layout.y -= height + 10;
 }
 
 function drawTeamSheet(layout: Layout, event: PrintEvent, team?: PrintTeam): void {
-  addPage(layout);
+  const compact = event.quiz.printTemplate?.layout === 'compact';
+  const rowHeight = compact ? 34 : 44;
   const repeatHeader = (): void => {
     addPage(layout);
-    drawHeader(layout, event, 'Hrací arch — pokračování', team);
+    drawHeader(layout, event, 'Hrací arch', team);
   };
-  drawHeader(layout, event, 'Hrací arch', team);
-  for (const round of event.quiz.rounds) {
-    ensureSpace(layout, 56, repeatHeader);
-    layout.page.drawRectangle({ x: MARGIN, y: layout.y - 16, width: layout.width - MARGIN * 2, height: 22, color: LIGHT });
-    drawText(layout, `Kolo ${round.number}: ${round.title}`, MARGIN + 7, layout.y - 10, 10, true);
-    layout.y -= 28;
+  event.quiz.rounds.forEach((round, roundIndex) => {
+    if (!compact || roundIndex === 0) repeatHeader();
+    const headingHeight = wrapText(`${round.number}. KOLO  /  ${round.title}`, layout.fonts.bold, 11, layout.width - MARGIN * 2 - 20).length * 15 + 26;
+    ensureSpace(layout, headingHeight + rowHeight, repeatHeader);
+    drawRoundHeader(layout, round);
     for (const question of round.questions) {
-      ensureSpace(layout, 31, repeatHeader);
-      drawText(layout, `${question.number}.`, MARGIN + 5, layout.y - 7, 9, true);
-      layout.page.drawRectangle({
-        x: MARGIN + 30,
-        y: layout.y - 21,
-        width: layout.width - MARGIN * 2 - 30,
-        height: 25,
-        borderColor: RULE,
-        borderWidth: 0.7,
-      });
-      layout.y -= 31;
+      if (layout.y - rowHeight < BOTTOM) { repeatHeader(); drawRoundHeader(layout, round, true); }
+      drawText(layout, `${question.number}.`, MARGIN + 5, layout.y - 18, 12, true, NAVY);
+      layout.page.drawLine({ start: { x: MARGIN + 36, y: layout.y - rowHeight + 9 }, end: { x: layout.width - MARGIN - 33, y: layout.y - rowHeight + 9 }, thickness: .65, color: RULE });
+      layout.page.drawRectangle({ x: layout.width - MARGIN - 22, y: layout.y - 24, width: 22, height: 19, borderColor: RULE, borderWidth: .5 });
+      layout.y -= rowHeight;
     }
-    layout.y -= 7;
-  }
+    layout.y -= 14;
+  });
 }
 
 function renderTeamSheets(layout: Layout, event: PrintEvent, options: Extract<PrintOptions, { artifactType: 'team-sheets' }>): void {
@@ -219,14 +245,13 @@ function renderAnswerKey(layout: Layout, event: PrintEvent): void {
   };
   drawHeader(layout, event, 'Klíč správných odpovědí');
   for (const round of event.quiz.rounds) {
-    ensureSpace(layout, 52, repeatHeader);
-    layout.page.drawRectangle({ x: MARGIN, y: layout.y - 16, width: layout.width - MARGIN * 2, height: 22, color: LIGHT });
-    drawText(layout, `Kolo ${round.number}: ${round.title}`, MARGIN + 7, layout.y - 10, 10, true);
-    layout.y -= 28;
+    const headingHeight = wrapText(`${round.number}. KOLO  /  ${round.title}`, layout.fonts.bold, 11, layout.width - MARGIN * 2 - 20).length * 15 + 26;
+    ensureSpace(layout, headingHeight + 56, repeatHeader);
+    drawRoundHeader(layout, round);
     for (const question of round.questions) {
       const lines = wrapText(answerDisplay(question), layout.fonts.regular, 9, layout.width - MARGIN * 2 - 32);
       const rowHeight = Math.max(22, lines.length * 12 + 8);
-      ensureSpace(layout, rowHeight, repeatHeader);
+      if (layout.y - rowHeight < BOTTOM) { repeatHeader(); drawRoundHeader(layout, round, true); }
       drawText(layout, `${question.number}.`, MARGIN + 4, layout.y - 10, 9, true);
       lines.forEach((line, index) => drawText(layout, line, MARGIN + 31, layout.y - 10 - index * 12, 9));
       layout.page.drawLine({ start: { x: MARGIN, y: layout.y - rowHeight + 2 }, end: { x: layout.width - MARGIN, y: layout.y - rowHeight + 2 }, thickness: 0.45, color: RULE });
@@ -267,32 +292,40 @@ function renderScoreTable(layout: Layout, event: PrintEvent, teams: PrintTeam[])
       const scoreWidth = (available - teamWidth - totalWidth) / roundNumbers.length;
       const widths = [teamWidth, ...roundNumbers.map(() => scoreWidth), totalWidth];
       drawScoreHeader(layout, roundNumbers, widths);
-      const rowHeight = 30;
-      const rowsPerPage = Math.max(1, Math.floor((layout.y - MARGIN - 24) / rowHeight));
-      const pageTeams = teams.slice(teamOffset, teamOffset + rowsPerPage);
-      for (const team of pageTeams) {
+      let pageTeamCount = 0;
+      for (const team of teams.slice(teamOffset)) {
+        const nameLines = wrapText(team.name, layout.fonts.regular, 9, teamWidth - 12);
+        const rowHeight = Math.max(32, nameLines.length * 12 + 12);
+        if (layout.y - rowHeight < BOTTOM) break;
         const top = layout.y;
         let x = MARGIN;
         layout.page.drawRectangle({ x, y: top - rowHeight, width: available, height: rowHeight, borderColor: RULE, borderWidth: 0.6 });
-        const nameLines = wrapText(team.name, layout.fonts.regular, 8.5, teamWidth - 8).slice(0, 2);
-        nameLines.forEach((line, index) => drawText(layout, line, x + 4, top - 12 - index * 10, 8.5));
+        nameLines.forEach((line, index) => drawText(layout, line, x + 6, top - 14 - index * 12, 9));
         widths.slice(0, -1).forEach((width) => {
           x += width;
           layout.page.drawLine({ start: { x, y: top }, end: { x, y: top - rowHeight }, thickness: 0.6, color: RULE });
         });
         layout.y -= rowHeight;
+        pageTeamCount += 1;
       }
-      teamOffset += pageTeams.length;
+      if (pageTeamCount === 0) throw new PrintCenterError(422, 'layout-limit', 'Název týmu nebo záhlaví je příliš dlouhé pro bodovací tabulku. Zkraťte jej.');
+      teamOffset += pageTeamCount;
     }
   }
 }
 
-function addPageNumbers(doc: PDFDocument, fonts: Fonts): void {
+function addPageNumbers(layout: Layout, event: PrintEvent): void {
+  const { doc, fonts } = layout;
   const pages = doc.getPages();
   pages.forEach((page, index) => {
+    layout.page = page;
+    const footer = event.quiz.printTemplate?.footer ?? 'JustKvíz / Prostor pro vaše znalosti';
+    const footerLines = wrapText(footer, fonts.regular, 8, page.getWidth() - MARGIN * 2 - 96);
+    page.drawLine({ start: { x: MARGIN, y: 54 }, end: { x: page.getWidth() - MARGIN, y: 54 }, thickness: .5, color: RULE });
+    footerLines.forEach((line, lineIndex) => drawText(layout, line, MARGIN, 39 - lineIndex * 11, 8, false, MUTED));
     const label = `Strana ${index + 1} / ${pages.length}`;
     const width = textWidth(label, fonts.regular, 8);
-    page.drawText(label, { x: page.getWidth() - MARGIN - width, y: 22, size: 8, font: fonts.regular.base, color: MUTED });
+    page.drawText(label, { x: page.getWidth() - MARGIN - width, y: 39, size: 8, font: fonts.regular.base, color: MUTED });
   });
 }
 
@@ -308,12 +341,12 @@ export async function renderPrintArtifact(event: PrintEvent, options: PrintOptio
   const [regularBytes, regularExtendedBytes, boldBytes, boldExtendedBytes] = await loadFontBytes();
   const fonts: Fonts = {
     regular: {
-      base: await doc.embedFont(regularBytes, { subset: true }),
-      extended: await doc.embedFont(regularExtendedBytes, { subset: true }),
+      base: await doc.embedFont(new Uint8Array(regularBytes), { subset: true }),
+      extended: await doc.embedFont(new Uint8Array(regularExtendedBytes), { subset: true }),
     },
     bold: {
-      base: await doc.embedFont(boldBytes, { subset: true }),
-      extended: await doc.embedFont(boldExtendedBytes, { subset: true }),
+      base: await doc.embedFont(new Uint8Array(boldBytes), { subset: true }),
+      extended: await doc.embedFont(new Uint8Array(boldExtendedBytes), { subset: true }),
     },
   };
   doc.setTitle(`${brand.name} — tiskové centrum`);
@@ -325,13 +358,17 @@ export async function renderPrintArtifact(event: PrintEvent, options: PrintOptio
 
   const placeholder = doc.addPage([PAGE.width, PAGE.height]);
   const layout: Layout = { doc, fonts, page: placeholder, width: PAGE.width, height: PAGE.height, y: 0, startedAt: Date.now() };
+  if (event.quiz.printTemplate?.showLogo !== false && event.logo) {
+    try { layout.logo = event.logo.contentType === 'image/png' ? await doc.embedPng(event.logo.bytes) : await doc.embedJpg(event.logo.bytes); }
+    catch { throw new PrintCenterError(422, 'invalid-logo', 'Logo nelze vložit do PDF. Nahrajte platný PNG nebo JPEG soubor.'); }
+  }
   doc.removePage(0);
 
   if (options.artifactType === 'team-sheets') renderTeamSheets(layout, event, options);
   else if (options.artifactType === 'answer-key') renderAnswerKey(layout, event);
   else renderScoreTable(layout, event, options.teams);
 
-  addPageNumbers(doc, fonts);
+  addPageNumbers(layout, event);
   const bytes = await doc.save({ useObjectStreams: false, addDefaultPage: false, updateFieldAppearances: false });
   if (bytes.byteLength > PRINT_LIMITS.outputBytes) {
     throw new PrintCenterError(422, 'output-limit', 'Výsledné PDF překročilo povolenou velikost.');

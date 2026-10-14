@@ -2,7 +2,7 @@ import { accessActor, securedOnCall, runAccessTransaction } from '../access/auth
 import { getFirestore, Timestamp, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { authorizeStaff, parseSession, loadSlide } from '../live/callables.js';
-import { buildPublicSessionState } from '../live/publication.js';
+import { buildPublicSessionState, publicResultTemplate } from '../live/publication.js';
 import { applyLiveSessionAction } from '../live/session-machine.js';
 import type { PrivateLiveSession } from '../live/types.js';
 import { calculateResults, calculateFinalResults, fingerprint, RESULTS_PAGE_SIZE, type ResultRow } from './model.js';
@@ -158,8 +158,10 @@ export const controlInterimResults = securedOnCall('controlInterimResults', opti
             updated = applyLiveSessionAction(withoutResults(session), { type: 'go-to-slide', position: session.currentSlidePosition, slideId: slide.id }, expected, uid, now, slide);
         }
         const slide = action === 'hide' ? await loadSlide(tx, session.quizId, updated.currentSlidePosition, session.snapshotId) : undefined;
+        const template = action === 'hide' ? {} : publicResultTemplate((await tx.get(db().doc('quizSnapshots/' + session.snapshotId))).data() ?? {}, 'interim');
         const publicState = action === 'hide' ? buildPublicSessionState(updated, slide) : {
             ...buildPublicSessionState({ ...updated, status: 'waiting', answerRevealed: false, presentationMode: 'slide' }), status: 'active',
+            ...template,
             interimResults: { ...updated.interimResults!, rows: rows.slice(updated.interimResults!.page * RESULTS_PAGE_SIZE, (updated.interimResults!.page + 1) * RESULTS_PAGE_SIZE).map(r => ({ rank: r.rank, teamName: r.teamName, halfPoints: r.halfPoints })) },
         };
         const response = { sessionId, revision: updated.revision };

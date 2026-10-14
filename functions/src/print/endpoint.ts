@@ -12,6 +12,11 @@ import { mapSnapshotToPrintEvent } from './snapshot-mapper.js';
 import { registrationToPrintTeam } from '../registrations/print-adapter.js';
 import type { PrintLogMetadata, PrintOptions, PrintRequestOptions, PrintTeam } from './types.js';
 import { parsePrintRequestOptions } from './validation.js';
+import { parseQuizAsset } from '@filmovy-kviz/quiz-domain';
+import { assetPath, mediaSignature } from '../media/model.js';
+import { mediaBucket } from '../media/storage.js';
+import { printLogoAsset } from './logo.js';
+import { assertCurrentPrintSource } from './source-guard.js';
 
 if (getApps().length === 0) initializeApp();
 
@@ -104,7 +109,7 @@ export const generatePrintArtifact = onRequest(
       const token = await getAuth().verifyIdToken(bearerToken(request.header('authorization')), true);
       const auth = { uid: token.uid, token };
       await freshIdentity(auth);
-      const assertAccess = async () => { const member = await authorize(auth, requestedOptions.artifactType === 'answer-key' ? ['event.export', 'event.answers.read', 'event.answers.export'] : ['event.export'], { kind: 'event', id: eventId }); assertEventReadable((await getFirestore().doc(`events/${eventId}`).get()).data(), member); };
+      const assertAccess = async () => { const member = await authorize(auth, requestedOptions.artifactType === 'answer-key' ? ['event.export', 'event.answers.read', 'event.answers.export'] : ['event.export'], { kind: 'event', id: eventId }); const current = (await getFirestore().doc(`events/${eventId}`).get()).data(); assertEventReadable(current, member); return current; };
       await assertAccess();
       const options = await resolvePrintOptions(eventId, requestedOptions);
 
@@ -128,6 +133,7 @@ export const generatePrintArtifact = onRequest(
         snapshotRef.collection('slides').orderBy('position').limit(PRINT_LIMITS.slides + 1).get(),
       ]);
       if (!snapshot.exists) throw new PrintCenterError(409, 'snapshot-missing', 'Uzamčený snapshot kvízu nebyl nalezen.');
+      assertCurrentPrintSource(assignment, assignment, snapshot.data(), eventId);
 
       const printEvent = mapSnapshotToPrintEvent(
         eventData,
@@ -135,8 +141,21 @@ export const generatePrintArtifact = onRequest(
         rounds.docs.map((document) => ({ id: document.id, data: record(document.data()) })),
         slides.docs.map((document) => ({ id: document.id, data: record(document.data()) })),
       );
+      const logoReference = printEvent.quiz.printTemplate?.showLogo !== false ? printEvent.quiz.printTemplate?.logoImage : undefined;
+      if (logoReference) {
+        const parsed = parseQuizAsset(logoReference);
+        const snapshotQuizId = record(snapshot.data()).quizId;
+        // Validate ownership before reading metadata, then validate the exact immutable generation.
+        if (parsed && parsed.quizId !== snapshotQuizId) throw new PrintCenterError(422, 'invalid-logo', 'Logo nepatří do připraveného kvízu.');
+        const asset = parsed ? (await db.doc(`quizzes/${parsed.quizId}/mediaAssets/${parsed.assetId}`).get()).data() : undefined;
+        const descriptor = printLogoAsset(logoReference, snapshotQuizId, asset);
+        const [bytes] = await mediaBucket().file(assetPath(descriptor.quizId, descriptor.assetId), { generation: descriptor.generation }).download();
+        if (bytes.length !== descriptor.size || !mediaSignature(bytes, descriptor.contentType)) throw new PrintCenterError(422, 'invalid-logo', 'Soubor loga neodpovídá ověřenému médiu.');
+        printEvent.logo = { bytes, contentType: descriptor.contentType };
+      }
       const artifact = await renderPrintArtifact(printEvent, options);
-      await assertAccess();
+      const currentEvent = await assertAccess();
+      assertCurrentPrintSource(assignment, currentEvent?.quizAssignment, (await snapshotRef.get()).data(), eventId);
       const questionCount = printEvent.quiz.rounds.reduce((total, round) => total + round.questions.length, 0);
       const metadata: PrintLogMetadata = {
         artifactType: options.artifactType,

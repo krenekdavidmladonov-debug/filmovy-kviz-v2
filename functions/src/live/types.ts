@@ -34,6 +34,11 @@ export interface PrivateLiveSession {
 }
 
 export interface PrivateSlide {
+  readonly hidden?: boolean;
+  readonly defaultDesign?: unknown;
+  readonly roundDesign?: unknown;
+  readonly design?: unknown;
+  readonly answerDesign?: unknown;
   readonly id: string;
   readonly position: number;
   readonly kind: string;
@@ -74,6 +79,9 @@ export interface PublicPresentation {
 }
 
 export interface PublicLiveSession {
+  readonly design?: import('@filmovy-kviz/quiz-domain').SlideDesign;
+  readonly roundTitle?: string;
+  readonly subtitle?: string;
   readonly sessionId: string;
   readonly status: LiveSessionStatus;
   readonly quizTitle: string;

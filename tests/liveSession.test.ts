@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { LiveSessionError } from '../functions/src/live/errors';
-import { buildPublicSessionState, displayAnswer } from '../functions/src/live/publication';
+import { buildPublicSessionState, displayAnswer, publicResultTemplate } from '../functions/src/live/publication';
 import { applyLiveSessionAction, applyMediaPlaybackReport } from '../functions/src/live/session-machine';
 import type { PrivateLiveSession, PrivateSlide } from '../functions/src/live/types';
 
@@ -73,6 +73,23 @@ function expectNoPrivateFields(value: unknown): void {
 }
 
 describe('live-session publication security', () => {
+  test('publishes resolved safe visuals and reveal-only overrides without private design extensions', () => {
+    const slide = { ...questionSlide(), defaultDesign: { textColor: '#fff', fontScale: 1 }, roundDesign: { accentColor: '#abc' }, design: { layout: 'centered', correctAnswer: 'SENTINEL-NESTED', logoImage: 'javascript:SENTINEL' }, answerDesign: { textColor: '#000', logoImage: 'https://example.test/SENTINEL-ANSWER.png' } };
+    const hidden = buildPublicSessionState(session(), slide);
+    expect(hidden.design).toEqual({ textColor: '#fff', fontScale: 1, accentColor: '#abc', layout: 'centered' });
+    expect(JSON.stringify(hidden)).not.toContain('SENTINEL');
+    expect(hidden).not.toHaveProperty('answerDesign');
+    expect(buildPublicSessionState(session({ answerRevealed: true }), slide).design).toMatchObject({ textColor: '#000', logoImage: 'https://example.test/SENTINEL-ANSWER.png' });
+    expect(buildPublicSessionState(session({ presentationMode: 'recap', recapQuestionPosition: 1 }), slide).design).toMatchObject({ textColor: '#000' });
+    expect(buildPublicSessionState(session({ status: 'ended' }), slide)).not.toHaveProperty('design');
+  });
+  test('result template allowlist never carries injected scores, contacts or answer values', () => {
+    expect(publicResultTemplate({ defaultDesign: { textColor: '#fff', answer: 'SENTINEL' }, resultTemplates: { interim: { title: 'Round results', subtitle: 'Totals', rows: ['SENTINEL'], contacts: 'SENTINEL', design: { textColor: '#abc', raw: 'SENTINEL' } } } }, 'interim')).toEqual({ title: 'Round results', subtitle: 'Totals', design: { textColor: '#abc' } });
+  });
+  test('publication fails closed for hidden information but never suppresses game records', () => {
+    expect(() => buildPublicSessionState(session(), { ...questionSlide(), kind: 'info', isQuestion: false, hidden: true })).toThrow();
+    expect(buildPublicSessionState(session(), { ...questionSlide(), hidden: true })).toMatchObject({ slideKind: 'question' });
+  });
   test('publishes an explicit allowlist before reveal without answer or private nested fields', () => {
     const publicState = buildPublicSessionState(session(), questionSlide());
     expect(publicState).toMatchObject({
@@ -97,6 +114,7 @@ describe('live-session publication security', () => {
     const publicState = buildPublicSessionState(session({ answerRevealed: true }), questionSlide());
     expect(publicState).toMatchObject({
       answerRevealed: true,
+      renderMode: 'recap',
       revealedAnswer: 'SENTINEL-REVEALED-ANSWER',
       answerImage: 'https://example.test/answer.jpg',
     });
@@ -127,6 +145,7 @@ describe('live-session publication security', () => {
     const publicState = buildPublicSessionState(moved, nextSlide);
     expect(moved).toMatchObject({ currentSlidePosition: 2, answerRevealed: false, revision: 6 });
     expect(publicState.answerRevealed).toBe(false);
+    expect(publicState.renderMode).toBe('question');
     expect(publicState).not.toHaveProperty('revealedAnswer');
     expect(publicState).not.toHaveProperty('answerImage');
     expectNoPrivateFields(publicState);
@@ -178,6 +197,14 @@ describe('live-session publication security', () => {
 });
 
 describe('live-session state machine', () => {
+  test('direct reveal and hide stop active timed media and invalidate its callbacks', () => {
+    const playing = session({ mediaCommand: 'play', mediaPlaybackState: 'playing', mediaGeneration: 8 });
+    const video = { ...questionSlide(), kind: 'video', mediaSource: 'abcdefghijk', clipStartSeconds: 20, clipEndSeconds: 30 };
+    const revealed = applyLiveSessionAction(playing, { type: 'reveal-answer' }, playing.revision, 'moderator', now, video);
+    expect(revealed).toMatchObject({ answerRevealed: true, mediaCommand: 'idle', mediaPlaybackState: 'idle', mediaGeneration: 9 });
+    expect(buildPublicSessionState(revealed, video)).toMatchObject({ renderMode: 'recap', mediaCommand: 'idle', mediaGeneration: 9 });
+    expect(applyLiveSessionAction(revealed, { type: 'hide-answer' }, revealed.revision, 'moderator', now, video)).toMatchObject({ answerRevealed: false, mediaGeneration: 10, mediaCommand: 'idle' });
+  });
   test('1,000 alternating slide transitions remain bounded and never retain an answer', () => {
     let current = session({ slideCount: 2, answerRevealed: true });
     const durations: number[] = [];

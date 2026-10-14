@@ -11,6 +11,10 @@ import {
 } from '../functions/src/editor/model';
 import { requestedQuizCreation, validateSlideInput } from '../functions/src/editor/validation';
 import { requestedPreflightRepair } from '../functions/src/editor/repair';
+import { validateQuizMetadata, validateSlideDesign, validatePrintTemplate } from '../functions/src/editor/validation';
+import { mergeStoredResultTemplates, validateExistingRoundHeaderTarget } from '../functions/src/editor/model';
+import { normalizeSlideDesign, resolveSlideDesign, visibleSlidePosition, normalizePrintTemplate, mergeStoredPrintTemplate, resolveLegacySlideAppearance } from '../packages/quiz-domain/src/index';
+import { slideView } from '../functions/src/access/slide-view';
 
 function slideInput(overrides: Record<string, unknown> = {}) {
   return {
@@ -32,6 +36,80 @@ function slideInput(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe('bounded slide design authoring', () => {
+  test('legacy defaults agree across preview and publication; reset clears known overrides only', () => {
+    const defaults = { backgroundImage: 'https://example.test/quiz.png', backgroundOverlay: 40, imageLayout: 'split' };
+    expect(resolveLegacySlideAppearance(defaults, { backgroundImage: '', backgroundOverlay: null })).toEqual({ ...defaults });
+    const original = { position: 1, kind: 'question', backgroundImage: 'https://example.test/local.png', imageLayout: 'stacked', presentation: { backgroundOverlay: 70, future: { private: true } }, design: { textColor: '#fff', future: 'keep' } };
+    expect(resolveLegacySlideAppearance(defaults, original)).toMatchObject({ backgroundOverlay: 70, imageLayout: 'stacked' });
+    const reset = applyKnownSlideUpdate(original, validateSlideInput(slideInput({ resetAppearance: true, design: {}, backgroundImage: '', presentation: { videoStart: null, videoEnd: null, audioTrigger: null, backgroundOverlay: null, answerOverlay: null, sourceQuestionNumber: null } })));
+    expect(reset).not.toHaveProperty('resetAppearance');
+    expect(reset).not.toHaveProperty('imageLayout');
+    expect(reset.presentation).toEqual({ future: { private: true } });
+    expect(reset.design).toEqual({ future: 'keep' });
+    expect(resolveLegacySlideAppearance(defaults, reset)).toEqual(defaults);
+    expect(resolveLegacySlideAppearance(defaults, mapEditorSlide('q', reset))).toEqual(defaults);
+    expect(mergeStoredResultTemplates({ final: { design: { textColor: '#fff', privateExtension: 'keep' } } }, {})).toEqual({ final: { design: { privateExtension: 'keep' } } });
+  });
+  test('existing round introduction preserves round identity and rejects ambiguous insertion', () => {
+    const members = [{ id: 'q1', data: { position: 3, roundId: 'r1', kind: 'question' } }, { id: 'q2', data: { position: 4, roundId: 'r1', kind: 'question' } }];
+    expect(() => validateExistingRoundHeaderTarget(members, 'r1', 3)).not.toThrow();
+    expect(() => validateExistingRoundHeaderTarget(members, 'missing', 3)).toThrow();
+    expect(() => validateExistingRoundHeaderTarget(members, 'r1', 4)).toThrow();
+    expect(() => validateExistingRoundHeaderTarget([{ id: 'header', data: { position: 2, kind: 'round', roundId: 'r1' } }, ...members], 'r1', 2)).toThrow();
+  });
+  test('print copy and style are bounded, safe and losslessly reset', () => {
+    const template = { title: 'Evening', instructions: 'Write clearly', footer: 'Thank you', logoText: 'Quiz', logoImage: 'https://example.test/logo.png', accentColor: '#abc', layout: 'compact', showLogo: false };
+    expect(validatePrintTemplate(template)).toEqual(template);
+    expect(normalizePrintTemplate({ ...template, correctAnswer: 'SENTINEL' })).toEqual(template);
+    expect(mergeStoredPrintTemplate({ ...template, future: { private: true } }, {})).toEqual({ future: { private: true } });
+    expect(validateQuizMetadata({ title: 'Quiz', description: '', printTemplate: template }).printTemplate).toEqual(template);
+    for (const invalid of [{ title: 'x'.repeat(121) }, { instructions: 'x'.repeat(401) }, { footer: 'x'.repeat(161) }, { logoText: 'x'.repeat(41) }, { accentColor: 'red' }, { showLogo: 1 }, { layout: 'unbounded' }, { logoImage: 'javascript:private' }, { answer: 'private' }]) expect(() => validatePrintTemplate(invalid)).toThrow();
+  });
+  test('known design edits round-trip and reset without erasing private future data', () => {
+    const current = { position: 1, kind: 'question', design: { textColor: '#fff', fontScale: 1.2, future: { private: 'secret' } }, answerDesign: { accentColor: '#abc', unknown: 'keep' }, legacy: { raw: { untouched: true } } };
+    const input = validateSlideInput(slideInput({ design: { layout: 'split', logoImage: 'https://example.test/logo.png' }, answerDesign: {} }));
+    const stored = applyKnownSlideUpdate(current, input);
+    expect(stored.design).toEqual({ layout: 'split', logoImage: 'https://example.test/logo.png', future: { private: 'secret' } });
+    expect(stored.answerDesign).toEqual({ unknown: 'keep' });
+    const loaded = mapEditorSlide('q', JSON.parse(JSON.stringify(stored)) as Record<string, unknown>);
+    expect(loaded.design).toEqual(input.design);
+    expect(loaded.answerDesign).toEqual({});
+    expect(applyKnownSlideUpdate(stored, validateSlideInput(slideInput({ design: {} }))).design).toEqual({ future: { private: 'secret' } });
+    expect(stored.legacy).toEqual(current.legacy);
+  });
+  test('strict writes reject executable, unbounded, nested and unsupported style values', () => {
+    for (const design of [{ fontScale: 99 }, { backgroundOverlay: -1 }, { textWidth: 100 }, { layout: 'anything' }, { textColor: 'url(secret)' }, { backgroundImage: 'javascript:alert(1)' }, { logoImage: 'https://user:secret@example.test/a' }, { correctAnswer: 'secret' }, { textAlign: { private: true } }]) expect(() => validateSlideDesign(design)).toThrow();
+    expect(normalizeSlideDesign({ textColor: '#123456', moderatorNote: 'secret', logoImage: 'javascript:secret', fontScale: Number.NaN })).toEqual({ textColor: '#123456' });
+  });
+  test('inheritance is sparse and private answer design applies only after reveal', () => {
+    const normal = resolveSlideDesign({ textColor: '#fff', fontScale: 1 }, { accentColor: '#abc', fontScale: 1.1 }, { fontScale: 1.2 }, { textColor: '#000', logoImage: 'https://example.test/answer.png' });
+    expect(normal).toEqual({ textColor: '#fff', accentColor: '#abc', fontScale: 1.2 });
+    expect(resolveSlideDesign(normal, undefined, undefined, { textColor: '#000' }, true)).toMatchObject({ textColor: '#000', fontScale: 1.2 });
+  });
+  test('templates accept only static bounded copy and design and preserve unknown stored extensions', () => {
+    expect(validateQuizMetadata({ title: 'Quiz', description: '', defaultDesign: { mediaFit: 'cover' }, resultTemplates: { interim: { title: 'Scores', subtitle: 'Round totals', design: {} } } })).toMatchObject({ resultTemplates: { interim: { title: 'Scores' } } });
+    for (const template of [{ rows: [] }, { title: { private: true } }, { subtitle: 'x'.repeat(2001) }, { design: { teamNames: [] } }]) expect(() => validateQuizMetadata({ title: 'Quiz', description: '', resultTemplates: { final: template } })).toThrow();
+    expect(mergeStoredResultTemplates({ future: true, interim: { title: 'old', design: { textColor: '#fff', extension: 4 }, extension: 'keep' } }, { interim: { design: {} } })).toEqual({ future: true, interim: { extension: 'keep', design: { extension: 4 } } });
+  });
+  test('restricted private views omit answer design and all unknown nested data', () => {
+    const view = slideView('q', { position: 1, kind: 'question', design: { accentColor: '#abc', raw: 'SENTINEL' }, answerDesign: { logoImage: 'https://example.test/SENTINEL.png', raw: 'SENTINEL' } }, false, false);
+    expect(view.design).toEqual({ accentColor: '#abc' });
+    expect(view.answerDesign).toBeUndefined();
+    expect(JSON.stringify(view)).not.toContain('SENTINEL');
+  });
+  test('only standalone information can hide, and navigation skips it in both directions', () => {
+    expect(applyKnownSlideUpdate({ position: 1 }, validateSlideInput(slideInput({ kind: 'info', hidden: true })))).toMatchObject({ hidden: true, isQuestion: false });
+    for (const current of [{ position: 1 }, { position: 1, roundId: 'round' }]) expect(() => applyKnownSlideUpdate(current, validateSlideInput(slideInput({ kind: current.roundId ? 'info' : 'question', hidden: true })))).toThrow();
+    const stream = [{ position: 1, kind: 'intro', hidden: true }, { position: 2, kind: 'question', isQuestion: true }, { position: 3, kind: 'info', hidden: true }, { position: 4, kind: 'recap' }, { position: 5, kind: 'end', hidden: true }];
+    expect(visibleSlidePosition(stream, 0, 1)).toBe(2);
+    expect(visibleSlidePosition(stream, 2, 1)).toBe(4);
+    expect(visibleSlidePosition(stream, 4, -1)).toBe(2);
+    expect(visibleSlidePosition(stream, 4, 1)).toBeUndefined();
+    expect(visibleSlidePosition([{ position: 1, kind: 'question', isQuestion: true, hidden: true }], 0, 1)).toBe(1);
+  });
+});
 
 describe('quiz editor lossless model', () => {
   test('updates known fields while preserving legacy.raw and unknown fields exactly', () => {

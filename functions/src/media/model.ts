@@ -1,5 +1,5 @@
 import { HttpsError } from 'firebase-functions/v2/https';
-import { parseQuizAsset, validOwnedMedia } from '@filmovy-kviz/quiz-domain';
+import { parseQuizAsset, validOwnedMedia, normalizeSlideDesign } from '@filmovy-kviz/quiz-domain';
 import type { Transaction, Firestore } from 'firebase-admin/firestore';
 
 export const assetPath = (quizId: string, assetId: string) => 'quiz-assets/' + quizId + '/' + assetId + '/source';
@@ -31,7 +31,10 @@ export function mediaByteRange(header: string | undefined, size: number): { star
 }
 // Exact current publication only: ordinary AUDIO has no public source; unrevealed answer is absent.
 export function publicMediaAllowed(publication: Record<string, unknown> | undefined, reference: string, kind?: string): boolean {
-  if (!publication || publication.status !== 'active' || publication.interimResults || publication.finalReveal) return false;
+  if (!publication || publication.status !== 'active') return false;
+  const design = normalizeSlideDesign(publication.design);
+  if ((kind === undefined || kind === 'image') && [design.backgroundImage, design.logoImage].includes(reference)) return true;
+  if (publication.interimResults || publication.finalReveal) return false;
   return ((kind === undefined || kind === 'image') && publication.backgroundImage === reference)
     || ((kind === undefined || kind === 'image') && ['image','picture','photo'].includes(String(publication.slideKind)) && publication.questionImage === reference)
     || ((kind === undefined || kind === 'image') && publication.answerRevealed === true && publication.answerImage === reference)
@@ -40,6 +43,15 @@ export function publicMediaAllowed(publication: Record<string, unknown> | undefi
 export async function assertQuizAssets(transaction: Transaction, db: Firestore, quizId: string, slides: readonly Record<string, unknown>[]): Promise<void> {
   const sources = new Map<string, 'image' | 'audio'>();
   for (const slide of slides) {
+    for (const design of [slide.design, slide.answerDesign]) {
+      const normalized = normalizeSlideDesign(design);
+      for (const source of [normalized.backgroundImage, normalized.logoImage]) {
+        if (!source?.startsWith('quiz-asset:')) continue;
+        const asset = parseQuizAsset(source);
+        if (!asset || asset.quizId !== quizId || (sources.has(source) && sources.get(source) !== 'image')) throw new HttpsError('invalid-argument', 'Asset nepatří do tohoto kvízu.');
+        sources.set(source, 'image');
+      }
+    }
     for (const field of ['questionImage', 'mediaSource', 'answerImage', 'backgroundImage']) {
       const value = slide[field];
       if (typeof value !== 'string' || !value.startsWith('quiz-asset:')) continue;

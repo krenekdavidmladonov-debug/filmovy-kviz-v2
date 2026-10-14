@@ -1,3 +1,5 @@
+import type { PrintTemplate } from '@filmovy-kviz/quiz-domain';
+
 export type PrintArtifactType = 'team-sheets' | 'answer-key' | 'score-table';
 
 export type PrintQuestionKind =
@@ -24,11 +26,13 @@ export interface PrintRound {
 export interface PrintQuiz {
   title: string;
   rounds: PrintRound[];
+  printTemplate?: PrintTemplate;
 }
 
 export interface PrintEvent {
   title: string;
   quiz: PrintQuiz;
+  logo?: { bytes: Uint8Array; contentType: 'image/png' | 'image/jpeg' };
 }
 
 export interface PrintTeam {

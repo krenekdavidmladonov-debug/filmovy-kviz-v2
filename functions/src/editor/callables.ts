@@ -1,4 +1,4 @@
-import { buildSemanticQuizModel, generatedAgendaOptions, mapEditorSlide } from '@filmovy-kviz/quiz-domain';
+import { buildSemanticQuizModel, generatedAgendaOptions, mapEditorSlide, mergeStoredDesign, normalizeSlideDesign, mergeStoredPrintTemplate } from '@filmovy-kviz/quiz-domain';
 import { assertQuizAssets } from '../media/model.js';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import {
@@ -24,6 +24,8 @@ import {
   quizCreationIdentity,
   quizRevision,
   sortedSlides,
+  mergeStoredResultTemplates,
+  validateExistingRoundHeaderTarget,
   type StoredEditorSlide,
 } from './model.js';
 import type { EditorQuizMutationResponse, EditorSlideKind } from './types.js';
@@ -151,7 +153,7 @@ function orderedWithPositions(slides: readonly StoredEditorSlide[]): readonly St
   }
   for (const group of groups.values()) {
     const questions = group.filter((slide) => slide.data.isQuestion === true);
-    const header = group.find((slide) => isRoundKind(storedKind(slide)));
+    const header = group.find((slide) => isRoundKind(storedKind(slide))) ?? group.find((slide) => storedKind(slide) === 'intro' && slide.data.isQuestion !== true);
     const existingTitle = group.map((slide) => slide.data.roundTitle).find((value): value is string => typeof value === 'string');
     const roundTitle = typeof header?.data.title === 'string' && header.data.title.trim().length > 0
       ? header.data.title : existingTitle;
@@ -192,7 +194,7 @@ function writeDerivedState(
   let roundPosition = 0;
   for (const [roundId, group] of groups) {
     roundPosition += 1;
-    const header = group.find((slide) => isRoundKind(storedKind(slide)));
+    const header = group.find((slide) => isRoundKind(storedKind(slide))) ?? group.find((slide) => storedKind(slide) === 'intro' && slide.data.isQuestion !== true);
     const questions = group.filter((slide) => slide.data.isQuestion === true);
     const inferredType = questions.length > 0 && questions.every((slide) => ['audio', 'music'].includes(String(slide.data.kind)))
       ? 'audio'
@@ -202,6 +204,7 @@ function writeDerivedState(
       ...(storedRoundIds.has(roundId) ? {} : { type: inferredType }),
       slideCount: group.length,
       questionCount: questions.length,
+      design: isObject(header?.data.design) ? normalizeSlideDesign(header.data.design) : FieldValue.delete(),
       sourceSlideStart: group[0]?.data.position,
       sourceSlideEnd: group[group.length - 1]?.data.position,
       ...(header === undefined
@@ -360,8 +363,23 @@ export const updateQuizMetadata = securedOnCall('updateQuizMetadata', callableOp
         if (!currentMembership().permissions.includes('quiz.media.attach') && metadata.defaultAppearance.backgroundImage !== (state.quiz.defaultAppearance as { backgroundImage?: string } | undefined)?.backgroundImage) throw new HttpsError('permission-denied', 'Změna pozadí vyžaduje připojování médií.');
         await assertQuizAssets(transaction, db, quizId, [metadata.defaultAppearance]);
       }
+      const designs = [metadata.defaultDesign, metadata.resultTemplates?.interim?.design, metadata.resultTemplates?.final?.design, ...(metadata.printTemplate?.logoImage === undefined ? [] : [{ logoImage: metadata.printTemplate.logoImage }])].filter(value => value !== undefined);
+      protectPrivateMedia(state.slides, designs.map(design => ({ design })));
+      if (!currentMembership().permissions.includes('quiz.media.attach')) {
+        if (metadata.printTemplate !== undefined && (metadata.printTemplate.logoImage ?? '') !== ((state.quiz.printTemplate as { logoImage?: unknown } | undefined)?.logoImage ?? '')) throw new HttpsError('permission-denied', 'Změna loga vyžaduje připojování médií.');
+        const previous = [state.quiz.defaultDesign, (state.quiz.resultTemplates as { interim?: { design?: unknown } } | undefined)?.interim?.design, (state.quiz.resultTemplates as { final?: { design?: unknown } } | undefined)?.final?.design];
+        const next = [metadata.defaultDesign, metadata.resultTemplates?.interim?.design, metadata.resultTemplates?.final?.design];
+        next.forEach((design, index) => {
+          if (index === 0 ? metadata.defaultDesign === undefined : metadata.resultTemplates === undefined) return;
+          for (const field of ['backgroundImage', 'logoImage'] as const) if ((design?.[field] ?? '') !== ((previous[index] as Record<string, unknown> | undefined)?.[field] ?? '')) throw new HttpsError('permission-denied', 'Změna obrázku vyžaduje připojování médií.');
+        });
+      }
+      await assertQuizAssets(transaction, db, quizId, designs.map(design => ({ design })));
       transaction.update(state.quizRef, {
         ...metadata,
+        ...(metadata.printTemplate === undefined ? {} : { printTemplate: mergeStoredPrintTemplate(state.quiz.printTemplate, metadata.printTemplate) }),
+        ...(metadata.defaultDesign === undefined ? {} : { defaultDesign: mergeStoredDesign(state.quiz.defaultDesign, metadata.defaultDesign) }),
+        ...(metadata.resultTemplates === undefined ? {} : { resultTemplates: mergeStoredResultTemplates(state.quiz.resultTemplates, metadata.resultTemplates) }),
         revision: state.revision + 1,
         updatedAt: Timestamp.now(),
         updatedBy: actor.uid,
@@ -453,7 +471,9 @@ export const createQuizSlide = securedOnCall('createQuizSlide', callableOptions,
     const input = requestedSlide(request.data);
     if (!isObject(request.data)) throw new HttpsError('invalid-argument', 'Request data is required.');
     const globalSection = request.data.scope === 'quiz';
-    if ((request.data.scope !== undefined && !globalSection) || (globalSection && !['intro','agenda','rules','end'].includes(input.kind))) throw new HttpsError('invalid-argument', 'Invalid quiz-level section.');
+    if ((request.data.scope !== undefined && !globalSection) || (globalSection && !['intro','agenda','rules','end','title','info'].includes(input.kind))) throw new HttpsError('invalid-argument', 'Invalid quiz-level section.');
+    const existingRoundId = request.data.roundId === undefined ? undefined : requiredId(request.data, 'roundId');
+    if (existingRoundId !== undefined && (globalSection || !isRoundKind(input.kind))) throw new HttpsError('invalid-argument', 'Existing round target requires a round introduction.');
     const quizRef = db.collection('quizzes').doc(quizId);
     const slideRef = quizRef.collection('slides').doc();
     return await runAccessTransaction(db, async (transaction) => {
@@ -466,9 +486,10 @@ export const createQuizSlide = securedOnCall('createQuizSlide', callableOptions,
       }
       const before = state.slides[position - 2];
       const inheritedRoundId = globalSection || before === undefined ? undefined : slideRoundId(before);
-      const roundId = isRoundKind(input.kind) || (inheritedRoundId === undefined && isQuestionKind(input.kind))
+      if (existingRoundId !== undefined) validateExistingRoundHeaderTarget(state.slides, existingRoundId, position);
+      const roundId = existingRoundId ?? (isRoundKind(input.kind) || (inheritedRoundId === undefined && isQuestionKind(input.kind))
         ? quizRef.collection('rounds').doc().id
-        : inheritedRoundId;
+        : inheritedRoundId);
       const created: StoredEditorSlide = {
         id: slideRef.id,
         data: createSlideData(input, position, roundId),

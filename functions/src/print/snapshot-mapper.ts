@@ -1,3 +1,4 @@
+import { normalizePrintTemplate } from '@filmovy-kviz/quiz-domain';
 import { PrintCenterError } from './errors.js';
 import { PRINT_LIMITS } from './limits.js';
 import type { PrintEvent, PrintQuestionKind } from './types.js';
@@ -103,6 +104,7 @@ export function mapSnapshotToPrintEvent(
     title: requiredText(eventData.title, 'event.title'),
     quiz: {
       title: requiredText(snapshotData.quizTitle, 'snapshot.quizTitle'),
+      ...(snapshotData.printTemplate ? { printTemplate: normalizePrintTemplate(snapshotData.printTemplate) } : {}),
       rounds: sortedRounds.map((round, roundOffset) => ({
         number: roundOffset + 1,
         title: requiredText(round.data.title, 'round.title'),

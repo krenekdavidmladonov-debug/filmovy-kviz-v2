@@ -5,7 +5,7 @@ import { bound, id, object, previewIn, revision, staff } from '../leaderboard/ca
 import { fingerprint, type ResultRow } from '../leaderboard/model.js';
 import { authorizeStaff, loadSlide } from '../live/callables.js';
 import { applyLiveSessionAction } from '../live/session-machine.js';
-import { buildPublicSessionState } from '../live/publication.js';
+import { buildPublicSessionState, publicResultTemplate } from '../live/publication.js';
 import { advanceFinal, initialFinal, publicFinalPage, type FinalAction } from './model.js';
 const options = { region: 'europe-west1', cors: true, maxInstances: 10 };
 
@@ -73,6 +73,7 @@ export const controlFinalReveal = securedOnCall('controlFinalReveal', options, a
       : { ...clean, revision: expected + 1, updatedBy: uid, updatedAt: now }), finalReveal: state };
     const publicState = state.visible ? {
       ...buildPublicSessionState({ ...updated, status: 'waiting', presentationMode: 'slide', answerRevealed: false }), status: 'active',
+      ...publicResultTemplate((await tx.get(db.doc('quizSnapshots/' + session.snapshotId))).data() ?? {}, 'final'),
       finalReveal: publicFinalPage(state, rows),
     } : buildPublicSessionState(updated, slide);
     const response: FinalResponse = { sessionId, versionId: state.versionId, revision: updated.revision, winnerRevealed: action === 'reveal' && state.rank === 1, replayed: false };

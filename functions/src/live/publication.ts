@@ -1,4 +1,5 @@
 import { LiveSessionError } from './errors.js';
+import { resolveSlideDesign, normalizeResultTemplates, canHideInfoSlide, type ResultTemplate } from '@filmovy-kviz/quiz-domain';
 import type {
   LiveRenderMode,
   PrivateLiveSession,
@@ -10,6 +11,13 @@ import type {
 
 const maximumPublicTextLength = 20_000;
 const publicMediaKinds = new Set<PublicMedia['kind']>(['image', 'audio', 'video', 'unknown']);
+
+/** Result copy and style come only from the event's frozen source, never scores or contacts. */
+export function publicResultTemplate(snapshot: Record<string, unknown>, kind: 'interim' | 'final'): ResultTemplate {
+  const template = normalizeResultTemplates(snapshot.resultTemplates)[kind];
+  const design = resolveSlideDesign(snapshot.defaultDesign, undefined, template?.design);
+  return { ...(template?.title === undefined ? {} : { title: template.title }), ...(template?.subtitle === undefined ? {} : { subtitle: template.subtitle }), ...(Object.keys(design).length ? { design } : {}) };
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && !Array.isArray(value) && typeof value === 'object';
@@ -167,6 +175,7 @@ export function buildPublicSessionState(session: PrivateLiveSession, slide?: Pri
   if (slide === undefined || slide.position !== expectedPosition) {
     throw new LiveSessionError('failed-precondition', 'Active session slide is unavailable.');
   }
+  if (slide.hidden === true && canHideInfoSlide(slide)) throw new LiveSessionError('failed-precondition', 'Hidden information slide cannot be published.');
   const allowAudioVideo = session.presentationMode === 'recap' || isVideoKind(slide.kind);
   const classified = normalizedMedia(slide);
   const presentation = isObject(slide.presentation) ? slide.presentation : {};
@@ -183,6 +192,8 @@ export function buildPublicSessionState(session: PrivateLiveSession, slide?: Pri
     slideKind: publicText(slide.kind) ?? 'legacy',
     title: publicText(slide.title) ?? '',
     text: publicText(slide.text) ?? '',
+    ...(publicText(slide.roundTitle) === undefined ? {} : { roundTitle: publicText(slide.roundTitle) }),
+    ...(Object.keys(resolveSlideDesign(slide.defaultDesign, slide.roundDesign, slide.design)).length ? { design: resolveSlideDesign(slide.defaultDesign, slide.roundDesign, slide.design) } : {}),
     options: sanitizeOptions(slide.options),
     media: sanitizedMedia(slide.media, allowAudioVideo),
     presentation: sanitizePresentation(slide.presentation),
@@ -204,6 +215,8 @@ export function buildPublicSessionState(session: PrivateLiveSession, slide?: Pri
   return {
     ...result,
     answerRevealed: true,
+    renderMode: 'recap',
+    ...(Object.keys(resolveSlideDesign(slide.defaultDesign, slide.roundDesign, slide.design, slide.answerDesign, true)).length ? { design: resolveSlideDesign(slide.defaultDesign, slide.roundDesign, slide.design, slide.answerDesign, true) } : {}),
     revealedAnswer,
     ...(publicText(slide.answerExplanation) === undefined ? {} : { answerExplanation: publicText(slide.answerExplanation) }),
     ...(classified.answerImage === undefined ? {} : { answerImage: classified.answerImage }),

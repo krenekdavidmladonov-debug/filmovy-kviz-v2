@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: [
+      'tests/slideDesignSecurity.test.ts',
       'tests/editorWorkingCopy.test.ts', 'tests/outlineMoves.test.ts',
       'tests/adminNavigation.test.tsx', 'tests/eventDetailLoading.test.tsx',
       'tests/accessDeploymentManifest.test.ts', 'tests/accessPermissions.test.ts', 'tests/darkTheme.test.ts', 'tests/branding.test.tsx', 'tests/adminDashboard.test.tsx',
@@ -14,6 +15,8 @@ export default defineConfig({
       'tests/quizCreationRecovery.test.ts',
       'tests/presentation.test.ts',
       'tests/presentationComponents.test.tsx',
+      'tests/slideDesignRenderer.test.tsx',
+      'tests/editorSlideDesign.test.tsx',
       'tests/uxFoundation.test.tsx',
       'tests/roundFirstEditor.test.tsx',
       'tests/quizPreflight.test.ts',

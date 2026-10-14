@@ -1,6 +1,6 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { mapEditorSlide, parseQuizAsset } from '@filmovy-kviz/quiz-domain';
+import { mapEditorSlide, parseQuizAsset, normalizeSlideDesign, normalizeResultTemplates, normalizePrintTemplate } from '@filmovy-kviz/quiz-domain';
 import { authorize, type AuthIdentity } from './authorization.js';
 import { slideView, snapshotResource } from './reads.js';
 
@@ -16,12 +16,13 @@ export async function authorizePrivateMedia(auth: AuthIdentity, reference: strin
     const slides = await tx.get(source.limit(401));
     if (slides.size > 400) throw new HttpsError('permission-denied', 'Médium není dostupné.');
     const all = slides.docs.map(d => mapEditorSlide(d.id, d.data()));
-    const answerReference = all.some(s => s.answerImage === reference || s.media.some(m => m.role === 'answer' && m.source === reference));
+    const answerReference = all.some(s => s.answerImage === reference || [s.answerDesign?.backgroundImage, s.answerDesign?.logoImage].includes(reference) || s.media.some(m => m.role === 'answer' && m.source === reference));
     if (answerReference && !answers) throw new HttpsError('permission-denied', 'Médium není dostupné.');
     const visible = slides.docs.map(d => slideView(d.id, d.data(), answers, false));
     const root = (await tx.get(db.doc(snapshotId ? `quizSnapshots/${snapshotId}` : `quizzes/${parsed.quizId}`))).data();
     const appearance = root?.defaultAppearance as { backgroundImage?: unknown } | undefined;
-    const attached = appearance?.backgroundImage === reference || visible.some(s => [s.backgroundImage, s.questionImage, s.answerImage, s.mediaSource, ...s.media.map(m => m.source)].includes(reference));
+    const defaults = normalizeSlideDesign(root?.defaultDesign), templates = normalizeResultTemplates(root?.resultTemplates);
+    const attached = appearance?.backgroundImage === reference || [normalizePrintTemplate(root?.printTemplate).logoImage, defaults.backgroundImage, defaults.logoImage, templates.interim?.design?.backgroundImage, templates.interim?.design?.logoImage, templates.final?.design?.backgroundImage, templates.final?.design?.logoImage].includes(reference) || visible.some(s => [s.backgroundImage, s.questionImage, s.answerImage, s.mediaSource, s.design?.backgroundImage, s.design?.logoImage, s.answerDesign?.backgroundImage, s.answerDesign?.logoImage, ...s.media.map(m => m.source)].includes(reference));
     if (snapshotId && !attached) throw new HttpsError('permission-denied', 'Médium nepatří do této akce.');
     if (!snapshotId && !attached && !answers) {
       const asset = (await tx.get(db.doc(`quizzes/${parsed.quizId}/mediaAssets/${parsed.assetId}`))).data();

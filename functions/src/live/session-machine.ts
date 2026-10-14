@@ -108,9 +108,9 @@ export function applyLiveSessionAction(
     if (session.presentationMode !== 'slide' || !slide.isQuestion || displayAnswer(slide.correctAnswer, slide.kind) === undefined) {
       throw new LiveSessionError('failed-precondition', 'This slide has no displayable answer.');
     }
-    return { ...session, ...common, answerRevealed: true };
+    return { ...session, ...common, answerRevealed: true, mediaCommand: 'idle', mediaPlaybackState: 'idle', mediaGeneration: session.mediaGeneration + 1 };
   }
-  if (action.type === 'hide-answer') return { ...session, ...common, answerRevealed: false };
+  if (action.type === 'hide-answer') return { ...session, ...common, answerRevealed: false, mediaCommand: 'idle', mediaPlaybackState: 'idle', mediaGeneration: session.mediaGeneration + 1 };
   if (action.type === 'start-intro') {
     if (!isIntroKind(slide.kind) || session.presentationMode !== 'slide') {
       throw new LiveSessionError('failed-precondition', 'The current slide has no intro animation.');
