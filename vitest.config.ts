@@ -11,6 +11,7 @@ export default defineConfig({
       'tests/liveSession.test.ts',
       'tests/liveRepository.test.ts',
       'tests/quizEditor.test.ts',
+      'tests/quizCreationRecovery.test.ts',
       'tests/presentation.test.ts',
       'tests/presentationComponents.test.tsx',
       'tests/uxFoundation.test.tsx',

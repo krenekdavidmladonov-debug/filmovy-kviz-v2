@@ -151,3 +151,64 @@ test('library CTA creates an empty quiz and carries its first round and free que
     await context.close();
   }
 });
+
+test('lost quiz creation restores the same attempt on reload and permits a deliberate new attempt after library check @seeded', async ({ browser }) => {
+  const context = await browser.newContext();
+  await restrictToLocalhost(context);
+  const page = await context.newPage();
+  const title = `Synthetic creation recovery ${Date.now()}`;
+  const requests: { title: string; requestId: string }[] = [];
+  const committedIds: string[] = [];
+  let loseNext = true;
+  await page.route('**/europe-west1/createQuiz', async route => {
+    if (route.request().method() !== 'POST') { await route.continue(); return; }
+    const payload = route.request().postDataJSON() as { data: { title: string; requestId: string } };
+    requests.push(payload.data);
+    const response = await route.fetch();
+    const body = await response.json() as { result: { quizId: string } };
+    committedIds.push(body.result.quizId);
+    if (loseNext) { loseNext = false; await route.abort('failed'); }
+    else await route.fulfill({ response });
+  });
+  try {
+    await login(page);
+    const legacyId = `legacy-creation-${Date.now()}`;
+    await page.evaluate(id => sessionStorage.setItem('justkviz.quiz-create-request-id', id), legacyId);
+    await page.goto('/admin/quizzes/new');
+    await page.getByLabel('Název kvízu').fill(title);
+    await page.getByRole('button', { name: 'Vytvořit', exact: true }).click();
+    await expect(page.getByText('Kvíz se nepodařilo vytvořit. Zadaný název zůstal zachovaný.', { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel('Název kvízu')).toHaveValue(title);
+    await expect(page.getByLabel('Název kvízu')).toHaveAttribute('readonly', '');
+    await expect(page.getByRole('button', { name: 'Začít nový pokus', exact: true })).toBeDisabled();
+    await waitForCallable(page, 'createQuiz', () => page.getByRole('button', { name: 'Zkusit znovu', exact: true }).click());
+    await expect(page).toHaveURL(new RegExp(`/admin/quizzes/${committedIds[0]}/edit$`));
+    expect(requests[1]).toEqual(requests[0]);
+    expect(requests[0]?.requestId).toBe(legacyId);
+    expect(await page.evaluate(() => sessionStorage.getItem('justkviz.quiz-create-request-id'))).toBeNull();
+    expect(committedIds[1]).toBe(committedIds[0]);
+    await page.getByRole('link', { name: '← Knihovna kvízů' }).click();
+    await expect(page.getByRole('link', { name: title, exact: true })).toHaveCount(1);
+
+    await page.goto('/admin/quizzes/new');
+    loseNext = true;
+    await page.getByLabel('Název kvízu').fill(title + ' second');
+    await page.getByRole('button', { name: 'Vytvořit', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Zkusit znovu', exact: true })).toBeEnabled();
+    await page.getByRole('link', { name: 'zkontrolujte knihovnu kvízů', exact: true }).click();
+    await expect(page.getByRole('link', { name: title + ' second', exact: true })).toHaveCount(1);
+    await page.goto('/admin/quizzes/new');
+    await expect(page.getByLabel('Název kvízu')).toHaveValue(title + ' second');
+    await page.getByRole('checkbox', { name: 'Zkontroloval(a) jsem knihovnu a chci začít nový pokus.' }).check();
+    await page.getByRole('button', { name: 'Začít nový pokus', exact: true }).click();
+    await page.getByLabel('Název kvízu').fill(title + ' third');
+    await waitForCallable(page, 'createQuiz', () => page.getByRole('button', { name: 'Vytvořit', exact: true }).click());
+    await expect(page).toHaveURL(/\/edit$/u);
+    expect(requests).toHaveLength(4);
+    expect(requests[2]).toBeDefined();
+    expect(requests[3]).toBeDefined();
+    expect(requests[3]?.requestId).not.toBe(requests[2]?.requestId);
+    expect(new Set(committedIds).size).toBe(3);
+  } finally { await context.close(); }
+});
