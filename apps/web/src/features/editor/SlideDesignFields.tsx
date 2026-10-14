@@ -1,6 +1,6 @@
 import type { SlideDesign } from '@filmovy-kviz/quiz-domain';
 import { MediaUploadField } from '../media/MediaUploadField';
-import { rendererDefaults } from '../presentation/design';
+import { colorInputValue, rendererDefaults } from '../presentation/design';
 import type { EditorSlide } from './types';
 
 export const designDefaults: Required<SlideDesign> = {
@@ -57,7 +57,7 @@ export function SlideDesignFields({ value, inherited = {}, legacy = {}, legacyRe
       <button type="button" className="secondary-button" disabled={disabled || (!local && !legacyOverride)} onClick={() => onReset ? onReset() : onChange({})}>Obnovit výchozí vzhled</button>
     </div>
     <label className="form-field">Šablona<select disabled={disabled} value="" onChange={event => { const preset = availablePresets[Number(event.target.value)]; if (preset) onChange({ ...value, ...preset.design }); }}><option value="">Vyberte vhodnou kompozici…</option>{availablePresets.map((preset, i) => <option key={preset.label} value={i}>{preset.label}</option>)}</select></label>
-    <div className="design-colors">{(['backgroundColor', 'textColor', 'accentColor'] as const).map((key, index) => <label className="form-field" key={key}>{['Barva pozadí', 'Barva textu', 'Barva zvýraznění'][index]}<small>{origin(key)}</small><input type="color" disabled={disabled} value={effective[key]} onChange={event => set(key, event.target.value)} /></label>)}</div>
+    <div className="design-colors">{(['backgroundColor', 'textColor', 'accentColor'] as const).map((key, index) => <label className="form-field" key={key}>{['Barva pozadí', 'Barva textu', 'Barva zvýraznění'][index]}<small>{origin(key)}</small><input type="color" disabled={disabled} value={colorInputValue(effective[key])} onChange={event => set(key, event.target.value)} /></label>)}</div>
     <MediaUploadField kind="image" label={`Pozadí${Object.hasOwn(value, 'backgroundImage') ? ' · vlastní' : ' · děděné'}`} value={effective.backgroundImage} disabled={disabled} onReady={next => set('backgroundImage', next)} />
     <label className="form-field">Ztmavení obrázku · {effective.backgroundOverlay} % <small>{origin('backgroundOverlay')}</small><input type="range" min="0" max="100" value={effective.backgroundOverlay} disabled={disabled} onChange={event => set('backgroundOverlay', Number(event.target.value))} /></label>
     <details className="editor-extra"><summary>Typografie, rozložení a doplňky</summary>
@@ -74,5 +74,6 @@ export function SlideDesignFields({ value, inherited = {}, legacy = {}, legacyRe
       {local > 0 && <details><summary>Obnovit jednotlivou děděnou hodnotu</summary><div className="design-reset-fields">{Object.keys(value).map(key => <button key={key} type="button" disabled={disabled} onClick={() => { const next = { ...value }; delete next[key as keyof SlideDesign]; onChange(next); }}>{({ backgroundColor: 'Pozadí', textColor: 'Text', accentColor: 'Zvýraznění', backgroundImage: 'Obrázek pozadí', logoImage: 'Logo', backgroundOverlay: 'Ztmavení', fontFamily: 'Písmo', fontScale: 'Velikost textu', textAlign: 'Zarovnání', layout: 'Rozložení', textWidth: 'Prostor pro text', mediaFit: 'Ořez', showLogo: 'Viditelnost loga', showQuestionNumber: 'Číslo otázky', showRoundTitle: 'Název kola' } as Record<string, string>)[key] ?? 'Vlastní nastavení'} ↩</button>)}</div></details>}
     </details>
     {designContrastWarning(effective) && <p className="field-validation warning" role="status">Text a pozadí mají slabý kontrast. Zkontrolujte čitelnost na projekci; uložení je možné.</p>}
+    {effective.backgroundImage && effective.backgroundOverlay < 50 && <p className="field-validation warning" role="status">Obrázkové pozadí může snížit čitelnost textu. Zkontrolujte náhled a podle potřeby přidejte ztmavení; uložení je možné.</p>}
   </section>;
 }

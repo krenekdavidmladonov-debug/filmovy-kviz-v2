@@ -970,7 +970,7 @@ h1 { max-width: 900px; margin: 0; font-size: clamp(2.8rem, 6vw, 5.5rem); line-he
 .projector-status-card > div { display: grid; gap: 2px; }
 .projector-status-card span { color: var(--color-text-subtle); font-size: .67rem; font-weight: 850; text-transform: uppercase; }
 .projector-status-card strong { color: var(--color-warning); font-size: .8rem; }
-.projector-status-card p { grid-column: 1 / -1; grid-row: 2; margin: 0; color: var(--color-text-subtle); font-size: .68rem; line-height: 1.35; }
+.projector-status-card p { grid-column: 1; grid-row: 2; min-width: 0; margin: 0; color: var(--color-text-subtle); font-size: .68rem; line-height: 1.35; }
 .projector-status-card button { grid-column: 2; grid-row: 1 / 3; }
 .primary-live-controls { gap: var(--space-2); }
 .recap-controls,

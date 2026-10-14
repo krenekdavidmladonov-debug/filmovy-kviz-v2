@@ -1,6 +1,7 @@
 import { useContext, useState } from 'react';
 import { parseQuizAsset, type PrintTemplate } from '@filmovy-kviz/quiz-domain';
 import { MediaAuthoringContext, MediaUploadField } from '../media/MediaUploadField';
+import { colorInputValue } from '../presentation/design';
 
 export interface PrintTemplateFieldsProps {
   value: PrintTemplate;
@@ -22,7 +23,7 @@ export function PrintTemplateFields({ value, disabled, onChange, quizId }: Print
     <label className="editor-field"><span>Patička</span><input maxLength={160} value={value.footer ?? ''} disabled={busy} placeholder="JustKvíz / Prostor pro vaše znalosti" onChange={event => change({ footer: event.target.value })} /></label>
     <label className="editor-field"><span>Rozložení odpovědního listu</span><select value={value.layout ?? 'comfortable'} disabled={busy} onChange={event => change({ layout: event.target.value as 'comfortable' | 'compact' })}><option value="comfortable">Pohodlné: nové kolo na nové straně</option><option value="compact">Úsporné: kola navazují</option></select></label>
     <p className="field-help">Pohodlné má 15,5 mm na odpověď, úsporné 12 mm. V obou variantách zůstává jméno týmu na každé straně. Malé políčko vpravo slouží pořadateli pro body.</p>
-    <label className="editor-field"><span>Barva drobného akcentu</span><input type="color" value={value.accentColor?.length === 7 ? value.accentColor : '#a87521'} disabled={busy} onChange={event => change({ accentColor: event.target.value })} /></label>
+    <label className="editor-field"><span>Barva drobného akcentu</span><input type="color" value={colorInputValue(value.accentColor ?? '#a87521')} disabled={busy} onChange={event => change({ accentColor: event.target.value })} /></label>
     <label><input type="checkbox" checked={value.showLogo !== false} disabled={busy} onChange={event => change({ showLogo: event.target.checked })} /> Zobrazit logo v záhlaví</label>
     {value.showLogo !== false && <>
       <label className="editor-field"><span>Textové logo</span><input maxLength={40} value={value.logoText ?? ''} disabled={busy} placeholder="JustKvíz" onChange={event => change({ logoText: event.target.value })} /></label>

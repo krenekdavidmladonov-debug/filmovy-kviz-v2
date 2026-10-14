@@ -14,6 +14,13 @@ export const rendererDefaults = {
   showQuestionNumber: true, showRoundTitle: true,
 } as const satisfies SlideDesign;
 
+/** Native color inputs require six digits, while persisted designs also allow #rgb. */
+export function colorInputValue(value: string): string {
+  return /^#[0-9a-f]{3}$/i.test(value)
+    ? '#' + value.slice(1).split('').map(channel => channel + channel).join('')
+    : value;
+}
+
 /** The public and private preview renderer both consume the same bounded appearance. */
 export function slideDesignStyle(value?: SlideDesign): CSSProperties {
   const design = normalizeSlideDesign(value) ?? {};

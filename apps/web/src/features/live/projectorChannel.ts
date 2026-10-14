@@ -120,8 +120,11 @@ export function parsePublicLiveState(value: unknown): PublicLiveState | undefine
     && nonNegativeInteger(data.recapQuestionPosition) && data.recapQuestionPosition > 0
     && data.recapQuestionPosition < data.slidePosition;
   const compatibilityReveal = data.presentationMode === 'slide' && data.renderMode === 'question' && data.answerRevealed === true;
-  if ((hasAnswer && (!data.answerRevealed || (!recapAnswer && !compatibilityReveal)))
+  const directReveal = data.presentationMode === 'slide' && data.renderMode === 'recap'
+    && data.status === 'active' && data.slidePosition > 0 && data.answerRevealed === true;
+  if ((hasAnswer && (!data.answerRevealed || (!recapAnswer && !compatibilityReveal && !directReveal)))
     || (data.answerRevealed && typeof data.revealedAnswer !== 'string')
+    || (data.presentationMode === 'slide' && data.renderMode === 'recap' && !directReveal)
     || (data.presentationMode === 'recap' && data.renderMode !== 'recap')
     || (data.presentationMode === 'slide' && Object.hasOwn(data, 'recapQuestionPosition'))
     || ((data.status === 'waiting' || data.status === 'ended') && (data.answerRevealed || hasAnswer))) return undefined;

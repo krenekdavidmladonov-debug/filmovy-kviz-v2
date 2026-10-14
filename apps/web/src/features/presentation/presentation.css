@@ -13,6 +13,7 @@
 .slide-renderer .slide-copy { max-width: min(100%, calc(var(--slide-text-width) + 25%)); gap: 1.6cqi; min-width: 0; }
 .slide-renderer .slide-copy h1, .slide-renderer .slide-centered h1 { color: inherit; font-size: calc(4.25cqi * var(--slide-scale)); font-weight: 850; line-height: 1.12; letter-spacing: -.035em; overflow-wrap: anywhere; }
 .slide-renderer .slide-copy p, .slide-renderer .slide-centered > p:not(.slide-kicker) { max-width: 100%; color: inherit; font-size: calc(2.35cqi * var(--slide-scale)); line-height: 1.36; opacity: .92; overflow-wrap: anywhere; white-space: pre-line; }
+.slide-renderer:not(.mode-recap) .slide-copy:not(:has(h1)) > p { font-size: calc(3.2cqi * var(--slide-scale)); line-height: 1.25; font-weight: 650; opacity: 1; }
 .slide-renderer .slide-kicker, .slide-renderer .slide-question-label { font-size: calc(1.15cqi * var(--slide-scale)); color: var(--slide-gold); letter-spacing: .12em; line-height: 1.25; margin: 0; }
 .slide-renderer .slide-question-label { gap: 1.5cqi; }
 .slide-renderer .slide-options { gap: 1cqi; }
@@ -78,6 +79,8 @@
 .slide-renderer.density-medium .slide-copy h1 { font-size: calc(3.6cqi * var(--slide-scale)); }
 .slide-renderer.density-dense .slide-copy h1 { font-size: calc(2.8cqi * var(--slide-scale)); }
 .slide-renderer.density-dense .slide-copy p { font-size: calc(1.9cqi * var(--slide-scale)); }
+.slide-renderer.density-medium:not(.mode-recap) .slide-copy:not(:has(h1)) > p { font-size: calc(2.7cqi * var(--slide-scale)); }
+.slide-renderer.density-dense:not(.mode-recap) .slide-copy:not(:has(h1)) > p { font-size: calc(2.35cqi * var(--slide-scale)); }
 .slide-renderer.density-dense .slide-options li > strong, .slide-renderer.density-dense .agenda-items li { font-size: calc(1.45cqi * var(--slide-scale)); }
 .slide-renderer.density-dense .slide-layout { gap: 1.3cqi; }
 @keyframes slide-reveal { from { opacity: .35; transform: translateY(.65cqi); } to { opacity: 1; transform: none; } }

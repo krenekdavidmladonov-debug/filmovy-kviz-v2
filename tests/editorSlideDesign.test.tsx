@@ -4,6 +4,7 @@ import { expect, test, vi } from 'vitest';
 import { SlideDesignFields, designContrastWarning, designDefaults } from '../apps/web/src/features/editor/SlideDesignFields';
 import { ResultTemplatePreview } from '../apps/web/src/features/editor/ResultTemplatePreview';
 import { EditorPreview } from '../apps/web/src/features/editor/EditorForms';
+import { PrintTemplateFields } from '../apps/web/src/features/print/PrintTemplateFields';
 import { practiceSlides } from '../apps/web/src/features/editor/QuizPractice';
 import type { EditorQuiz, EditorSlide } from '../apps/web/src/features/editor/types';
 
@@ -26,6 +27,15 @@ test('contrast warning handles shorthand colors and never blocks editing', () =>
   expect(designContrastWarning(designDefaults)).toBe(false);
   const html = renderToStaticMarkup(<SlideDesignFields scope="slide" value={{ backgroundColor: '#fff', textColor: '#fff' }} disabled={false} onChange={vi.fn()} />);
   expect(html).toContain('uložení je možné');
+  expect(html).toContain('value="#ffffff"');
+  const print = renderToStaticMarkup(<PrintTemplateFields value={{ accentColor: '#abc' }} disabled={false} quizId="quiz" onChange={vi.fn()} />);
+  expect(print).toContain('value="#aabbcc"');
+});
+
+test('image background advises a visual readability check without disabling controls', () => {
+  const html = renderToStaticMarkup(<SlideDesignFields scope="answer" value={{ backgroundImage: 'https://example.test/image.png', backgroundOverlay: 0 }} disabled={false} onChange={vi.fn()} />);
+  expect(html).toContain('Obrázkové pozadí může snížit čitelnost textu');
+  expect(html).toContain('<input type="range" min="0" max="100" value="0"/>');
 });
 
 test('layout-only legacy override can reset while inherited appearance cannot', () => {
