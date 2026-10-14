@@ -90,6 +90,8 @@ export function SlideRenderer({
   const mediaFailed = mediaCommand === 'error'
     || (locallyFailed?.generation === mediaGeneration && locallyFailed.source === model.mediaSource);
   const mediaPlan = projectorMediaPlan(model, mediaCommand, mediaPlaybackState, mediaFinished, mediaFailed);
+  const showMediaError = !mediaFinished && (mediaCommand === 'play' || mediaCommand === 'replay' || mediaCommand === 'error')
+    && (mediaFailed || mediaPlaybackState === 'error');
   const showAnswer = model.renderMode === 'recap' && model.revealedAnswer !== undefined;
   const displayedAnswer = model.isLegacyPl && model.revealedAnswer !== undefined
     ? formatPlAnswer(model.revealedAnswer)
@@ -125,6 +127,7 @@ export function SlideRenderer({
         {recapMedia && model.mediaSource && mediaPlan.mountPlayer && (
           <MediaPlayer
             sessionId={mediaSessionId}
+            allowManualAutoplay={model.contentKind === 'video'}
             source={model.mediaSource}
             command={mediaCommand}
             generation={mediaGeneration}
@@ -168,6 +171,7 @@ export function SlideRenderer({
       <div className="video-presentation"><QuestionCopy title={model.title} text={model.text} /><Options options={model.options} />
         <MediaPlayer
             sessionId={mediaSessionId}
+          allowManualAutoplay
           source={model.mediaSource}
           command={mediaCommand}
           generation={mediaGeneration}
@@ -200,6 +204,7 @@ export function SlideRenderer({
       <div className="slide-safe-area">
         <header className="slide-brand"><span>{quizTitle}</span><Brand /></header>
         {content}
+        {showMediaError && <p className="projector-media-error" role="status">Médium se nepodařilo přehrát. Moderátor může použít Pustit znovu nebo pokračovat otázkou.</p>}
       </div>
     </article>
   );

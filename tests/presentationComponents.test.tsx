@@ -27,6 +27,7 @@ class FakePlayer {
   readonly destroy = vi.fn();
   readonly cueVideoById = vi.fn();
   readonly loadVideoById = vi.fn();
+  readonly playVideo = vi.fn();
   readonly pauseVideo = vi.fn();
   readonly seekTo = vi.fn();
 
@@ -98,6 +99,72 @@ afterEach(() => {
 });
 
 describe('mounted media lifecycle regressions', () => {
+  test('blocked projector video keeps its iframe and resumes only on a local manual gesture', async () => {
+    Object.assign(window.YT!, { Player: DomReplacingFakePlayer });
+    const report = vi.fn();
+    const video = { kind: 'video', title: 'Veřejná otázka', text: 'Pouze zadání', options: [], media: [], mediaSource: 'abcdefghijk' };
+    const view = await mounted(<SlideRenderer quizTitle="Kvíz" mediaCommand="play" mediaGeneration={2} slide={video} onMediaPlaybackState={report} />);
+    const player = FakePlayer.instances[0]!;
+    await act(async () => { player.events.onReady(); player.events.onAutoplayBlocked?.(); });
+    expect(view.host.querySelector('iframe')).not.toBeNull();
+    expect(player.destroy).not.toHaveBeenCalled();
+    expect(view.host.textContent).toContain('Prohlížeč zablokoval automatické přehrání');
+    expect(report.mock.calls.some(call => call[1] === 'error' || call[1] === 'playing')).toBe(false);
+    const manual = [...view.host.querySelectorAll('button')].find(button => button.textContent === 'Spustit video ručně')!;
+    expect(player.playVideo).not.toHaveBeenCalled();
+    await act(async () => { manual.click(); });
+    expect(player.playVideo).toHaveBeenCalledOnce();
+    expect(view.host.querySelector('[data-media-lifecycle="PLAYING"]')).toBeNull();
+    await act(async () => { player.events.onStateChange({ data: 1 }); });
+    expect(view.host.querySelector('[data-media-lifecycle="PLAYING"]')).not.toBeNull();
+    expect(view.host.textContent).not.toContain('Spustit video ručně');
+    expect(report).toHaveBeenLastCalledWith(2, 'playing');
+    await act(async () => { view.root.unmount(); });
+  });
+
+  test('provider failure remains visible after player removal and clears on stop or slide change', async () => {
+    const report = vi.fn();
+    const video = { kind: 'video', title: 'Veřejná otázka', text: '', options: [], media: [], mediaSource: 'abcdefghijk',
+      revealedAnswer: 'PRIVATE_ANSWER_CANARY', answerExplanation: 'PRIVATE_EXPLANATION_CANARY', answerImage: 'https://example.test/private-answer.png' };
+    const view = await mounted(<SlideRenderer quizTitle="Kvíz" mediaCommand="play" mediaGeneration={4} slide={video} onMediaPlaybackState={report} />);
+    const failed = FakePlayer.instances[0]!;
+    await act(async () => { failed.events.onError(); });
+    expect(view.host.querySelector('[data-media-lifecycle]')).toBeNull();
+    expect(failed.destroy).toHaveBeenCalledOnce();
+    expect(view.host.querySelector('[role="status"]')?.textContent).toContain('Médium se nepodařilo přehrát');
+    expect(view.host.textContent).not.toContain('PRIVATE_ANSWER_CANARY');
+    expect(view.host.textContent).not.toContain('PRIVATE_EXPLANATION_CANARY');
+    expect(view.host.querySelector('img[src="https://example.test/private-answer.png"]')).toBeNull();
+    expect(report.mock.calls.filter(call => call[1] === 'error')).toHaveLength(1);
+    await act(async () => { view.root.render(<SlideRenderer quizTitle="Kvíz" mediaCommand="stop" mediaGeneration={5} slide={video} />); });
+    expect(view.host.querySelector('[role="status"]')).toBeNull();
+    await act(async () => { view.root.render(<SlideRenderer quizTitle="Kvíz" mediaCommand="error" mediaPlaybackState="error" mediaGeneration={6} slide={video} />); });
+    expect(view.host.querySelector('[role="status"]')).not.toBeNull();
+    await act(async () => { view.root.render(<SlideRenderer quizTitle="Kvíz" mediaCommand="idle" mediaGeneration={7} slide={{ kind: 'text', title: 'Další otázka', text: '', options: [], media: [] }} />); });
+    expect(view.host.querySelector('[role="status"]')).toBeNull();
+    expect(view.host.textContent).toContain('Další otázka');
+    await act(async () => { view.root.unmount(); });
+  });
+
+  test('blocked video manual control and late callbacks cannot restart after stop or finish', async () => {
+    const report = vi.fn();
+    const video = { kind: 'video', title: 'Video', text: '', options: [], media: [], mediaSource: 'abcdefghijk' };
+    const view = await mounted(<SlideRenderer quizTitle="Kvíz" mediaCommand="play" mediaGeneration={8} slide={video} onMediaPlaybackState={report} />);
+    const old = FakePlayer.instances[0]!;
+    await act(async () => { old.events.onReady(); old.events.onAutoplayBlocked?.(); });
+    const manual = [...view.host.querySelectorAll('button')].find(button => button.textContent === 'Spustit video ručně')!;
+    await act(async () => { view.root.render(<SlideRenderer quizTitle="Kvíz" mediaCommand="stop" mediaGeneration={9} slide={video} onMediaPlaybackState={report} />); });
+    report.mockClear();
+    await act(async () => { manual.click(); old.events.onAutoplayBlocked?.(); old.events.onStateChange({ data: 1 }); });
+    expect(old.playVideo).not.toHaveBeenCalled();
+    expect(report).not.toHaveBeenCalled();
+    expect(view.host.querySelector('[data-media-lifecycle]')).toBeNull();
+    await act(async () => { view.root.render(<SlideRenderer quizTitle="Kvíz" mediaCommand="finished" mediaGeneration={10} slide={video} />); });
+    expect(view.host.textContent).not.toContain('Spustit video ručně');
+    expect(view.host.querySelector('[role="status"]')).toBeNull();
+    await act(async () => { view.root.unmount(); });
+  });
+
   test('a delayed ENDED from PLAY generation 10 cannot finish REPLAY generation 11', async () => {
     const finished = vi.fn();
     const view = await mounted(

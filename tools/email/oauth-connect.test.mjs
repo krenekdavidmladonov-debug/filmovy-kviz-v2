@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { get } from 'node:http';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
 import path from 'node:path';
@@ -26,11 +26,31 @@ function localGet(url) {
     get(url, { agent: false }, response => { let body = ''; response.on('data', chunk => { body += chunk.toString(); }); response.on('end', () => resolve({ status: response.statusCode, headers: response.headers, body })); }).on('error', reject);
   });
 }
-function windowsDirectoryState(directory) {
+async function windowsDirectoryState(directory) {
   const script = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; $d=[Console]::In.ReadToEnd(); $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=[IO.Directory]::GetAccessControl($d); $rules=$acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]); $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; $onlyOwner=$rules.Count -eq 1; foreach($r in $rules){$onlyOwner=$onlyOwner -and $r.IdentityReference.Value -eq $sid.Value -and $r.AccessControlType -eq 'Allow' -and $r.FileSystemRights -eq 'FullControl' -and $r.InheritanceFlags -eq 'ContainerInherit,ObjectInherit' -and $r.PropagationFlags -eq 'None' -and -not $r.IsInherited}; $hash=[Security.Cryptography.SHA256]::Create(); $descriptorHash=[Convert]::ToBase64String($hash.ComputeHash([Text.Encoding]::Unicode.GetBytes($acl.GetSecurityDescriptorSddlForm('All')))); $hash.Dispose(); [Console]::Out.Write((@{ownerUser=$owner -eq $sid.Value; ownerAdministrators=$owner -eq 'S-1-5-32-544'; protected=$acl.AreAccessRulesProtected; onlyOwner=$onlyOwner; descriptorHash=$descriptorHash}|ConvertTo-Json -Compress))`;
-  const result = spawnSync('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
-    ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
-    { input: directory, encoding: 'utf8', timeout: 10_000, windowsHide: true });
+  const result = await new Promise(resolve => {
+    const child = spawn('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+      ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+      { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '', error;
+    const fail = cause => { error ??= cause; child.kill(); };
+    const timeout = setTimeout(() => fail(Object.assign(new Error('Metadata helper timed out'), { code: 'ETIMEDOUT' })), 10_000);
+    const append = (text, chunk) => {
+      const next = text + chunk.toString('utf8');
+      // Match spawnSync's default one-MiB output bound without retaining excess.
+      if (Buffer.byteLength(next, 'utf8') > 1024 * 1024) {
+        fail(Object.assign(new Error('Metadata helper output exceeded limit'), { code: 'ENOBUFS' }));
+        return text;
+      }
+      return next;
+    };
+    child.stdout.on('data', chunk => { stdout = append(stdout, chunk); });
+    child.stderr.on('data', chunk => { stderr = append(stderr, chunk); });
+    child.on('error', cause => { error ??= cause; });
+    child.stdin.on('error', fail);
+    child.on('close', status => { clearTimeout(timeout); resolve({ error, status, stdout, stderr }); });
+    child.stdin.end(directory);
+  });
   assert.equal(result.error, undefined); assert.equal(result.status, 0); assert.equal(result.stderr, '');
   return JSON.parse(result.stdout);
 }
@@ -209,18 +229,18 @@ test('actual Windows CurrentUser DPAPI round-trip and owner-only directory use o
   try {
     // On elevated CI the untouched fixture has Administrators ownership. The
     // standalone guard must reject it without normalizing any existing ACL.
-    const before = windowsDirectoryState(own.directory);
+    const before = await windowsDirectoryState(own.directory);
     if (!before.ownerUser) {
       assert.equal(before.ownerAdministrators, true);
       await assert.rejects(secureDirectory(own.directory), /^Error: PROTECTED_STORE_STOP$/u);
-      assert.deepEqual(windowsDirectoryState(own.directory), before); assert.deepEqual(readdirSync(own.directory), []);
+      assert.deepEqual(await windowsDirectoryState(own.directory), before); assert.deepEqual(readdirSync(own.directory), []);
     }
     const output = path.join(own.directory, 'secured'); await createOutput(output);
-    const secured = windowsDirectoryState(output);
+    const secured = await windowsDirectoryState(output);
     assert.equal(secured.ownerUser, true); assert.equal(secured.ownerAdministrators, false);
     assert.equal(secured.protected, true); assert.equal(secured.onlyOwner, true); assert.deepEqual(readdirSync(output), []);
-    await secureDirectory(output); assert.deepEqual(windowsDirectoryState(output), secured);
-    await assert.rejects(createOutput(output), /OUTPUT_EXISTS/u); assert.deepEqual(windowsDirectoryState(output), secured);
+    await secureDirectory(output); assert.deepEqual(await windowsDirectoryState(output), secured);
+    await assert.rejects(createOutput(output), /OUTPUT_EXISTS/u); assert.deepEqual(await windowsDirectoryState(output), secured);
     const synthetic = Buffer.from('SYNTHETIC ONLY: not an OAuth credential');
     const encrypted = await protectCurrentUser(synthetic), decoded = await unprotectCurrentUser(encrypted);
     assert.notDeepEqual(encrypted, synthetic); assert.deepEqual(decoded, synthetic);
