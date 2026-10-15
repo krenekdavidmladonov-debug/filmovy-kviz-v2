@@ -99,9 +99,7 @@ for (const [width, height] of [[1280, 720], [1024, 768], [390, 844]]) {
       const field = page.getByLabel('Název akce');
       await expect(field).toBeVisible();
       await expect(page.getByText('V2 staging', { exact: true }).filter({ visible: true })).toBeVisible();
-      const environmentNote = page.getByRole('main').getByRole('note');
-      await expect(environmentNote).toHaveText('Pro zkoušení používejte pouze smyšlená data.');
-      await expect(environmentNote).toBeVisible();
+      await expect(page.getByText('Pro zkoušení používejte pouze smyšlená data.', { exact: true })).toHaveCount(0);
       const size = await field.boundingBox();
       expect(size!.height).toBe(46);
       expect(size!.width).toBeGreaterThan(width === 390 ? 250 : 600);
