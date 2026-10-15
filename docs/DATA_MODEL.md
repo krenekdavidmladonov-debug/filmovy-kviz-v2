@@ -152,6 +152,15 @@ The public client calls a Function. The Function validates shape and limits, che
 
 Transactional registration email adds server-only event child collections `emailIntents` (operation snapshot and safe delivery audit), `emailSecrets` (authenticated ciphertext envelope only) and `registrationOperations` (payload fingerprints and replay receipts). The existing staff-readable registration contains a safe `emailDelivery` summary. Delivery progresses through `pending → processing → sent/failed`, with transient retries returning to pending. Intents store an expiring lease, at most five submission attempts, a nullable next-attempt timestamp and allowlisted error codes; terminal intents are never resent by queue replay. Neither a raw capability nor a secret URL enters those documents. Retention must coordinate encrypted token envelopes, creation receipts and decryption keys before cloud rollout. See [TRANSACTIONAL_EMAIL.md](TRANSACTIONAL_EMAIL.md).
 
+New eligible registration-update intents also receive an intent-bound encrypted
+management-token envelope in the existing emailSecrets child collection. No-op,
+replayed or invalid-token operations create neither an intent nor an envelope.
+Historical updates without an envelope remain valid without a management CTA;
+malformed envelopes are rejected. Uncertain provider acceptance and expired
+processing leases use the existing terminal failed/outcome-unknown contract,
+without automatically submitting the message again. No new business state,
+collection or client-visible capability field is introduced.
+
 The optional future-public-registration email policy adds two private fields only
 to newly eligible registration intents: `recipientPolicy:
 'future-public-registration'` and `registrationCreatedAt: Timestamp`. Both are

@@ -294,7 +294,7 @@ export const getEventRegistration = onCall(callableOptions, async (request) => {
   });
 });
 
-export const updateEventRegistration = onCall(callableOptions, async (request) => {
+export const updateEventRegistration = onCall({ ...callableOptions, secrets: registrationEmailSecrets() }, async (request) => {
   const eventId = requestId(request.data, 'eventId');
   const registrationId = requestId(request.data, 'registrationId');
   const token = requestToken(request.data);
@@ -350,7 +350,16 @@ export const updateEventRegistration = onCall(callableOptions, async (request) =
       revision: revision + 1,
       updatedAt: now,
     });
-    enqueueRegistrationEmail(transaction, eventRef, registrationRef, intentId, 'registration-updated', event.data, { ...current, ...input }, now);
+    const emailCreated = enqueueRegistrationEmail(transaction, eventRef, registrationRef, intentId, 'registration-updated', event.data, { ...current, ...input }, now);
+    if (emailCreated) {
+      // Only a verified capability and a real eligible change reach this branch.
+      // Replays/no-ops return above; the same token is sealed, never rotated or logged.
+      const vault = registrationEmailActivation() ? (await import('../email/config.js')).registrationTokenVault()
+        : emailEmulatorRuntime() ? emulatorTokenVault() : undefined;
+      if (vault) transaction.create(eventRef.collection('emailSecrets').doc(intentId), {
+        envelope: vault.seal(token, eventRef.collection('emailIntents').doc(intentId).path), createdAt: now,
+      });
+    }
     if (operationRef) transaction.create(operationRef, { kind: 'update', registrationId, fingerprint, intentId, createdAt: now });
     if (input.normalizedTeamName !== oldNormalized) {
       transaction.delete(oldNameRef);

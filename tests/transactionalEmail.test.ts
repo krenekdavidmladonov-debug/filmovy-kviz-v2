@@ -9,23 +9,58 @@ import { CaptureEmailTransport } from '../functions/src/dev/capture-email';
 import { mapRegistration } from '../apps/web/src/features/events/eventMappers';
 
 const content = { eventTitle: 'Filmový večer <script>alert(1)</script>', startsAtMillis: Date.parse('2031-11-20T18:00:00Z'), timeZone: 'Europe/Prague', venueName: 'Sál & kino', publicLocation: '', teamName: 'Tým "<img src=x onerror=alert(1)>"', memberCount: 4 };
+const protectedManagementLink = managementUrl('http://localhost:5000', 'synthetic', 'registration', 'a'.repeat(43));
 afterEach(() => vi.unstubAllEnvs());
 
 describe('Czech transactional messages', () => {
   for (const type of ['registration-confirmed', 'registration-updated', 'registration-cancelled'] as const) {
     test(type + ' has text, escaped HTML and event/team details', () => {
-      const body = registrationEmail(type, content, 'http://localhost:5000/events/synthetic/registration/manage#synthetic');
+      const body = registrationEmail(type, content, protectedManagementLink);
       expect(body.subject.length > 10).toBe(true);
       expect(body.text.includes(content.teamName) && body.text.includes('19:00') && body.text.includes('Počet hráčů: 4')).toBe(true);
       expect(body.html.includes('<script>') || body.html.includes('<img')).toBe(false);
       expect(body.html.includes('&lt;script&gt;') && body.html.includes('&amp;')).toBe(true);
-      expect(body.html.includes('href=')).toBe(type === 'registration-confirmed');
+      expect(body.html.includes('href=')).toBe(type !== 'registration-cancelled');
+      expect(body.subject).toBe('JustKvíz | ' + {
+        'registration-confirmed': `Registrace týmu ${content.teamName} potvrzena`,
+        'registration-updated': `Změna registrace týmu ${content.teamName}`,
+        'registration-cancelled': `Registrace týmu ${content.teamName} zrušena`,
+      }[type]);
+      expect(body.text).toContain('Dobrý den,'); expect(body.text).toContain('Tým JustKvíz');
+      expect(body.html).toContain('max-width:600px'); expect(body.html).not.toMatch(/<script|<iframe|<img|<form|https?:\/\/(?!localhost)/u);
       expect(body.text.includes('Tým již není aktivně přihlášen')).toBe(type === 'registration-cancelled');
     });
   }
   test('requires a confirmation link and rejects unsafe link protocols', () => {
     expect(() => registrationEmail('registration-confirmed', content)).toThrow();
     expect(() => registrationEmail('registration-confirmed', content, 'javascript:alert(1)')).toThrow();
+    for (const unsafe of [protectedManagementLink.replace('localhost:5000', 'remote.example.test'),
+      protectedManagementLink.replace('localhost:5000', 'user:password@localhost:5000'),
+      protectedManagementLink + '&token=' + 'b'.repeat(43), protectedManagementLink.replace('/registration/manage#', '/other#')]) {
+      expect(() => registrationEmail('registration-updated', content, unsafe)).toThrow('Invalid management link.');
+    }
+  });
+  test('uses an actual update capability while historical updates remain deliverable without a link', () => {
+    const current = registrationEmail('registration-updated', content, protectedManagementLink);
+    expect(current.text).toContain(`Spravovat registraci: ${protectedManagementLink}`);
+    expect(current.html).toContain(protectedManagementLink.replace('&', '&amp;'));
+    expect(current.text).toContain('Nesdílejte ho veřejně.');
+    const historical = registrationEmail('registration-updated', content);
+    expect(historical.text).toContain('byly změněny'); expect(historical.html).not.toContain('href=');
+    expect(historical.text).not.toContain('Spravovat registraci:');
+  });
+  test('omits absent or invalid optional details without invented defaults', () => {
+    const absent = registrationEmail('registration-cancelled', { ...content, eventTitle: '', teamName: '', startsAtMillis: Number.NaN,
+      venueName: '', publicLocation: '', memberCount: 0 });
+    expect(absent.subject).toBe('JustKvíz | Registrace zrušena');
+    expect(absent.text).not.toMatch(/Kdy:|Kde:|Akce:|Tým:|Počet hráčů:|undefined|NaN|Invalid Date/u);
+    expect(absent.text).not.toContain('@');
+    expect(registrationEmail('registration-updated', { ...content, timeZone: 'not-a-time-zone' }).text).not.toContain('Kdy:');
+  });
+  test('formats real event time with daylight saving and includes a known address only once', () => {
+    const summer = registrationEmail('registration-updated', { ...content, startsAtMillis: Date.parse('2031-07-20T18:00:00Z'),
+      venueName: 'Praha', publicLocation: 'Praha' });
+    expect(summer.text).toContain('20:00'); expect(summer.text).toContain('Kde: Praha'); expect(summer.text).not.toContain('Praha · Praha');
   });
   test('keeps capabilities in URL fragments on the configured server origin', () => {
     const token = randomBytes(32).toString('base64url');
@@ -36,7 +71,7 @@ describe('Czech transactional messages', () => {
     }
   });
   test('prevents subject header injection', () => {
-    expect(registrationEmail('registration-updated', { ...content, eventTitle: 'Akce\r\nBcc: forged' }).subject).not.toMatch(/[\r\n]/u);
+    expect(registrationEmail('registration-updated', { ...content, teamName: 'Tým\r\nBcc: forged\0\u202e' }).subject).not.toMatch(/[\p{Cc}\p{Cf}]/u);
   });
 });
 

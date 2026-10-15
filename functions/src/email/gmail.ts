@@ -88,7 +88,8 @@ export class GmailEmailTransport implements EmailTransport {
           let body: Record<string, unknown> = {};
           try { body = object(await response.json()); } catch { /* Inspect status without exposing body. */ }
           if (response.status === 429) throw new EmailDeliveryError('rate-limited', true);
-          if (response.status >= 500) throw new EmailDeliveryError('provider-unavailable', true);
+          // After a send starts, even 5xx cannot prove Gmail did not accept it.
+          if (response.status >= 500 || response.status === 408) throw new EmailDeliveryError(sending ? 'outcome-unknown' : 'provider-unavailable', !sending);
           const error = object(body.error);
           const reasons = Array.isArray(error.errors) ? error.errors.map(item => object(item).reason) : [];
           if (response.status === 403 && reasons.some(reason => reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded')) throw new EmailDeliveryError('rate-limited', true);
@@ -97,12 +98,12 @@ export class GmailEmailTransport implements EmailTransport {
           return body;
         })(),
         new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(() => { controller.abort(); reject(new EmailDeliveryError(sending ? 'outcome-unknown' : 'network-unavailable', true)); }, this.timeoutMillis);
+          timer = setTimeout(() => { controller.abort(); reject(new EmailDeliveryError(sending ? 'outcome-unknown' : 'network-unavailable', !sending)); }, this.timeoutMillis);
         }),
       ]);
     } catch (error) {
       if (error instanceof EmailDeliveryError) throw error;
-      throw new EmailDeliveryError(sending ? 'outcome-unknown' : 'network-unavailable', true);
+      throw new EmailDeliveryError(sending ? 'outcome-unknown' : 'network-unavailable', !sending);
     } finally { if (timer) clearTimeout(timer); }
   }
 
@@ -120,6 +121,6 @@ export class GmailEmailTransport implements EmailTransport {
     const result = await this.request(SEND_URL, { method: 'POST',
       headers: { Authorization: 'Bearer ' + token.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify({ raw }),
     }, true);
-    if (typeof result.id !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/u.test(result.id)) throw new EmailDeliveryError('outcome-unknown', true);
+    if (typeof result.id !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/u.test(result.id)) throw new EmailDeliveryError('outcome-unknown', false);
   }
 }
