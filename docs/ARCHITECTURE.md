@@ -126,6 +126,23 @@ the deployment inventory is a local plan, not deployment authorization.
 
 ## Event organizational email
 
+Registration email has a backward-compatible, explicit recipient policy in the
+trusted runtime. Missing `REGISTRATION_EMAIL_RECIPIENT_POLICY` means `selected`,
+preserving the existing single-recipient staging activation. The opt-in
+`future-public-registration` policy admits only the three transactional
+registration message types for canonical online registrations created at or after
+one shared activation cutoff. The server records the registration creation time
+and policy on each new intent; dispatch and every delivery claim reject unmarked
+backlog and pre-cutoff registrations before queueing/lease/provider access. Public
+create/update/cancel receipts and management capabilities retain their existing
+contract. No email is added for no-op/replay/manual staff operations.
+
+This is a prepared source capability, not wider cloud activation. Read-only
+staging metadata on 2026-10-15 still showed selected-recipient configuration and a
+PAUSED queue. Enabling normal delivery requires approval of the exact five email
+Functions, shared fresh cutoff and queue activation. Organizational campaigns
+remain outside this policy; no new service, secret, IAM or Rules is introduced.
+
 Admin-only preview/confirmation creates an immutable emailCampaigns record and recipient snapshots in the existing emailIntents outbox. The shared task worker delivers plain-text organizational messages without management capabilities or changes to registration confirmation status. All client campaign/intent access remains denied; safe history and status are exposed only through fresh-admin callables. Atomic recipient limits, snapshot/idempotence contracts and offline tests: [EVENT_TEAM_EMAIL.md](EVENT_TEAM_EMAIL.md).
 
 ## Owned media foundation

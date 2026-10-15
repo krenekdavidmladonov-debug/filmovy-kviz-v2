@@ -42,6 +42,27 @@ Registration uses callable Functions rather than direct Firestore writes. It val
 
 ## Firebase configuration and secrets
 
+The prepared `REGISTRATION_EMAIL_RECIPIENT_POLICY=future-public-registration`
+opt-in is restricted to the same exact V2 staging runtime and requires a valid
+shared activation cutoff. Absence or `selected` retains the existing one-recipient
+contract; unknown policy values fail closed. Future mode derives eligibility from
+the canonical online registration's original creation time and management-token
+verifier, excludes manual registrations, and writes private policy/time provenance
+onto the intent. Browser-supplied provenance is ignored. The dispatch and worker
+allowlist requires this marker and both creation times at/after the current cutoff
+before enqueue or lease/secrets/provider access. Old tasks, fresh edits of old
+registrations and organizational campaigns therefore cannot become mail solely
+because the queue resumes. No historical outbox rewrite/backfill is introduced.
+
+This source change does not authorize its deployment, broader recipients or queue
+resume. The 2026-10-15 read-only operating-state check still found the queue PAUSED,
+five matching selected-recipient configurations and a non-public worker. A future
+approved activation preserves the existing sender, keyring/OAuth secret versions
+and dedicated identities; IAM, public worker invocation and new credentials are
+not prerequisites. Rollout keeps the queue paused until all five matching versions
+and settings are verified. Existing retry/lease limits and the possibility of a
+duplicate physical message after ambiguous Gmail acceptance remain unchanged.
+
 Firebase web configuration is not a secret, but project selection is safety-critical. Local defaults use a `demo-*` project and emulators. Cloud access additionally requires explicit staging mode and the exact allowlisted V2 staging project/app/domain. Other cloud and production builds are rejected. Service-account keys and secrets are forbidden in Git. The isolated staging bootstrap uses only operator CLI OAuth in memory and synthetic data; its generated passwords/tokens remain under ignored `.local-data/staging`. See `STAGING.md`.
 
 The local auth seed uses Admin SDK only after fail-closed checks for an explicit loopback Authentication Emulator host/valid port and a `demo-*` project. The accompanying membership seed also requires a loopback Firestore emulator. The standard launcher uses ports `9099` and `8080`. It creates three documented development accounts and their explicit emulator memberships.

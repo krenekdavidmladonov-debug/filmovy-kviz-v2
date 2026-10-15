@@ -150,6 +150,18 @@ The public client calls a Function. The Function validates shape and limits, che
 
 Transactional registration email adds server-only event child collections `emailIntents` (operation snapshot and safe delivery audit), `emailSecrets` (authenticated ciphertext envelope only) and `registrationOperations` (payload fingerprints and replay receipts). The existing staff-readable registration contains a safe `emailDelivery` summary. Delivery progresses through `pending → processing → sent/failed`, with transient retries returning to pending. Intents store an expiring lease, at most five submission attempts, a nullable next-attempt timestamp and allowlisted error codes; terminal intents are never resent by queue replay. Neither a raw capability nor a secret URL enters those documents. Retention must coordinate encrypted token envelopes, creation receipts and decryption keys before cloud rollout. See [TRANSACTIONAL_EMAIL.md](TRANSACTIONAL_EMAIL.md).
 
+The optional future-public-registration email policy adds two private fields only
+to newly eligible registration intents: `recipientPolicy:
+'future-public-registration'` and `registrationCreatedAt: Timestamp`. Both are
+derived by trusted code from the canonical registration, never browser fields.
+Eligibility requires a non-manual online registration with its management-token
+verifier, an original creation time at/after the activation cutoff, and a new
+intent time at/after that same cutoff. An update/cancellation cannot substitute
+its current operation time for an older registration's creation time. Unmarked
+historical intents are not backfilled or upgraded. Selected-recipient/default-off
+stored shapes and all public registration responses remain unchanged. A rejected
+pre-cutoff create stores no email intent, delivery summary or token envelope.
+
 Contact data needs an explicit retention policy before launch. Important mutations should record server-derived actor and timestamp fields. Avoid indefinite logs containing contact data.
 
 ## Referee access extension

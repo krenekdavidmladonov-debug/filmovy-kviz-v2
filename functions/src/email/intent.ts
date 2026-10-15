@@ -1,7 +1,7 @@
 import { Timestamp, type DocumentReference, type Transaction } from 'firebase-admin/firestore';
 
 import type { RegistrationEmailContent, RegistrationEmailType } from './templates.js';
-import { registrationEmailRecipientEligible } from './runtime.js';
+import { futurePublicRegistrationEligible, registrationEmailActivation, registrationEmailRecipientEligible } from './runtime.js';
 
 export type DeliveryStatus = 'pending' | 'processing' | 'sent' | 'failed';
 interface EmailIntentState {
@@ -23,6 +23,8 @@ interface EmailIntentState {
 export interface RegistrationEmailIntent extends EmailIntentState {
   readonly type: RegistrationEmailType;
   readonly content: RegistrationEmailContent;
+  readonly recipientPolicy?: 'future-public-registration';
+  readonly registrationCreatedAt?: Timestamp;
 }
 export interface EventTeamEmailIntent extends EmailIntentState {
   readonly type: 'event-team-message';
@@ -34,9 +36,13 @@ export type EmailIntent = RegistrationEmailIntent | EventTeamEmailIntent;
 // No raw token, full URL, provider body or client-supplied destination enters the audit.
 export function enqueueRegistrationEmail(transaction: Transaction, eventRef: DocumentReference, registrationRef: DocumentReference,
   intentId: string, type: RegistrationEmailType, event: Record<string, unknown>, registration: Record<string, unknown>, now: Timestamp) {
-  if (!registrationEmailRecipientEligible(registration.contactEmail as string)) return;
+  if (!registrationEmailRecipientEligible(registration.contactEmail as string)) return false;
+  const activation = registrationEmailActivation();
+  const future = activation?.recipientPolicy === 'future-public-registration';
+  if (future && !futurePublicRegistrationEligible(registration, now.toMillis(), activation)) return false;
   const venue = event.venue as { name: string; publicLocation: string };
   const intent: RegistrationEmailIntent = {
+    ...(future ? { recipientPolicy: 'future-public-registration' as const, registrationCreatedAt: registration.createdAt as Timestamp } : {}),
     capabilityVersion: Number(event.capabilityVersion ?? 0),
     eventId: eventRef.id, registrationId: registrationRef.id, type,
     recipient: registration.contactEmail as string,
@@ -46,4 +52,5 @@ export function enqueueRegistrationEmail(transaction: Transaction, eventRef: Doc
   };
   transaction.create(eventRef.collection('emailIntents').doc(intentId), intent);
   transaction.update(registrationRef, { emailDelivery: { intentId, type, status: 'pending', updatedAt: now } });
+  return true;
 }

@@ -4,7 +4,12 @@ import { requireEmailEmulator } from './token-vault.js';
 
 export const EMAIL_STAGING_PROJECT = 'filmovy-kviz-v2-staging';
 export const EMAIL_KEYRING_SECRET = 'EMAIL_TOKEN_KEYRING';
-export interface RegistrationEmailActivation { readonly activatedAtMillis: number; readonly recipient: string }
+export interface RegistrationEmailActivation {
+  readonly activatedAtMillis: number;
+  readonly recipient?: string;
+  /** Absence retains the original selected-recipient deployment contract. */
+  readonly recipientPolicy?: 'future-public-registration';
+}
 
 // No parameter declarations or secret reads during Functions discovery.
 export function emailEmulatorRuntime(environment: NodeJS.ProcessEnv = process.env): boolean {
@@ -31,6 +36,9 @@ export function registrationEmailActivation(environment: NodeJS.ProcessEnv = pro
     || !Number.isFinite(Date.parse(cutoff)) || new Date(cutoff).toISOString() !== cutoff) {
     throw new EmailDeliveryError('configuration-invalid', false);
   }
+  const policy = environment.REGISTRATION_EMAIL_RECIPIENT_POLICY ?? 'selected';
+  if (policy === 'future-public-registration') return { activatedAtMillis: Date.parse(cutoff), recipientPolicy: policy };
+  if (policy !== 'selected') throw new EmailDeliveryError('configuration-invalid', false);
   return { activatedAtMillis: Date.parse(cutoff), recipient: mailbox(environment.REGISTRATION_EMAIL_ALLOWED_RECIPIENT ?? '') };
 }
 
@@ -47,13 +55,36 @@ export function registrationEmailEnabled(environment: NodeJS.ProcessEnv = proces
 
 export function registrationEmailRecipientEligible(recipient: string, environment: NodeJS.ProcessEnv = process.env): boolean {
   const activation = registrationEmailActivation(environment);
+  if (activation?.recipientPolicy === 'future-public-registration') {
+    try { mailbox(recipient); return true; } catch { return false; }
+  }
   return activation ? recipient === activation.recipient : registrationEmailEnabled(environment);
+}
+
+function timestampMillis(value: unknown): number | undefined {
+  const timestamp = value as { toMillis?: () => number } | undefined;
+  if (typeof timestamp?.toMillis !== 'function') return undefined;
+  const millis = timestamp.toMillis();
+  return Number.isFinite(millis) ? millis : undefined;
+}
+
+/** Only canonical server registration fields can establish future-online origin. */
+export function futurePublicRegistrationEligible(registration: Record<string, unknown>, nowMillis: number, activation: RegistrationEmailActivation): boolean {
+  const createdAt = timestampMillis(registration.createdAt);
+  return activation.recipientPolicy === 'future-public-registration' && registration.source !== 'manual'
+    && typeof registration.managementTokenHash === 'string' && /^[a-f0-9]{64}$/u.test(registration.managementTokenHash)
+    && Number.isSafeInteger(nowMillis) && createdAt !== undefined && createdAt >= activation.activatedAtMillis
+    && createdAt <= nowMillis && nowMillis >= activation.activatedAtMillis;
 }
 
 // Used again inside the delivery lease transaction, before any secret/provider resolution.
 export function allowedRegistrationEmailIntent(intent: Record<string, unknown>, activation: RegistrationEmailActivation): boolean {
-  const createdAt = intent.createdAt as { toMillis?: () => number } | undefined;
-  return ['registration-confirmed', 'registration-updated', 'registration-cancelled'].includes(intent.type as string)
-    && intent.recipient === activation.recipient && typeof createdAt?.toMillis === 'function'
-    && Number.isFinite(createdAt.toMillis()) && createdAt.toMillis() >= activation.activatedAtMillis;
+  const createdAt = timestampMillis(intent.createdAt);
+  if (!['registration-confirmed', 'registration-updated', 'registration-cancelled'].includes(intent.type as string)
+    || createdAt === undefined || createdAt < activation.activatedAtMillis) return false;
+  if (activation.recipientPolicy !== 'future-public-registration') return intent.recipient === activation.recipient;
+  const registrationCreatedAt = timestampMillis(intent.registrationCreatedAt);
+  if (intent.recipientPolicy !== 'future-public-registration' || registrationCreatedAt === undefined
+    || registrationCreatedAt < activation.activatedAtMillis || registrationCreatedAt > createdAt) return false;
+  try { mailbox(intent.recipient as string); return true; } catch { return false; }
 }

@@ -263,8 +263,8 @@ export const createEventRegistration = onCall({ ...callableOptions, secrets: reg
       cancelledBy: null,
     };
     transaction.create(registrationRef, registrationData);
-    if (envelope) transaction.create(eventRef.collection('emailSecrets').doc(intentId), { envelope, createdAt: now });
-    enqueueRegistrationEmail(transaction, eventRef, registrationRef, intentId, 'registration-confirmed', event.data, registrationData, now);
+    const emailCreated = enqueueRegistrationEmail(transaction, eventRef, registrationRef, intentId, 'registration-confirmed', event.data, registrationData, now);
+    if (emailCreated && envelope) transaction.create(eventRef.collection('emailSecrets').doc(intentId), { envelope, createdAt: now });
     if (operationRef) transaction.create(operationRef, { kind: 'create', fingerprint, registrationId: registrationRef.id, intentId, createdAt: now });
     transaction.create(nameRef, { registrationId: registrationRef.id, createdAt: now });
     transaction.update(eventRef, {
