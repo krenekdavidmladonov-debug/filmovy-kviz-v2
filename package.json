@@ -60,7 +60,10 @@
     "test:e2e:complete-editor": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/complete-editor.config.ts",
     "test:e2e:complete-editor-performance": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/complete-editor-performance.config.ts",
     "test:e2e:whole-evening": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/whole-evening-design.config.ts",
-    "test:e2e:whole-evening-performance": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/whole-evening-performance.config.ts"
+    "test:e2e:whole-evening-performance": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/whole-evening-performance.config.ts",
+    "test:e2e:show-mode": "node tools/local-emulator-environment.mjs full tests/e2e/show-mode-emulator.mjs",
+    "test:e2e:show-audio": "node tools/local-emulator-environment.mjs full tests/e2e/show-audio-emulator.mjs",
+    "test:e2e:show-browser": "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/show-mode.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

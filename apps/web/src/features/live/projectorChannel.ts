@@ -1,5 +1,8 @@
 import type { MediaPlaybackState } from '../presentation/types';
 import type { PublicLiveState, PublicMedia } from './types';
+import { normalizeSlideDesign, parseInterimBackdrop, parseShowCue, type SlideDesign } from '@filmovy-kviz/quiz-domain';
+import { parseResultPage } from '../leaderboard/types';
+import { parseFinalPage } from '../final-reveal/types';
 
 type ReportablePlaybackState = Extract<MediaPlaybackState, 'ready' | 'playing' | 'error' | 'finished'>;
 
@@ -26,6 +29,7 @@ const stateKeys = new Set([
   'introGeneration', 'questionNumber', 'questionCount', 'backgroundImage', 'questionImage', 'mediaSource',
   'backgroundOverlay', 'clipStartSeconds', 'clipEndSeconds', 'answerRevealed', 'revealedAnswer', 'answerImage',
   'recapQuestionPosition', 'revision',
+  'design', 'roundTitle', 'subtitle', 'imageLayout', 'answerExplanation', 'showCue', 'interimBackdrop', 'interimResults', 'finalReveal',
 ]);
 const presentationKeys = new Set(['backgroundOverlay', 'answerOverlay', 'sourceQuestionNumber']);
 const mediaKeys = new Set(['role', 'kind', 'source']);
@@ -91,6 +95,22 @@ function playbackSemantics(command: PublicLiveState['mediaCommand'], state: Medi
 export function parsePublicLiveState(value: unknown): PublicLiveState | undefined {
   const data = object(value);
   if (data === undefined || !hasOnlyKeys(data, stateKeys)) return undefined;
+  let additions: Pick<PublicLiveState, 'design' | 'showCue' | 'interimBackdrop' | 'interimResults' | 'finalReveal'>;
+  try {
+    let design: SlideDesign | undefined;
+    if (data.design !== undefined) {
+      const raw = object(data.design); if (!raw) return undefined;
+      design = normalizeSlideDesign(raw);
+      if (Object.keys(raw).length !== Object.keys(design).length || Object.entries(raw).some(([key, entry]) => design?.[key as keyof SlideDesign] !== entry)) return undefined;
+    }
+    additions = {
+      ...(design === undefined ? {} : { design }),
+      ...(data.showCue === undefined ? {} : { showCue: parseShowCue(data.showCue) }),
+      ...(data.interimBackdrop === undefined ? {} : { interimBackdrop: parseInterimBackdrop(data.interimBackdrop) }),
+      ...(data.interimResults === undefined ? {} : { interimResults: parseResultPage(data.interimResults) }),
+      ...(data.finalReveal === undefined ? {} : { finalReveal: parseFinalPage(data.finalReveal) }),
+    };
+  } catch { return undefined; }
   if (typeof data.sessionId !== 'string' || data.sessionId.length === 0 || data.sessionId.length > 1_500
     || typeof data.quizTitle !== 'string'
     || (data.status !== 'waiting' && data.status !== 'active' && data.status !== 'ended')
@@ -105,6 +125,7 @@ export function parsePublicLiveState(value: unknown): PublicLiveState | undefine
     || !optionalString(data, 'slideKind') || !optionalString(data, 'title') || !optionalString(data, 'text')
     || !optionalString(data, 'backgroundImage') || !optionalString(data, 'questionImage')
     || !optionalString(data, 'mediaSource') || !optionalString(data, 'revealedAnswer') || !optionalString(data, 'answerImage')
+    || !optionalString(data, 'roundTitle') || !optionalString(data, 'subtitle') || !optionalString(data, 'imageLayout') || !optionalString(data, 'answerExplanation')
     || !optionalNumber(data, 'backgroundOverlay') || !optionalNumber(data, 'clipStartSeconds')
     || !optionalNumber(data, 'clipEndSeconds')
     || (Object.hasOwn(data, 'questionNumber') && !nonNegativeInteger(data.questionNumber))
@@ -115,7 +136,7 @@ export function parsePublicLiveState(value: unknown): PublicLiveState | undefine
   if (media === undefined || presentation === undefined
     || !playbackSemantics(data.mediaCommand as PublicLiveState['mediaCommand'], data.mediaPlaybackState as MediaPlaybackState)) return undefined;
 
-  const hasAnswer = Object.hasOwn(data, 'revealedAnswer') || Object.hasOwn(data, 'answerImage');
+  const hasAnswer = Object.hasOwn(data, 'revealedAnswer') || Object.hasOwn(data, 'answerImage') || Object.hasOwn(data, 'answerExplanation');
   const recapAnswer = data.presentationMode === 'recap' && data.renderMode === 'recap'
     && nonNegativeInteger(data.recapQuestionPosition) && data.recapQuestionPosition > 0
     && data.recapQuestionPosition < data.slidePosition;
@@ -134,7 +155,21 @@ export function parsePublicLiveState(value: unknown): PublicLiveState | undefine
   if (normalAudio && (Object.hasOwn(data, 'mediaSource')
     || media.some((item) => item.kind === 'audio' || item.kind === 'video'))) return undefined;
 
+  const result = additions.interimResults ?? additions.finalReveal;
+  if (additions.interimResults && additions.finalReveal) return undefined;
+  if (result && (data.status !== 'active' || data.answerRevealed || hasAnswer || media.length || data.options.length
+    || (data.text !== undefined && data.text !== '')
+    || data.presentationMode !== 'slide' || data.renderMode !== 'question' || data.mediaCommand !== 'idle' || data.mediaPlaybackState !== 'idle'
+    || ['questionImage', 'backgroundImage', 'mediaSource', 'recapQuestionPosition', 'answerImage', 'answerExplanation'].some(key => Object.hasOwn(data, key)))) return undefined;
+  if (additions.interimBackdrop && (!additions.interimResults || additions.interimResults.presentationStyle !== 'show')) return undefined;
+  if (additions.showCue && (!result || result.presentationStyle !== 'show')) return undefined;
+
   return {
+    ...additions,
+    ...(data.roundTitle === undefined ? {} : { roundTitle: data.roundTitle as string }),
+    ...(data.subtitle === undefined ? {} : { subtitle: data.subtitle as string }),
+    ...(data.imageLayout === undefined ? {} : { imageLayout: data.imageLayout as string }),
+    ...(data.answerExplanation === undefined ? {} : { answerExplanation: data.answerExplanation as string }),
     sessionId: data.sessionId,
     quizTitle: data.quizTitle,
     status: data.status,
@@ -169,6 +204,15 @@ export function parsePublicLiveState(value: unknown): PublicLiveState | undefine
 
 export function sanitizedChannelState(state: PublicLiveState): PublicLiveState {
   const candidate = {
+    ...(state.design === undefined ? {} : { design: state.design }),
+    ...(state.roundTitle === undefined ? {} : { roundTitle: state.roundTitle }),
+    ...(state.subtitle === undefined ? {} : { subtitle: state.subtitle }),
+    ...(state.imageLayout === undefined ? {} : { imageLayout: state.imageLayout }),
+    ...(state.answerExplanation === undefined ? {} : { answerExplanation: state.answerExplanation }),
+    ...(state.interimResults === undefined ? {} : { interimResults: state.interimResults }),
+    ...(state.finalReveal === undefined ? {} : { finalReveal: state.finalReveal }),
+    ...(state.interimBackdrop === undefined ? {} : { interimBackdrop: state.interimBackdrop }),
+    ...(state.showCue === undefined ? {} : { showCue: state.showCue }),
     sessionId: state.sessionId, quizTitle: state.quizTitle, status: state.status, slidePosition: state.slidePosition,
     ...(state.slideKind === undefined ? {} : { slideKind: state.slideKind }),
     ...(state.title === undefined ? {} : { title: state.title }),
@@ -252,7 +296,7 @@ export function isProjectorChannelMessage(value: unknown): value is ProjectorCha
 }
 
 export function projectorPresentationAuthority(state: PublicLiveState): ProjectorPresentationAuthority {
-  return state.answerRevealed
+  return state.interimResults || state.finalReveal || state.showCue || state.interimBackdrop || state.answerRevealed
     || state.revealedAnswer !== undefined
     || state.answerImage !== undefined
     ? 'authoritative-only'

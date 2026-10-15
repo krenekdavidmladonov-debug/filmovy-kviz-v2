@@ -2,8 +2,7 @@ import { Link } from 'react-router-dom';
 import { visibleSlidePosition } from '@filmovy-kviz/quiz-domain';
 
 import { SlideRenderer } from '../presentation/SlideRenderer';
-import { ResultsTable } from '../leaderboard/ResultsTable';
-import { FinalRevealView } from '../final-reveal/FinalRevealView';
+import { ShowModeRenderer } from '../show-mode/ShowModeRenderer';
 import '../events/event-navigation.css';
 import { MediaPlayer } from '../presentation/MediaPlayer';
 import { HumanError, type HumanErrorValue } from '../../ui/HumanError';
@@ -21,7 +20,7 @@ import {
 } from './livePresentation';
 import type { LiveControlSlide, LiveControlState, PublicLiveState } from './types';
 
-export type LivePendingAction = 'previous' | 'next' | 'intro' | 'recap' | 'reveal' | 'hide' | 'play' | 'stop' | 'replay' | 'end';
+export type LivePendingAction = 'previous' | 'next' | 'intro' | 'recap' | 'reveal' | 'hide' | 'play' | 'stop' | 'replay' | 'end' | 'show';
 
 interface LiveModeratorViewProps {
   readonly session: LiveControlState;
@@ -33,6 +32,7 @@ interface LiveModeratorViewProps {
   readonly pendingAction: LivePendingAction | null;
   readonly error: HumanErrorValue | null;
   readonly projectorOpened: boolean;
+  readonly audioSuppressed?: boolean;
   readonly onOpenProjector: () => void;
   readonly onPrevious: () => void;
   readonly onNext: () => void;
@@ -69,6 +69,7 @@ export function LiveModeratorView({
   pendingAction,
   error,
   projectorOpened,
+  audioSuppressed = false,
   onOpenProjector,
   onPrevious,
   onNext,
@@ -203,7 +204,7 @@ export function LiveModeratorView({
                 <button className="secondary-button" type="button" disabled={pending || ended} onClick={onReplay}>{pendingLabel(pendingAction, 'replay', 'Pustit znovu')}</button>
               </div>
               <p className="youtube-limitation">Při přehrávání z YouTube se mohou zobrazit jeho vlastní prvky.</p>
-              {isAudioSlide(presentedSlide) && session.presentationMode === 'slide' && (
+              {isAudioSlide(presentedSlide) && session.presentationMode === 'slide' && !audioSuppressed && (
                 <MediaPlayer
                   source={source}
                   command={session.mediaCommand}
@@ -246,9 +247,8 @@ export function LiveModeratorView({
               <div className="live-preview-message"><h2>Projektor čeká</h2><p>Tlačítkem Další zobrazíte první obsah.</p></div>
             ) : ended ? (
               <div className="live-preview-message"><h2>Kvíz byl ukončen</h2><p>Projektor zobrazuje závěrečný stav.</p></div>
-            ) : publicState?.finalReveal ? <FinalRevealView {...publicState.finalReveal} template={{ title: publicState.title, subtitle: publicState.subtitle, design: publicState.design }} mediaSessionId={session.sessionId} />
-            : publicState?.interimResults ? <ResultsTable {...publicState.interimResults} template={{ title: publicState.title, subtitle: publicState.subtitle, design: publicState.design }} mediaSessionId={session.sessionId} />
-            : publicState ? (
+            ) : publicState ? (
+              <ShowModeRenderer state={publicState}>
               <SlideRenderer
                 compact
                 mediaSessionId={session.sessionId}
@@ -262,6 +262,7 @@ export function LiveModeratorView({
                   text: publicState.text ?? '',
                 }}
               />
+              </ShowModeRenderer>
             ) : (
               <div className="live-preview-message" aria-live="polite"><p>Načítám obsah…</p></div>
             )}

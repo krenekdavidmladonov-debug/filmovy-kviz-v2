@@ -5,9 +5,12 @@ import { getFirebaseServices } from '../../services/firebase/client';
 import type { LiveControlState } from '../live/types';
 import type { ResultsPreview } from './types';
 import { ResultsTable } from './ResultsTable';
+import { useShowCommands, type RevisionedResult } from '../live/ShowCommandContext';
 export function InterimResultsPanel({ session }: {
     session: LiveControlState;
 }) {
+    const show = useShowCommands();
+    const previewSize = show?.enabled ? 6 : 8;
     const [rounds, setRounds] = useState<{
         id: string;
         title: string;
@@ -47,22 +50,30 @@ export function InterimResultsPanel({ session }: {
             setPending(false);
         }
     }
-    async function control(action: 'publish' | 'hide' | 'page', page?: number) {
-        if (busy.current)
+    async function control(action: 'publish' | 'hide' | 'page' | 'static', page?: number) {
+        if (busy.current || show?.busy)
             return;
+        const audioTicket = action === 'publish' && show?.enabled ? show.prepareAudio() : undefined;
+        if (action === 'hide') show?.stopAudio();
         busy.current = true;
         setPending(true);
         setError('');
         const content = { eventId: session.eventId, sessionId: session.sessionId, action, expectedRevision: action === 'publish' ? preview!.sessionRevision : session.revision,
-            ...(action === 'publish' ? { throughRoundId: preview!.throughRoundId, sourceFingerprint: preview!.sourceFingerprint } : action === 'page' ? { page } : {}) };
+            ...(action === 'publish' ? { throughRoundId: preview!.throughRoundId, sourceFingerprint: preview!.sourceFingerprint, ...(show?.enabled ? { presentationStyle: 'show' } : {}) } : action === 'page' ? { page } : {}) };
         const previous = retry.current;
         const request = previous && Object.entries(content).every(([k, v]) => previous[k] === v) ? previous : { ...content, requestId: crypto.randomUUID() };
         retry.current = request;
         try {
-            await httpsCallable(getFirebaseServices().functions, 'controlInterimResults')(request);
+            const invoke = async (_current: LiveControlState, revision: number) => {
+                if (action !== 'publish' && request !== previous) request.expectedRevision = revision;
+                return (await httpsCallable<unknown, RevisionedResult & { returnRestored?: boolean }>(getFirebaseServices().functions, 'controlInterimResults')(request)).data;
+            };
+            const response = show ? await show.execute(invoke) : await invoke(session, session.revision);
             retry.current = null;
             if (action === 'publish')
                 setPreview(null);
+            if (action === 'publish' && audioTicket !== undefined && !response.replayed) void show?.playAudio('interim', response, audioTicket);
+            if (action === 'hide' && response.returnRestored === false) setError('Výsledky jsou skryté. Původní odpověď nelze s aktuálním oprávněním obnovit.');
         }
         catch (e) {
             const code = (e as {
@@ -82,14 +93,15 @@ export function InterimResultsPanel({ session }: {
         }
     }
     const published = session.interimResults, ended = session.status === 'ended' || session.finalReveal?.visible === true;
+    const disabled = pending || show?.busy === true;
     return <section className="interim-panel" aria-label="Ovládání průběžných výsledků"><h2>Průběžné výsledky</h2>
     <p>{published ? `Zveřejněná verze ${published.versionId.slice(0, 8)} · po ${published.roundNumber}. kole · strana ${published.page + 1}/${published.pageCount}` : 'Výsledky nejsou na projektoru zobrazené.'}</p>
-    {rounds.length === 1 ? <p>Jednokolová akce nemá průběžné výsledky mezi koly.</p> : <><label className="form-field"><span>Výsledky po kole</span><select value={roundId} disabled={pending || ended} onChange={e => { setRoundId(e.target.value); setPreview(null); retry.current = null; }}>{rounds.slice(0, -1).map((r, i) => <option key={r.id} value={r.id}>{i + 1}. kolo — {r.title}</option>)}</select></label><p>Poslední kolo je součástí finálního vyhlášení.</p><button className="secondary-button" disabled={!roundId || pending || ended} onClick={() => void loadPreview()}>Načíst náhled výsledků</button></>}
+    {rounds.length === 1 ? <p>Jednokolová akce nemá průběžné výsledky mezi koly.</p> : <><label className="form-field"><span>Výsledky po kole</span><select value={roundId} disabled={disabled || ended} onChange={e => { setRoundId(e.target.value); setPreview(null); retry.current = null; }}>{rounds.slice(0, -1).map((r, i) => <option key={r.id} value={r.id}>{i + 1}. kolo — {r.title}</option>)}</select></label><p>Poslední kolo je součástí finálního vyhlášení.</p><button className="secondary-button" disabled={!roundId || disabled || ended} onClick={() => void loadPreview()}>Načíst náhled výsledků</button></>}
     {error && <p role="alert">{error}</p>}
     {preview && <section aria-label="Interní náhled výsledků"><h3>Interní náhled — zatím nezveřejněno</h3><p>Zahrnutá kola: {preview.includedRounds.map(r => r.title).join(', ')}</p>
-      {!preview.complete ? <><p role="alert">Zveřejnění je zablokované: {preview.rows.length === 0 ? 'žádné přijaté týmy.' : 'chybějí body.'}</p><ul>{preview.missing.map(m => <li key={m.teamId + ':' + m.roundId}>{m.teamName} — {m.roundTitle}: nezadáno</li>)}</ul></> : <><div className="results-frame"><ResultsTable roundNumber={preview.roundNumber} page={previewPage} pageCount={Math.ceil(preview.rows.length / 8)} rows={preview.rows.slice(previewPage * 8, (previewPage + 1) * 8)}/></div><div className="interim-actions"><button disabled={previewPage === 0} onClick={() => setPreviewPage(p => p - 1)}>Předchozí stránka náhledu</button><button disabled={(previewPage + 1) * 8 >= preview.rows.length} onClick={() => setPreviewPage(p => p + 1)}>Další stránka náhledu</button></div></>}
-      <button className="primary-button" disabled={!preview.complete || pending || session.status !== 'active'} onClick={() => void control('publish')}>{published ? 'Aktualizovat zobrazené výsledky' : 'Zobrazit výsledky'}</button>{session.status === 'waiting' && <p>Nejprve spusťte prezentaci tlačítkem Další.</p>}
+      {!preview.complete ? <><p role="alert">Zveřejnění je zablokované: {preview.rows.length === 0 ? 'žádné přijaté týmy.' : 'chybějí body.'}</p><ul>{preview.missing.map(m => <li key={m.teamId + ':' + m.roundId}>{m.teamName} — {m.roundTitle}: nezadáno</li>)}</ul></> : <><div className="results-frame"><ResultsTable roundNumber={preview.roundNumber} page={previewPage} pageCount={Math.ceil(preview.rows.length / previewSize)} rows={preview.rows.slice(previewPage * previewSize, (previewPage + 1) * previewSize)}/></div><div className="interim-actions"><button disabled={previewPage === 0} onClick={() => setPreviewPage(p => p - 1)}>Předchozí stránka náhledu</button><button disabled={(previewPage + 1) * previewSize >= preview.rows.length} onClick={() => setPreviewPage(p => p + 1)}>Další stránka náhledu</button></div></>}
+      <button className="primary-button" disabled={!preview.complete || disabled || session.status !== 'active'} onClick={() => void control('publish')}>{published ? 'Aktualizovat zobrazené výsledky' : 'Zobrazit výsledky'}</button>{session.status === 'waiting' && <p>Nejprve spusťte prezentaci tlačítkem Další.</p>}
     </section>}
-    {published && <div className="interim-actions"><button disabled={pending || ended || published.page === 0} onClick={() => void control('page', published.page - 1)}>Předchozí stránka projektoru</button><button disabled={pending || ended || published.page + 1 >= published.pageCount} onClick={() => void control('page', published.page + 1)}>Další stránka projektoru</button><button className="secondary-button" disabled={pending || ended} onClick={() => void control('hide')}>Skrýt výsledky a vrátit prezentaci</button></div>}
+    {published && <div className="interim-actions">{published.presentationStyle === 'show' && <button className="secondary-button" disabled={disabled || ended} onClick={() => void control('static')}>Přeskočit animaci / statický obraz</button>}<button disabled={disabled || ended || published.page === 0} onClick={() => void control('page', published.page - 1)}>Předchozí stránka projektoru</button><button disabled={disabled || ended || published.page + 1 >= published.pageCount} onClick={() => void control('page', published.page + 1)}>Další stránka projektoru</button><button className="secondary-button" disabled={disabled || ended} onClick={() => void control('hide')}>Skrýt výsledky a vrátit prezentaci</button></div>}
   </section>;
 }
