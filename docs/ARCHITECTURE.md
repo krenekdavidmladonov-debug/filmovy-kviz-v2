@@ -109,6 +109,21 @@ Event-bound moderation and explicitly reviewed cumulative result versions use th
 
 Final reveal extends the same event-bound live session with private immutable finalVersions, revisioned finalOperations and an explicitly revealed public page. Staff confirmation, corrections, closure and moderator-only synthetic sound are documented in [FINAL_REVEAL.md](FINAL_REVEAL.md). No Rules, indexes or cloud data change is required by this implementation.
 
+Show Mode extends these same confirmed-result transactions and public session
+allowlist; it does not create another score or ranking source. New show versions
+use six-row server pages, while missing historical pagination metadata continues
+to mean classic eight-row pages. Interim entry captures a private return intent
+and publishes an answer-free static slide backdrop; hide reconstructs the previous
+explicit answer/recap from the same authoritative snapshot only with current
+answer permission, always with media stopped and a new generation. Final lower-rank
+bulk reveal and separately paged revealed history contain only explicitly released
+groups. Server cue metadata authorizes visual presentation, never future rows or
+client-driven navigation. Event-scoped show preferences/audio bindings and a narrow
+authenticated media gateway let moderators play linked owned MP3/WAV locally.
+The integrated moderator queue serializes live and result commands. Details and
+verification are in [SHOW_MODE_IMPLEMENTATION.md](SHOW_MODE_IMPLEMENTATION.md);
+the deployment inventory is a local plan, not deployment authorization.
+
 ## Event organizational email
 
 Admin-only preview/confirmation creates an immutable emailCampaigns record and recipient snapshots in the existing emailIntents outbox. The shared task worker delivers plain-text organizational messages without management capabilities or changes to registration confirmation status. All client campaign/intent access remains denied; safe history and status are exposed only through fresh-admin callables. Atomic recipient limits, snapshot/idempotence contracts and offline tests: [EVENT_TEAM_EMAIL.md](EVENT_TEAM_EMAIL.md).

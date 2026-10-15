@@ -1,11 +1,13 @@
-# Show Mode — návrh kontraktu, fáze 1
+# Show Mode — schválený a lokálně implementovaný kontrakt
 
-Stav: návrh k vizuálnímu rozhodnutí vlastníka, nikoli implementace nebo souhlas
-s nasazením. Podklad: `be81596`, větev `codex/show-mode-design-review`.
-Ve fázi 1 se mění pouze návrhové dokumenty a syntetický vizuální prototyp.
-Implementace následuje až po schválení tří povinných obrazovek jednoho
-vizuálního směru: mezivýsledky, běžné finální umístění a vítězové.
-Nejde o výběr jedné ze tří alternativ.
+Stav: vlastník schválil všechny tři povinné obrazovky společného směru
+(mezivýsledky, běžné finální umístění a vítězové) a následnou plnou lokální
+implementaci včetně audia, synchronizace a testů. Nejde o výběr alternativ.
+Implementační větev je `codex/show-mode-implementation`, základ `9404e1c`.
+Původní návrhové odkazy na řádky níže popisují výchozí stav `be81596`;
+aktuální zdroj a ověření shrnuje [SHOW_MODE_IMPLEMENTATION.md](SHOW_MODE_IMPLEMENTATION.md).
+Souhlas s lokální implementací **není souhlas s deploymentem ani cloudovým
+čtením/zápisem**. Návrhové formulace dále vyjadřují schválený kontrakt.
 
 ## Co už existuje a musí zůstat jedinou autoritou
 
@@ -112,8 +114,10 @@ na právě zveřejněné stránce.
 `controlInterimResults` publish a `controlFinalReveal` start/replace přijmou
 volitelný enum `presentationStyle: 'classic' | 'show'`; nepřítomnost znamená
 classic. Server z něj odvodí pageSize, zahrne styl do command fingerprintu
-a uloží `presentationStyle` a `pageSize` do nové immutable výsledkové verze,
-private session pointeru a veřejného výsledkového payloadu. Výpočet skóre
+a uloží `presentationStyle` a `pageSize` do nové immutable výsledkové verze
+a private session pointeru. Veřejný show payload nese explicitní show/6;
+veřejný classic payload obě pole vynechá a nadále znamená classic/8, aby jej
+mohl číst i starý striktní projektor. Výpočet skóre
 a sourceFingerprint tím nejsou změněny. Klient nemůže poslat libovolné číslo.
 
 Při čtení všech starých verzí, pointerů a payloadů je chybějící pageSize vždy
@@ -142,9 +146,10 @@ Dokončení animace ani skladby nesmí odhalit další tým nebo ukončit sessio
 K aktuální výsledkové publikaci přibude volitelné
 `showCue: { id, kind, motion, startedAt, durationMs }`.
 `id` a čas vytvoří server; `kind` je bounded enum `interim | lower | third |
-second | winners | final-intro`, `motion` je `animate | static` a durationMs je
+second | winners | final-intro | reveal`, `motion` je `animate | static` a durationMs je
 validovaný krátký limit konkrétního návrhu. ID odkazuje na prezentační krok,
-nikoli na tým. Neobsahuje audio reference. Při stránkování se zvuk nespouští.
+nikoli na tým. Cue dále nese pouze vizuální `intensity: none | subtle | show`,
+`topThree` a `winnerAnimation`; neobsahuje audio reference. Při stránkování se zvuk nespouští.
 Animation settings jednoho již publikovaného kroku se zpětně nemění úpravou
 event defaults.
 
@@ -199,16 +204,20 @@ Navržené privátní `events/{eventId}.showPreferences`:
 ```ts
 {
   schemaVersion: 1,
-  motion: 'full' | 'reduced' | 'none',
+  motion: 'none' | 'subtle' | 'show',
   lowerRanks: 'step' | 'bulk',
+  topThree: boolean, winnerAnimation: boolean, audioEnabled: boolean,
   volume: number, fadeInMs: number, fadeOutMs: number,
-  cues: { interim?: string, lower?: string, third?: string,
-          second?: string, winners?: string }
+  cues: { intro?: string, interim?: string, suspense?: string,
+          reveal?: string, winner?: string }
 }
 ```
 
-Pět slotů znamená mezivýsledky, nižší umístění, 3. místo, 2. místo, vítězové.
-Finální úvod je standardně tichý. Zdroj je pouze existující ready vlastněný
+Pět slotů znamená intro, mezivýsledky, napětí, odhalení a vítěznou skladbu.
+Nejde o samostatné skladby pro třetí/druhé místo. Výchozí nastavení je subtle,
+step, topThree true, winnerAnimation true, audioEnabled false, volume 0,25,
+fade-in 300 ms a fade-out 500 ms; volume je 0..1 a obě fade hodnoty 0..2000 ms.
+Finální úvod je bez přiřazené a povolené skladby tichý. Zdroj je pouze existující ready vlastněný
 `quiz-asset:` s kind audio, MP3/WAV, validní generation, MIME/size/signature;
 stejný soubor lze vybrat vícekrát. Žádný výchozí soubor nepředstíráme jako
 nahraný/připravený. Prázdný slot je platný tichý režim. Vzhled zůstává děděný
@@ -219,8 +228,10 @@ localStorage, a neovlivňují již potvrzené výsledkové řádky.
 Navržený nový `configureEventShow({ eventId, expectedRevision, preferences })`
 použije event revision, serverovou validaci a transakci jako updateEvent.
 Vyžaduje `event.live` + scope a operational event; připojení nové audio
-reference navíc vyžaduje aktuální `quiz.read` + scope zdrojového kvízu a stejnou
-viditelnost assetu jako dnešní `mediaAssets` privátní read. Již schválené sloty
+reference navíc vyžaduje aktuální `quiz.read` + scope zdrojového kvízu a ověřenou
+viditelnost assetu: veřejná otázková role v privátním zdroji, vlastní upload
+s `quiz.media.upload`, nebo `quiz.answers.read`; privátní answer role vždy
+vyžaduje `quiz.answers.read`. Již schválené sloty
 může event-only moderátor používat a měnit jejich hlasitost/pohyb bez čtení
 celé knihovny. Nový upload používá pouze existující grant protocol s odděleným
 `quiz.media.upload`; `event.live` upload právo nenahrazuje. Kdo knihovnu nemůže
@@ -234,9 +245,12 @@ Picker `mediaApi.ts:8` také prochází privátní quiz oprávnění a redakci
 (`functions/src/access/reads.ts:89`). Samotný event.read není univerzální
 čtení libovolného quiz assetu a starý snapshot se kvůli zvuku nesmí přepsat.
 
-Proto návrh obsahuje úzké rozšíření autentizovaného `readQuizMedia` o vzájemně
+Implementace obsahuje úzké rozšíření autentizovaného `readQuizMedia` o vzájemně
 výlučný `eventId` kontext: fresh Auth, aktuální `event.live` + event scope,
 operational event a **přesná reference v právě uložených showPreferences.cues**.
+Privátní `showAudioBindings` navíc připíná reference a generation konkrétního
+ověřeného assetu; jeho MIME a velikost se kontrolují při přiřazení i čtení.
+Pouhý řetězec v cue není dostatečným audio grantem.
 Read zkontroluje ready audio a pinned generation a po IO znovu membership,
 event a připojení reference. Je to eventem přidělený zvukový přístup, ne grant
 na zdrojový kvíz ani anonymní audio. Odebrání slotu/revokace ukončí nový read;
@@ -313,7 +327,8 @@ static/hide během animace/decode, offline/reconnect bez zvuku, dva panely,
 společný limit playerů a event-only media access včetně odebrání slotu během IO.
 Ověřit anonymní payloady i skutečné HTTP bajty, ne pouze DOM/screenshot.
 
-Tato fáze tyto změny ani testy nespouští. Neproběhl deploy, cloudové čtení,
-změna dat nebo poslech na fyzickém výstupu. Pozdější implementace a samostatně
-schválené nasazení musí mít konkrétní zdrojovou verzi a inventář všech změněných
-exportů, včetně starých callables s novým parserem/lifecycle.
+Lokální implementace a testy jsou rozpracované/ověřované podle evidence
+v SHOW_MODE_IMPLEMENTATION.md. Neproběhl deploy, cloudové čtení/zápis ani
+poslech na fyzickém výstupu. Budoucí samostatně schválené nasazení musí určit
+konkrétní zdrojovou verzi a celý inventář změněných exportů, včetně starých
+callables s novým parserem/lifecycle; lokální manifest tento souhlas neuděluje.

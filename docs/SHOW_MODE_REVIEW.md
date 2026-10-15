@@ -1,5 +1,9 @@
 # JustKvíz SHOW MODE — návrh ke schválení
 
+Následný stav: vlastník schválil všechny tři obrazovky a plnou lokální implementaci.
+Dokončení a nové důkazy vede [SHOW_MODE_RELEASE.md](SHOW_MODE_RELEASE.md). Níže je
+zachovaný záznam první návrhové fáze; její tehdejší čekání na souhlas již neplatí.
+
 Datum: 15. 10. 2026. Fáze 1: skutečný lokální React prototyp, technický kontrakt a QA návrh. Plná implementace do živé aplikace čeká na vlastníkem požadované schválení vizuálního směru.
 
 ## Ověřený základ

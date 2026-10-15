@@ -99,6 +99,18 @@ Implemented safe listing data: title, venue display/public location, start time/
 
 ### `publicSessions/{sessionId}`
 
+Show Mode adds optional `presentationStyle` and `pageSize` to confirmed result
+versions and their private pointers: show/6 or classic/8. Public show payloads
+carry explicit show/6; classic public payloads omit both fields to preserve old
+strict projector readers. Missing historical/public metadata means classic/8.
+Public final mode additionally accepts
+`lower`; optional final `history` is a separate six-row page of previously revealed
+groups only, excluding the current group. It is absent on intro/lower/table.
+Public `showCue` is bounded visual metadata (server ID/time/duration, kind, motion,
+intensity, podium/winner switches). `interimBackdrop` is an explicit static slide
+allowlist without answer, answer appearance or playback sources. These fields are
+removed on hide/end; no public result-version collection is introduced.
+
 Server-generated projector snapshot: `sessionId`, `status`, `quizTitle`, `slidePosition`, `presentationMode`, `renderMode`, moderator `mediaCommand`, confirmed `mediaPlaybackState`, monotonic `mediaGeneration`, `introGeneration`, `answerRevealed`, `revision`, and `updatedAt`. An active snapshot may add allowlisted `slideKind`, title, text, primitive options, normalized media roles, question numbering, overlay, and clip controls. A selected recap also publishes its non-sensitive `recapQuestionPosition` so transport validation can prove the answer belongs to an explicit selection. In normal AUDIO mode its source is deliberately omitted. `revealedAnswer` and optional answer image exist only for the single selected recap question or the retained compatibility reveal operation. Correct-answer source fields, moderator notes, `legacy`, `raw`, recap overrides, private references, and complete slide/question objects are forbidden.
 
 Anonymous clients may get one document when they already know its random session ID, but cannot list the collection or write any public state. Every state change replaces the whole public document in the same transaction as the private session update, removing stale reveal fields.
@@ -106,6 +118,29 @@ Anonymous clients may get one document when they already know its random session
 ### Confirmed interim results
 
 Event-bound sessions add private eventId/snapshotId and an interimResults version/page pointer. Private session child collections interimVersions and interimOperations hold immutable reviewed totals and idempotent audit receipts. The existing public session document contains only the currently published page of at most eight rank/teamName/halfPoints rows plus version/scope/page metadata. There is no public leaderboard subcollection. Hide/end/cancel/archive remove this payload. See [INTERIM_RESULTS.md](INTERIM_RESULTS.md).
+
+Show interim versions additionally store private `rowTeamIds` and `teamRanks`;
+session `lastInterimVersionId` retains the last confirmed comparison after hide.
+Only a numeric `movement` delta may cross the public row allowlist, and only when
+stable IDs exist in the prior confirmed version. Names and unconfirmed scores
+never substitute for stable identity. Six-row show pages coexist with legacy
+eight-row pages; the browser never truncates a server page.
+
+Private session `interimReturn` contains only snapshot/slide identity and position,
+presentationMode, prior explicit answerRevealed/recap selection and capturedRevision.
+It stores neither answer text nor playback state. It survives result page/version
+changes and is cleared on hide, navigation to final, END and event closure. A private
+`showCue` copy supports current-state verification without publishing future teams.
+
+Private `events/{eventId}.showPreferences` stores schemaVersion 1, visual motion,
+lowerRanks, topThree/winnerAnimation switches, audioEnabled, volume/fades and five
+optional owned asset references: intro/interim/suspense/reveal/winner. Private
+`showAudioBindings` pins each linked audio reference to its validated generation;
+MIME and size are validated against the ready asset on assignment and reads.
+Configuring these fields advances the existing event revision;
+neither field is copied to publicEvents or immutable question snapshots. New cue
+configuration and media reads use trusted Functions, never direct browser writes.
+See [SHOW_MODE_IMPLEMENTATION.md](SHOW_MODE_IMPLEMENTATION.md).
 
 ## Server-only registration flow
 

@@ -77,6 +77,29 @@ Interim result publication checks current Auth at invocation and rechecks active
 
 Final reveal extends the same event-bound live session with private immutable finalVersions, revisioned finalOperations and an explicitly revealed public page. Staff confirmation, corrections, closure and moderator-only synthetic sound are documented in [FINAL_REVEAL.md](FINAL_REVEAL.md). No Rules, indexes or cloud data change is required by this implementation.
 
+Show Mode retains these same result/version/revision boundaries. The interim
+backdrop is rebuilt by the server as a static allowlist without answer fields,
+answerDesign or audio/video sources. Private return intent cannot be supplied by
+the browser. Restoring a formerly explicit answer/recap rereads the same current
+snapshot binding and requires current `event.answers.read` in the transaction;
+revocation falls back to the ordinary slide while allowing an authorized event.live
+operator to hide results. It never resumes playback. Only explicitly revealed
+groups enter final lower/current/history pages, each bounded by its server pageSize.
+Stable team IDs used for movement stay private. Receipt replay neither changes
+the public document nor grants a showCue/winner sound attempt.
+
+`configureEventShow` and `readEventShowPreferences` require fresh Auth, active
+membership, `event.live` and event scope with transaction rechecks. Attaching a
+new owned audio reference additionally checks current source-quiz read scope and
+answer-media visibility. Upload permission remains a separate quiz grant. The
+authenticated eventId media gateway accepts only an exact currently attached
+MP3/WAV reference with matching pinned generation and validated MIME/size, and repeats current
+authorization/attachment checks after IO. Event scope grants no arbitrary source
+quiz or Storage access. Public gateway access is extended only to images actually
+present in the current sanitized interimBackdrop. Show audio references, bindings,
+contacts and future result rows never enter publicSessions/publicEvents.
+See [SHOW_MODE_IMPLEMENTATION.md](SHOW_MODE_IMPLEMENTATION.md).
+
 ## Event organizational email
 
 The organizational email source requires current Auth, active membership, `event.manage`, `event.contacts` and event scope for preview, confirmation and safe history/status callables. Confirmation creates an immutable emailCampaigns record and recipient snapshots in the existing emailIntents outbox. The worker source sends plain-text organizational messages without management capabilities or changes to registration confirmation status. All direct client campaign/intent access remains denied. These endpoints and the worker are excluded from the current restart release inventory; this describes their source authorization contract, not an activated cloud email service. Atomic recipient limits, snapshot/idempotence contracts and offline tests: [EVENT_TEAM_EMAIL.md](EVENT_TEAM_EMAIL.md).
