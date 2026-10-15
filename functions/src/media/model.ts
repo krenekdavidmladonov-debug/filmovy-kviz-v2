@@ -1,5 +1,5 @@
 import { HttpsError } from 'firebase-functions/v2/https';
-import { parseQuizAsset, validOwnedMedia, normalizeSlideDesign } from '@filmovy-kviz/quiz-domain';
+import { parseQuizAsset, validOwnedMedia, normalizeSlideDesign, parseInterimBackdrop } from '@filmovy-kviz/quiz-domain';
 import type { Transaction, Firestore } from 'firebase-admin/firestore';
 
 export const assetPath = (quizId: string, assetId: string) => 'quiz-assets/' + quizId + '/' + assetId + '/source';
@@ -34,6 +34,13 @@ export function publicMediaAllowed(publication: Record<string, unknown> | undefi
   if (!publication || publication.status !== 'active') return false;
   const design = normalizeSlideDesign(publication.design);
   if ((kind === undefined || kind === 'image') && [design.backgroundImage, design.logoImage].includes(reference)) return true;
+  if (publication.interimResults && publication.interimBackdrop && (kind === undefined || kind === 'image')) {
+    try {
+      const backdrop = parseInterimBackdrop(publication.interimBackdrop), appearance = normalizeSlideDesign(backdrop.design);
+      if ([appearance.backgroundImage, appearance.logoImage, backdrop.backgroundImage].includes(reference)) return true;
+      if (['image','picture','photo'].includes(backdrop.slideKind) && backdrop.questionImage === reference) return true;
+    } catch { return false; }
+  }
   if (publication.interimResults || publication.finalReveal) return false;
   return ((kind === undefined || kind === 'image') && publication.backgroundImage === reference)
     || ((kind === undefined || kind === 'image') && ['image','picture','photo'].includes(String(publication.slideKind)) && publication.questionImage === reference)

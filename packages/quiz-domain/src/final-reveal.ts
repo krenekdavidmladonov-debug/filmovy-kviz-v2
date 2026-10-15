@@ -1,16 +1,18 @@
-/** Public content is only one explicitly revealed page, never the private ranking. */
-export interface FinalRevealPage {
+import type { PublicResultRow, ResultPagination } from './show-mode.js';
+/** Public content is only explicitly revealed bounded pages, never the private ranking. */
+export interface FinalRevealPage extends ResultPagination {
   versionId: string;
-  mode: 'intro' | 'group' | 'table';
+  mode: 'intro' | 'lower' | 'group' | 'table';
   rank: number | null;
   page: number;
   pageCount: number;
   groupSize: number;
-  rows: { rank: number; teamName: string; halfPoints: number }[];
+  rows: PublicResultRow[];
+  history?: { page: number; pageCount: number; pageSize: 6; rows: PublicResultRow[] };
 }
 
 /** Private session pointer; immutable rows live in finalVersions. */
-export interface FinalRevealState {
+export interface FinalRevealState extends ResultPagination {
   versionId: string;
   visible: boolean;
   mode: FinalRevealPage['mode'];
@@ -19,4 +21,5 @@ export interface FinalRevealState {
   rank: number | null;
   page: number;
   pageCount: number;
+  historyPage?: number;
 }

@@ -66,7 +66,7 @@ function resourceId(value: unknown): string {
 const quizEdits = ['updateQuizMetadata', 'updateQuizSlide', 'createQuizSlide', 'duplicateQuizSlide', 'moveQuizSlide', 'updateQuizRound', 'reorderQuizQuestion', 'moveQuizQuestionToRound', 'duplicateQuizRound', 'moveQuizRound', 'createQuizRound'];
 const eventManagement = ['updateEvent', 'cancelEvent', 'archiveEvent', 'configureEventRegistration', 'adminCancelEventRegistration', 'adminAddEventTeam', 'adminUpdateEventTeam', 'listRefereeAccess'];
 const live = ['createLiveSession', 'endLiveSession', 'finishMedia', 'goToSlide', 'hideAnswer', 'nextSlide', 'playMedia', 'previousSlide', 'reportMediaPlayback', 'replayMedia', 'revealAnswer', 'selectRecapQuestion', 'startIntro', 'stopMedia'];
-const eventLive = ['createEventLiveSession', 'previewInterimResults', 'controlInterimResults', 'previewFinalResults', 'controlFinalReveal'];
+const eventLive = ['createEventLiveSession', 'previewInterimResults', 'controlInterimResults', 'previewFinalResults', 'controlFinalReveal', 'configureEventShow', 'readEventShowPreferences'];
 const email = ['previewEventTeamMessage', 'createEventTeamMessage', 'listEventTeamMessages', 'getEventTeamMessage'];
 /** Every legacy staff callable is enumerated here; unknown names fail closed. */
 export async function authorizeOperation(name: string, request: CallableRequest, tx?: Transaction): Promise<Membership> {

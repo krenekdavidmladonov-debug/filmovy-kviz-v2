@@ -4,6 +4,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: [
+      'tests/showModeServer.test.ts', 'tests/showModeDomain.test.ts',
+      'tests/showModePresentation.test.tsx', 'tests/showModePublicParser.test.ts',
+      'tests/showAudio.test.ts', 'tests/showAudioSecurity.test.ts', 'tests/showAudioPanel.test.tsx',
       'tests/slideDesignSecurity.test.ts',
       'tests/editorWorkingCopy.test.ts', 'tests/outlineMoves.test.ts',
       'tests/adminNavigation.test.tsx', 'tests/eventDetailLoading.test.tsx',

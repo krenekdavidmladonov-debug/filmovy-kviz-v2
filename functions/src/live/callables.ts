@@ -2,11 +2,12 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type DocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { accessActor, securedOnCall, runAccessTransaction } from '../access/authorization.js';
-import { canHideInfoSlide, resolveLegacySlideAppearance } from '@filmovy-kviz/quiz-domain';
+import { canHideInfoSlide, resolveLegacySlideAppearance, normalizeResultPagination, parseShowCue } from '@filmovy-kviz/quiz-domain';
 
 import { LiveSessionError } from './errors.js';
 import { buildPublicSessionState } from './publication.js';
 import { applyLiveSessionAction, applyMediaPlaybackReport } from './session-machine.js';
+import { parseInterimReturn } from './show-mode.js';
 import type {
   LiveMediaCommand,
   LiveMediaPlaybackState,
@@ -124,12 +125,17 @@ export function parseSession(snapshot: DocumentSnapshot): PrivateLiveSession {
   const currentSlideId = typeof data.currentSlideId === 'string' ? data.currentSlideId : undefined;
   const recapQuestionId = typeof data.recapQuestionId === 'string' ? data.recapQuestionId : undefined;
   const recapQuestionPosition = optionalInteger(data, 'recapQuestionPosition');
+  if (isObject(data.interimResults)) normalizeResultPagination(data.interimResults);
+  if (isObject(data.finalReveal)) normalizeResultPagination(data.finalReveal);
   return {
     sessionId: snapshot.id,
     ...(typeof data.eventId === "string" ? { eventId: data.eventId } : {}),
     ...(typeof data.snapshotId === "string" ? { snapshotId: data.snapshotId } : {}),
     ...(isObject(data.finalReveal) ? { finalReveal: data.finalReveal as unknown as NonNullable<PrivateLiveSession["finalReveal"]> } : {}),
     ...(isObject(data.interimResults) ? { interimResults: data.interimResults as unknown as NonNullable<PrivateLiveSession["interimResults"]> } : {}),
+    ...(data.interimReturn === undefined ? {} : { interimReturn: parseInterimReturn(data.interimReturn) }),
+    ...(typeof data.lastInterimVersionId === 'string' ? { lastInterimVersionId: data.lastInterimVersionId } : {}),
+    ...(data.showCue === undefined ? {} : { showCue: parseShowCue(data.showCue) }),
     quizId: requiredString(data, 'quizId', 'Live session'),
     quizTitle: requiredString(data, 'quizTitle', 'Live session'),
     slideCount: requiredNumber(data, 'slideCount', 'Live session'),

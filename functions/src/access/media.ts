@@ -3,6 +3,23 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { mapEditorSlide, parseQuizAsset, normalizeSlideDesign, normalizeResultTemplates, normalizePrintTemplate } from '@filmovy-kviz/quiz-domain';
 import { authorize, type AuthIdentity } from './authorization.js';
 import { slideView, snapshotResource } from './reads.js';
+import { assertEventOperational } from '../events/guards.js';
+import { eventShowAudioAllowed } from '../show-mode/audio-model.js';
+
+/** Event scope authorizes only an exact current linked ready generation, never arbitrary quiz audio. */
+export async function authorizeEventShowMedia(auth: AuthIdentity, eventId: string, reference: string): Promise<string> {
+  const parsed = parseQuizAsset(reference);
+  if (!parsed) throw new HttpsError('permission-denied', 'Médium není dostupné.');
+  const db = getFirestore();
+  return db.runTransaction(async tx => {
+    await authorize(auth, ['event.live'], { kind: 'event', id: eventId }, tx);
+    const event = (await tx.get(db.doc('events/' + eventId))).data();
+    assertEventOperational(event);
+    const asset = (await tx.get(db.doc(`quizzes/${parsed.quizId}/mediaAssets/${parsed.assetId}`))).data();
+    if (!eventShowAudioAllowed(event, reference, asset)) throw new HttpsError('permission-denied', 'Zvuk není přiřazený k této akci.');
+    return asset!.generation as string;
+  });
+}
 
 export async function authorizePrivateMedia(auth: AuthIdentity, reference: string, snapshotId?: string) {
   const parsed = parseQuizAsset(reference);

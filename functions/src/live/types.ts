@@ -8,7 +8,10 @@ export interface PrivateLiveSession {
   readonly sessionId: string;
   readonly eventId?: string;
   readonly snapshotId?: string;
-  readonly interimResults?: { versionId: string; roundNumber: number; page: number; pageCount: number };
+  readonly interimResults?: { versionId: string; roundNumber: number; page: number; pageCount: number } & import('@filmovy-kviz/quiz-domain').ResultPagination;
+  readonly interimReturn?: InterimReturn;
+  readonly lastInterimVersionId?: string;
+  readonly showCue?: import('@filmovy-kviz/quiz-domain').ShowCue;
   readonly finalReveal?: FinalRevealState;
   readonly quizId: string;
   readonly quizTitle: string;
@@ -31,6 +34,13 @@ export interface PrivateLiveSession {
   readonly startedAt: unknown;
   readonly endedAt: unknown;
   readonly updatedAt: unknown;
+}
+
+/** Server-captured intent only; never stores answer content or playback. */
+export interface InterimReturn {
+  snapshotId: string; slideId: string; slidePosition: number;
+  presentationMode: LivePresentationMode; answerRevealed: boolean;
+  recapQuestionId?: string; recapQuestionPosition?: number; capturedRevision: number;
 }
 
 export interface PrivateSlide {
