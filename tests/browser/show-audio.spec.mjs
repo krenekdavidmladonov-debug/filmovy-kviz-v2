@@ -130,8 +130,15 @@ test('fresh confirmed publication only; retry/reload/other panel stay silent; qu
     state = await f.session(); await f.admin.call('playMedia', { sessionId: f.sessionId, expectedRevision: state.revision });
     await expect.poll(async () => (await graph(page)).outputs).toBe(0);
     expect((await f.rawPublic()).mediaSource).toBeUndefined();
+    // Show output stops as soon as the remote command arrives, before the native
+    // question player finishes loading and commits its ready/playing reports.
+    // Wait for that actual playback before reading a revision for the SDK STOP.
+    await expect.poll(async () => (await f.session()).mediaPlaybackState).toBe('playing');
+    await expect(page.locator('.media-controls').getByRole('status')).toHaveText('Přehrává se');
     await f.admin.call('stopMedia', { sessionId: f.sessionId, expectedRevision: (await f.session()).revision });
-    await f.admin.call('controlFinalReveal', { eventId: f.eventId, sessionId: f.sessionId, action: 'start', requestId: randomUUID(), expectedRevision: (await f.session()).revision, versionId: null, sourceFingerprint: (await f.previewFinal()).sourceFingerprint });
+    await expect.poll(async () => (await f.session()).mediaPlaybackState).toBe('idle');
+    const finalPreview = await f.previewFinal();
+    await f.admin.call('controlFinalReveal', { eventId: f.eventId, sessionId: f.sessionId, action: 'start', requestId: randomUUID(), expectedRevision: (await f.session()).revision, versionId: null, sourceFingerprint: finalPreview.sourceFingerprint });
     expect((await graph(page)).outputs).toBe(0);
   } finally { await other?.close(); await f.dispose(); }
 });
