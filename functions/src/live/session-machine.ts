@@ -40,6 +40,10 @@ function withoutRecapSelection(session: PrivateLiveSession): PrivateLiveSession 
   void recapQuestionId;
   return clean;
 }
+function withoutShowState(session: PrivateLiveSession): PrivateLiveSession {
+  const { interimReturn, showCue, ...clean } = session; void interimReturn; void showCue;
+  return clean;
+}
 
 export function applyLiveSessionAction(
   session: PrivateLiveSession,
@@ -54,7 +58,7 @@ export function applyLiveSessionAction(
   const common = { revision: session.revision + 1, updatedAt: now, updatedBy: actorUid };
   if (action.type === 'end-session') {
     return {
-      ...withoutRecapSelection(session), ...(session.finalReveal ? { finalReveal: { ...session.finalReveal, visible: false } } : {}), ...common, status: 'ended', answerRevealed: false, presentationMode: 'slide',
+      ...withoutShowState(withoutRecapSelection(session)), ...(session.finalReveal ? { finalReveal: { ...session.finalReveal, visible: false } } : {}), ...common, status: 'ended', answerRevealed: false, presentationMode: 'slide',
       mediaCommand: 'idle', mediaPlaybackState: 'idle', mediaGeneration: session.mediaGeneration + 1, endedAt: now,
     };
   }
@@ -70,7 +74,7 @@ export function applyLiveSessionAction(
     }
     const recap = isRecapKind(slide.kind);
     return {
-      ...withoutRecapSelection(session),
+      ...withoutShowState(withoutRecapSelection(session)),
       ...common,
       status: 'active',
       currentSlidePosition: position,
@@ -108,9 +112,9 @@ export function applyLiveSessionAction(
     if (session.presentationMode !== 'slide' || !slide.isQuestion || displayAnswer(slide.correctAnswer, slide.kind) === undefined) {
       throw new LiveSessionError('failed-precondition', 'This slide has no displayable answer.');
     }
-    return { ...session, ...common, answerRevealed: true };
+    return { ...session, ...common, answerRevealed: true, mediaCommand: 'idle', mediaPlaybackState: 'idle', mediaGeneration: session.mediaGeneration + 1 };
   }
-  if (action.type === 'hide-answer') return { ...session, ...common, answerRevealed: false };
+  if (action.type === 'hide-answer') return { ...session, ...common, answerRevealed: false, mediaCommand: 'idle', mediaPlaybackState: 'idle', mediaGeneration: session.mediaGeneration + 1 };
   if (action.type === 'start-intro') {
     if (!isIntroKind(slide.kind) || session.presentationMode !== 'slide') {
       throw new LiveSessionError('failed-precondition', 'The current slide has no intro animation.');

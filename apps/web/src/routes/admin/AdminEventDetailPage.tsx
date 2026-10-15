@@ -5,7 +5,7 @@ import { EventLiveButton } from '../../features/leaderboard/EventLiveButton';
 import { RefereeAccessPanel } from '../../features/referee/RefereeAccessPanel';
 import { runQuizPreflight, type EditorQuiz, type PreflightResult } from '@filmovy-kviz/quiz-domain';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { useAuth } from '../../auth/AuthProvider';
 import {
@@ -48,6 +48,7 @@ function formValues(event: EventRecord): EventFormValues {
 
 export function AdminEventDetailPage() {
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const { eventId } = useParams<{ eventId: string }>();
   const { can, currentUser } = useAuth();
   const canChooseQuiz = can('event.manage') && can('quiz.read') && can('quiz.export') && can('quiz.answers.read') && can('quiz.notes.read');
@@ -67,6 +68,9 @@ export function AdminEventDetailPage() {
   const [conflict, setConflict] = useState(false);
   const [addingTeam, setAddingTeam] = useState(false);
   const [addedTeam, setAddedTeam] = useState<{ id: string; name: string } | null>(null);
+  const [libraryComparison, setLibraryComparison] = useState<{ eventId: string; quizId: string; revision: number } | null>(null);
+  const [checkingLibrary, setCheckingLibrary] = useState(false);
+  const [libraryComparisonError, setLibraryComparisonError] = useState(false);
   const loadVersion = useRef(0);
   const quizEditable = !loading && event?.id === eventId && event !== null && canChooseQuiz
     && eventOperational(event) && !event.liveSessionId && !event.scoring.started;
@@ -75,6 +79,7 @@ export function AdminEventDetailPage() {
     if (!eventId) return;
     const version = ++loadVersion.current;
     setLoading(true);
+    setCheckingLibrary(false);
     setError(null);
     try {
       const loadedEvent = await getEvent(eventId);
@@ -94,9 +99,15 @@ export function AdminEventDetailPage() {
   useEffect(() => {
     setEvent(null);
     setSelectedQuizId('');
+    setLibraryComparison(null);
+    setCheckingLibrary(false);
+    setLibraryComparisonError(false);
     void load();
     return () => { loadVersion.current++; };
   }, [load]);
+  useEffect(() => {
+    if (!loading && hash === '#event-quiz') document.getElementById('event-quiz')?.scrollIntoView({ block: 'start' });
+  }, [hash, loading]);
   useEffect(() => {
     let current = true;
     setQuizzes([]);
@@ -146,6 +157,8 @@ export function AdminEventDetailPage() {
   const admin = can('event.manage') && eventOperational(event);
   const hidden = ['trash', 'deleting'].includes(eventDisposition(event));
   const locked = event.quizAssignment;
+  const sourceRevision = locked && libraryComparison?.eventId === event.id && libraryComparison.quizId === locked.quizId
+    ? libraryComparison.revision : selectedQuiz?.id === locked?.quizId ? selectedQuiz?.revision : undefined;
   const lockDisabled = pending || !eventOperational(event) || Boolean(event.liveSessionId) || event.scoring.started || selectedQuiz === null || preflight === null
     || preflight.blockerCount > 0 || (preflight.warningCount > 0 && !acknowledgeWarnings);
   return (
@@ -162,6 +175,19 @@ export function AdminEventDetailPage() {
         for (const key of Object.keys(original) as (keyof EventFormValues)[]) { if (values[key] !== original[key]) { Object.assign(merged, { [key]: values[key] }); if (incoming[key] !== original[key] && incoming[key] !== values[key]) conflicting.push(key + ': na serveru „' + String(incoming[key]) + '“, váš návrh „' + String(values[key]) + '“'); } }
         setValues(merged); setEvent(latest); setConflict(false); setNotice(conflicting.length ? 'Před uložením potvrďte svůj návrh u shodně změněných polí: ' + conflicting.join('; ') : 'Vaše změny byly přeneseny do aktuální verze. Ostatní novější údaje zůstaly zachované. Zkontrolujte formulář a uložte.'); setError(null);  } }); }}>Načíst aktuální stav a ponechat formulář</button></section>}
       {notice && <p className="event-notice" role="status">{notice}</p>}
+
+      <section className="event-section event-evening-summary" aria-label="Příprava večera">
+        <dl>
+          <div><dt>Termín</dt><dd>{new Intl.DateTimeFormat('cs-CZ', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Prague' }).format(event.startsAt)}</dd></div>
+          <div><dt>Kvíz pro tuto akci</dt><dd>{locked ? `${locked.quizTitle} · verze ${locked.quizRevision}` : 'Zatím nevybrán'}</dd></div>
+          <div><dt>Týmy</dt><dd>{event.acceptedTeams} / {event.teamCapacity}</dd></div>
+          <div><dt>Registrace</dt><dd>{{ scheduled: 'Otevřou se později', open: 'Otevřené', paused: 'Pozastavené', full: 'Naplněno', closed: 'Uzavřené' }[event.registrationStatus]}</dd></div>
+        </dl>
+        {!hidden && (event.lifecycleStatus === 'completed' ? <Link className="primary-button" to={`/admin/events/${event.id}/results`}>Zobrazit výsledky</Link>
+          : locked && eventOperational(event) && can('event.live') && ['ready', 'live', 'finalizing'].includes(event.lifecycleStatus)
+            ? <EventLiveButton eventId={event.id} revision={event.revision} />
+            : <a className="primary-button" href="#event-quiz">Dokončit přípravu</a>)}
+      </section>
 
       {!hidden && can('event.read') && event.lifecycleStatus === 'completed' && <section className="event-section">
         <div className="event-section-heading"><div><p className="eyebrow">Dokončená akce</p><h2>Konečné výsledky</h2></div></div>
@@ -191,9 +217,22 @@ export function AdminEventDetailPage() {
         )}
       </section>
 
-      <section className="event-section" data-testid="event-quiz-assignment">
+      <section className="event-section" id="event-quiz" data-testid="event-quiz-assignment">
         <div className="event-section-heading"><div><p className="eyebrow">Kvíz</p><h2>{locked ? 'Kvíz připraven' : 'Vybrat kvíz'}</h2></div>{locked && <span>Zdrojová revize {locked.quizRevision}</span>}</div>
-        {locked && <div className="event-locked-quiz"><strong>{locked.quizTitle}</strong><span>{locked.roundCount} kol · {locked.questionCount} otázek</span><small>Snapshot je privátní a nemění se při dalších úpravách zdrojového kvízu.</small></div>}
+        {locked && <div className="event-locked-quiz"><strong>{locked.quizTitle}</strong><span>{locked.roundCount} kol · {locked.questionCount} otázek</span><small>Hraje se připravená verze {locked.quizRevision}. Další úpravy v knihovně ji nezmění.</small>
+          {sourceRevision !== undefined ? <p role="status">{sourceRevision > locked.quizRevision ? `V knihovně je novější verze ${sourceRevision}. Tato akce stále používá připravenou verzi ${locked.quizRevision}.` : 'Připravená verze odpovídá naposledy ověřené verzi v knihovně.'}</p> : <p>Novější změny v knihovně zatím nejsou ověřené.</p>}
+          {canChooseQuiz && <button className="secondary-button" type="button" disabled={checkingLibrary} onClick={() => {
+            const version = loadVersion.current;
+            setCheckingLibrary(true); setLibraryComparisonError(false);
+            void getEditorQuiz(locked.quizId).then(quiz => {
+              if (version !== loadVersion.current) return;
+              if (quiz) setLibraryComparison({ eventId: event.id, quizId: quiz.id, revision: quiz.revision });
+              else setLibraryComparisonError(true);
+            }).catch(() => { if (version === loadVersion.current) setLibraryComparisonError(true); })
+              .finally(() => { if (version === loadVersion.current) setCheckingLibrary(false); });
+          }}>{checkingLibrary ? 'Ověřuji knihovnu…' : 'Ověřit novější změny v knihovně'}</button>}
+          {libraryComparisonError && <p role="status">Zdrojový kvíz se nepodařilo ověřit. Připravená verze akce zůstává beze změny.</p>}
+        </div>}
         {quizEditable ? (
           <div className="event-quiz-lock">
             {quizzesLoading && <p role="status">Načítám nabídku kvízů…</p>}
@@ -214,7 +253,6 @@ export function AdminEventDetailPage() {
         {!hidden && can('event.export') && <Link className="secondary-link" to={`/admin/events/${event.id}/print`}>Otevřít tiskové centrum</Link>}
       </section>
 
-      {eventOperational(event) && can('event.live') && locked && ['ready', 'live', 'finalizing'].includes(event.lifecycleStatus) && <EventLiveButton eventId={event.id} revision={event.revision} />}
       {admin && !['archived', 'cancelled', 'completed'].includes(event.lifecycleStatus) && <RefereeAccessPanel eventId={event.id} canIssue={can('event.score')} />}
 
     </article>

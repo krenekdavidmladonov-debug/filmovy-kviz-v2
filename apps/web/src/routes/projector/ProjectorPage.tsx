@@ -1,6 +1,5 @@
 import { Brand } from '../../ui/Brand';
-import { FinalRevealView } from '../../features/final-reveal/FinalRevealView';
-import { ResultsTable } from '../../features/leaderboard/ResultsTable';
+import { ShowModeRenderer } from '../../features/show-mode/ShowModeRenderer';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
@@ -31,9 +30,8 @@ function ProjectorState({ state, onMediaFinished, onMediaPlaybackState }: {
 }) {
   if (state.status === 'waiting') return <ProjectorMessage quizTitle={state.quizTitle} title="Čekáme na první slide" text="Moderátor kvíz připravuje." />;
   if (state.status === 'ended') return <ProjectorMessage quizTitle={state.quizTitle} title="Kvíz skončil" text="Děkujeme za účast." />;
-  if (state.finalReveal) return <div className="results-frame" data-version-id={state.finalReveal.versionId}><FinalRevealView {...state.finalReveal} /></div>;
-  if (state.interimResults) return <div className="results-frame" data-version-id={state.interimResults.versionId}><ResultsTable {...state.interimResults} /></div>;
   return (
+    <ShowModeRenderer state={state}>
     <SlideRenderer
       mediaSessionId={state.sessionId}
       quizTitle={state.quizTitle}
@@ -45,6 +43,8 @@ function ProjectorState({ state, onMediaFinished, onMediaPlaybackState }: {
       onMediaFinished={onMediaFinished}
       onMediaPlaybackState={(generation, playbackState) => onMediaPlaybackState(generation, playbackState)}
       slide={{
+        ...(state.design === undefined ? {} : { design: state.design }),
+        ...(state.roundTitle === undefined ? {} : { roundTitle: state.roundTitle }),
         kind: state.slideKind ?? 'legacy', title: state.title ?? '', text: state.text ?? '',
         options: state.options, media: state.media, presentation: state.presentation,
         ...(state.questionNumber === undefined ? {} : { questionNumber: state.questionNumber }),
@@ -61,6 +61,7 @@ function ProjectorState({ state, onMediaFinished, onMediaPlaybackState }: {
         ...(state.revealedAnswer === undefined ? {} : { revealedAnswer: state.revealedAnswer }),
       }}
     />
+    </ShowModeRenderer>
   );
 }
 

@@ -1,11 +1,14 @@
-import { accessActor, securedOnCall, runAccessTransaction } from '../access/authorization.js';
+import { accessActor, securedOnCall, runAccessTransaction, currentMembership } from '../access/authorization.js';
 import { getFirestore, Timestamp, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { authorizeStaff, parseSession, loadSlide } from '../live/callables.js';
-import { buildPublicSessionState } from '../live/publication.js';
+import { buildPublicSessionState, publicResultTemplate } from '../live/publication.js';
 import { applyLiveSessionAction } from '../live/session-machine.js';
 import type { PrivateLiveSession } from '../live/types.js';
-import { calculateResults, calculateFinalResults, fingerprint, RESULTS_PAGE_SIZE, type ResultRow } from './model.js';
+import { calculateResults, calculateFinalResults, fingerprint } from './model.js';
+import { normalizeResultPagination, resultPagination, type PublicResultRow, type ShowCue } from '@filmovy-kviz/quiz-domain';
+import { attachResultMovement, captureInterimReturn, makeShowCue, restoreInterimReturn, staticInterimBackdrop } from '../live/show-mode.js';
+import type { PrivateSlide } from '../live/types.js';
 const options = { region: 'europe-west1', cors: true, maxInstances: 10 };
 const db = () => getFirestore();
 export function object(value: unknown): Record<string, unknown> {
@@ -92,32 +95,35 @@ export const previewInterimResults = securedOnCall('previewInterimResults', opti
     });
 });
 function withoutResults(session: PrivateLiveSession): PrivateLiveSession {
-    const { interimResults, ...clean } = session;
-    void interimResults;
+    const { interimResults, showCue, ...clean } = session;
+    void interimResults; void showCue;
     return clean;
 }
 export const controlInterimResults = securedOnCall('controlInterimResults', options, async (request) => {
     const uid = authorizeStaff(request.auth).uid, data = object(request.data);
     const eventId = id(data, 'eventId'), sessionId = id(data, 'sessionId'), requestId = id(data, 'requestId');
     const action = data.action;
-    if (!['publish', 'hide', 'page'].includes(action as string))
+    if (!['publish', 'hide', 'page', 'static'].includes(action as string))
         throw new HttpsError('invalid-argument', 'Neplatný příkaz výsledků.');
-    const allowed = ['eventId', 'sessionId', 'requestId', 'expectedRevision', 'action', ...(action === 'publish' ? ['throughRoundId', 'sourceFingerprint'] : action === 'page' ? ['page'] : [])];
+    const allowed = ['eventId', 'sessionId', 'requestId', 'expectedRevision', 'action', ...(action === 'publish' ? ['throughRoundId', 'sourceFingerprint', 'presentationStyle', 'motion'] : action === 'page' ? ['page'] : [])];
     if (Object.keys(data).some(k => !allowed.includes(k)))
         throw new HttpsError('invalid-argument', 'Nepovolená pole.');
-    const expected = revision(data), operationId = fingerprint([uid, sessionId, requestId]), commandFingerprint = fingerprint([eventId, sessionId, action, data.expectedRevision, data.throughRoundId ?? null, data.sourceFingerprint ?? null, data.page ?? null]);
+    let requestedPagination;
+    try { requestedPagination = resultPagination(data.presentationStyle); }
+    catch { throw new HttpsError('invalid-argument', 'Neplatný režim výsledků.'); }
+    if (data.motion !== undefined && data.motion !== 'animate' && data.motion !== 'static') throw new HttpsError('invalid-argument', 'Neplatný pohyb.');
+    const expected = revision(data), operationId = fingerprint([uid, sessionId, requestId]), commandFingerprint = fingerprint([eventId, sessionId, action, data.expectedRevision, data.throughRoundId ?? null, data.sourceFingerprint ?? null, data.page ?? null,
+        ...(data.presentationStyle === undefined && data.motion === undefined ? [] : [data.presentationStyle ?? null, data.motion ?? null])]);
     const sessionRef = db().doc('sessions/' + sessionId), receiptRef = sessionRef.collection('interimOperations').doc(operationId);
     return runAccessTransaction(db(), async (tx) => {
         await staff(request);
-        const { session } = await bound(tx, eventId, sessionId);
+        const { session, event } = await bound(tx, eventId, sessionId);
         const receipt = (await tx.get(receiptRef)).data();
         if (receipt) {
             if (receipt.fingerprint !== commandFingerprint)
                 throw new HttpsError('already-exists', 'Request ID má jiný obsah.');
-            return receipt.response as {
-                sessionId: string;
-                revision: number;
-            };
+            const { showCue, ...old } = receipt.response as { sessionId: string; revision: number; showCue?: ShowCue }; void showCue;
+            return { ...old, replayed: true };
         }
         if (session.revision !== expected)
             throw new HttpsError('aborted', 'Prezentace se změnila. Načtěte nový náhled.');
@@ -128,7 +134,9 @@ export const controlInterimResults = securedOnCall('controlInterimResults', opti
         const now = Timestamp.now();
         let updated: PrivateLiveSession;
         let publication: Record<string, unknown> | undefined;
-        let rows: ResultRow[] = [];
+        let rows: PublicResultRow[] = [];
+        let restoreSlide: PrivateSlide | undefined;
+        let returnRestored = true;
         if (action === 'publish') {
             const { result } = await previewIn(tx, eventId, sessionId, id(data, 'throughRoundId'));
             if (!result.complete)
@@ -138,31 +146,57 @@ export const controlInterimResults = securedOnCall('controlInterimResults', opti
             const slide = await loadSlide(tx, session.quizId, session.currentSlidePosition, session.snapshotId);
             // Existing navigation lifecycle stops media, clears recap/reveal, preserves position.
             updated = applyLiveSessionAction(withoutResults(session), { type: 'go-to-slide', position: session.currentSlidePosition, slideId: slide.id }, expected, uid, now, slide);
-            rows = result.rows;
-            updated = { ...updated, interimResults: { versionId: operationId, roundNumber: result.roundNumber, page: 0, pageCount: Math.ceil(rows.length / RESULTS_PAGE_SIZE) } };
-            publication = { eventId, sessionId, snapshotId: session.snapshotId, sourceFingerprint: result.sourceFingerprint, includedRounds: result.includedRounds, rows, actorUid: uid, createdAt: now, versionId: operationId };
+            const previousId = session.interimResults?.versionId ?? session.lastInterimVersionId;
+            const previous = previousId ? (await tx.get(sessionRef.collection('interimVersions').doc(previousId))).data() : undefined;
+            const previousRanks = previous?.eventId === eventId && previous.sessionId === sessionId && previous.snapshotId === session.snapshotId ? previous.teamRanks as Record<string, number> | undefined : undefined;
+            rows = requestedPagination.presentationStyle === 'show' ? attachResultMovement(result.rows, result.rowTeamIds, result.teamRanks, previousRanks) : result.rows;
+            updated = { ...updated,
+                ...(requestedPagination.presentationStyle === 'show' ? { interimReturn: session.interimReturn ?? captureInterimReturn(session, slide) } : {}),
+                lastInterimVersionId: operationId,
+                interimResults: { versionId: operationId, roundNumber: result.roundNumber, page: 0, pageCount: Math.ceil(rows.length / requestedPagination.pageSize), ...requestedPagination } };
+            publication = { eventId, sessionId, snapshotId: session.snapshotId, sourceFingerprint: result.sourceFingerprint, includedRounds: result.includedRounds, rows,
+                teamRanks: result.teamRanks, rowTeamIds: result.rowTeamIds, ...requestedPagination, actorUid: uid, createdAt: now, versionId: operationId };
         }
-        else if (action === 'page') {
-            if (!session.interimResults || !Number.isSafeInteger(data.page) || (data.page as number) < 0 || (data.page as number) >= session.interimResults.pageCount)
+        else if (action === 'page' || action === 'static') {
+            if (!session.interimResults || (action === 'page' && (!Number.isSafeInteger(data.page) || (data.page as number) < 0 || (data.page as number) >= session.interimResults.pageCount)))
                 throw new HttpsError('invalid-argument', 'Neplatná stránka výsledků.');
             const saved = (await tx.get(sessionRef.collection('interimVersions').doc(session.interimResults.versionId))).data();
-            if (!saved || saved.eventId !== eventId || saved.sessionId !== sessionId)
+            if (!saved || saved.eventId !== eventId || saved.sessionId !== sessionId || saved.snapshotId !== session.snapshotId)
                 throw new HttpsError('failed-precondition', 'Verze výsledků chybí.');
-            rows = saved.rows as ResultRow[];
-            updated = { ...session, revision: expected + 1, updatedAt: now, updatedBy: uid, interimResults: { ...session.interimResults, page: data.page as number } };
+            const savedPage = normalizeResultPagination(saved), pointerPage = normalizeResultPagination(session.interimResults);
+            if (savedPage.pageSize !== pointerPage.pageSize || savedPage.presentationStyle !== pointerPage.presentationStyle || (action === 'static' && savedPage.presentationStyle !== 'show')) throw new HttpsError('failed-precondition', 'Formát potvrzené verze neodpovídá.');
+            rows = saved.rows as PublicResultRow[];
+            updated = { ...withoutResults(session), revision: expected + 1, updatedAt: now, updatedBy: uid, interimResults: { ...session.interimResults, page: action === 'page' ? data.page as number : session.interimResults.page } };
         }
         else {
             if (!session.interimResults)
                 throw new HttpsError('failed-precondition', 'Výsledky nejsou zobrazené.');
             const slide = await loadSlide(tx, session.quizId, session.currentSlidePosition, session.snapshotId);
-            updated = applyLiveSessionAction(withoutResults(session), { type: 'go-to-slide', position: session.currentSlidePosition, slideId: slide.id }, expected, uid, now, slide);
+            let selected: PrivateSlide | undefined;
+            const intent = session.interimReturn;
+            const allowAnswers = currentMembership().permissions.includes('event.answers.read');
+            if (intent && intent.snapshotId === session.snapshotId && intent.recapQuestionPosition !== undefined && allowAnswers) {
+                try { selected = await loadSlide(tx, session.quizId, intent.recapQuestionPosition, session.snapshotId); }
+                catch { /* A missing old selection must never restore stale answer content. */ }
+            }
+            const restored = restoreInterimReturn(session, slide, selected, allowAnswers, uid, now);
+            updated = restored.session; restoreSlide = restored.slide; returnRestored = restored.restored;
         }
-        const slide = action === 'hide' ? await loadSlide(tx, session.quizId, updated.currentSlidePosition, session.snapshotId) : undefined;
-        const publicState = action === 'hide' ? buildPublicSessionState(updated, slide) : {
+        const pageConfig = updated.interimResults ? normalizeResultPagination(updated.interimResults) : undefined;
+        const backdrop = action !== 'hide' && pageConfig?.presentationStyle === 'show' ? staticInterimBackdrop(updated, await loadSlide(tx, session.quizId, updated.currentSlidePosition, session.snapshotId)) : undefined;
+        const cue = action !== 'hide' && pageConfig?.presentationStyle === 'show' ? makeShowCue(operationId, 'interim', event.showPreferences, now.toMillis(), action === 'publish' ? data.motion : 'static') : undefined;
+        if (cue) updated = { ...updated, showCue: cue };
+        const template = action === 'hide' ? {} : publicResultTemplate((await tx.get(db().doc('quizSnapshots/' + session.snapshotId))).data() ?? {}, 'interim');
+        const publicState = action === 'hide' ? buildPublicSessionState(updated, restoreSlide) : {
             ...buildPublicSessionState({ ...updated, status: 'waiting', answerRevealed: false, presentationMode: 'slide' }), status: 'active',
-            interimResults: { ...updated.interimResults!, rows: rows.slice(updated.interimResults!.page * RESULTS_PAGE_SIZE, (updated.interimResults!.page + 1) * RESULTS_PAGE_SIZE).map(r => ({ rank: r.rank, teamName: r.teamName, halfPoints: r.halfPoints })) },
+            ...template,
+            ...(backdrop ? { interimBackdrop: backdrop } : {}), ...(cue ? { showCue: cue } : {}),
+            interimResults: { versionId: updated.interimResults!.versionId, roundNumber: updated.interimResults!.roundNumber, page: updated.interimResults!.page, pageCount: updated.interimResults!.pageCount,
+                ...(pageConfig!.presentationStyle === 'show' ? { presentationStyle: 'show', pageSize: 6 } : {}),
+                rows: rows.slice(updated.interimResults!.page * pageConfig!.pageSize, (updated.interimResults!.page + 1) * pageConfig!.pageSize).map(r => ({ rank: r.rank, teamName: r.teamName, halfPoints: r.halfPoints,
+                ...(pageConfig!.presentationStyle === 'show' && Number.isSafeInteger(r.movement) ? { movement: r.movement } : {}) })) },
         };
-        const response = { sessionId, revision: updated.revision };
+        const response = { sessionId, revision: updated.revision, replayed: false, ...(cue ? { showCue: cue } : {}), ...(action === 'hide' ? { returnRestored } : {}) };
         if (publication)
             tx.create(sessionRef.collection('interimVersions').doc(operationId), publication);
         tx.set(sessionRef, updated);

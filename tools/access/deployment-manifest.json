@@ -80,7 +80,9 @@
     "getEventTeamMessage": "Not deployed in verified staging inventory; team emails remain disabled. Source secured for future use, no activation in this release.",
     "deleteEvent": "Introduced by event management; see tools/event-management/deployment-manifest.json",
     "restoreEvent": "Introduced by event management; see tools/event-management/deployment-manifest.json",
-    "trashEvent": "Introduced by event management; see tools/event-management/deployment-manifest.json"
+    "trashEvent": "Introduced by event management; see tools/event-management/deployment-manifest.json",
+    "readEventShowPreferences": "Introduced by SHOW MODE; local only, no staging deployment authorized. See docs/SHOW_MODE_IMPLEMENTATION.md.",
+    "configureEventShow": "Introduced by SHOW MODE; local only, no staging deployment authorized. See docs/SHOW_MODE_IMPLEMENTATION.md."
   },
   "firestoreRules": "firestore.rules",
   "storageRules": "storage.rules",

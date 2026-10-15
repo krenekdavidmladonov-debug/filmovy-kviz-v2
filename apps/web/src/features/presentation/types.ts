@@ -1,3 +1,5 @@
+import type { SlideDesign } from '@filmovy-kviz/quiz-domain';
+
 export type SlideContentKind =
   | 'question'
   | 'free'
@@ -44,6 +46,8 @@ export interface SlidePresentationInput {
 }
 
 export interface SlideRenderInput {
+  readonly design?: SlideDesign;
+  readonly roundTitle?: string;
   readonly kind: string;
   readonly title: string;
   readonly text: string;
@@ -65,6 +69,8 @@ export interface SlideRenderInput {
 }
 
 export interface NormalizedSlideRenderModel {
+  readonly design: SlideDesign;
+  readonly roundTitle?: string;
   readonly contentKind: SlideContentKind;
   readonly renderMode: SlideRenderMode;
   readonly title: string;

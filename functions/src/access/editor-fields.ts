@@ -5,15 +5,16 @@ import { currentMembership } from './authorization.js';
 import { isQuestionKind } from '../editor/model.js';
 import { slideView } from './slide-view.js';
 
-const answerKeys = ['correctAnswer', 'answerImage', 'answerExplanation', 'answerMode'] as const;
+const answerKeys = ['correctAnswer', 'answerImage', 'answerExplanation', 'answerMode', 'answerDesign'] as const;
 const mediaKeys = ['backgroundImage', 'questionImage', 'mediaSource'] as const;
 const equal = (a: unknown, b: unknown) => JSON.stringify(a ?? '') === JSON.stringify(b ?? '');
 const deny = () => { throw new HttpsError('permission-denied', 'Tato změna vyžaduje další oprávnění.'); };
 export function protectPrivateMedia(slides: readonly { data: Record<string, unknown> }[], inputs: readonly Record<string, unknown>[]) {
   if (currentMembership().permissions.includes('quiz.answers.read')) return;
-  const hidden = new Set(slides.flatMap(s => { const mapped = mapEditorSlide('source', s.data); return [mapped.answerImage, ...mapped.media.filter(m => m.role === 'answer').map(m => m.source)].filter(Boolean); }));
+  const hidden = new Set(slides.flatMap(s => { const mapped = mapEditorSlide('source', s.data); return [mapped.answerImage, mapped.answerDesign?.backgroundImage, mapped.answerDesign?.logoImage, ...mapped.media.filter(m => m.role === 'answer').map(m => m.source)].filter(Boolean); }));
   for (const input of inputs) {
     const sources: unknown[] = [input.backgroundImage, input.questionImage, input.mediaSource];
+    if (input.design && typeof input.design === 'object') sources.push(...['backgroundImage', 'logoImage'].map(field => (input.design as Record<string, unknown>)[field]));
     if (Array.isArray(input.media)) for (const entry of input.media as unknown[]) {
       if (entry && typeof entry === 'object' && 'role' in entry && (entry.role === 'prompt' || entry.role === 'background') && 'source' in entry) sources.push(entry.source);
     }
@@ -39,16 +40,19 @@ export function protectSlideFields(current: Record<string, unknown> | undefined,
   }
   if (!allowed.includes('quiz.notes.edit') && !equal(input.moderatorNote, allowed.includes('quiz.notes.read') ? previous?.moderatorNote : '')) deny();
   if (!allowed.includes('quiz.media.attach')) {
+    if (input.resetAppearance === true && previous?.backgroundImage) deny();
     for (const key of mediaKeys) if (!equal(input[key], visible?.[key])) deny();
     const visibleMedia = (previous?.media ?? []).filter(m => m.role === 'prompt' || m.role === 'background' || (allowed.includes('quiz.answers.read') && m.role === 'answer'));
     if (!equal(input.media, visibleMedia)) deny();
     if (allowed.includes('quiz.answers.read') && !equal(input.answerImage, previous?.answerImage)) deny();
+    for (const key of ['design', 'answerDesign'] as const) if (input[key] !== undefined) for (const field of ['backgroundImage', 'logoImage'] as const) if (!equal(input[key]?.[field], visible?.[key]?.[field])) deny();
   }
   if (!previous) return input;
   return {
     ...input,
     ...(!allowed.includes('quiz.answers.edit') ? { correctAnswer: previous.correctAnswer, answerImage: previous.answerImage,
       answerExplanation: previous.answerExplanation, answerMode: previous.answerMode,
+      answerDesign: previous.answerDesign,
       media: [...input.media.filter(m => m.role !== 'answer'), ...previous.media.filter(m => m.role === 'answer')],
       presentation: { ...input.presentation, answerOverlay: previous.presentation.answerOverlay } } : {}),
     ...(!allowed.includes('quiz.notes.edit') ? { moderatorNote: previous.moderatorNote } : {}),

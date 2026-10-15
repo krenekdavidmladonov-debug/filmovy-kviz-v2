@@ -2,10 +2,12 @@ import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp, type DocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { accessActor, securedOnCall, runAccessTransaction } from '../access/authorization.js';
+import { canHideInfoSlide, resolveLegacySlideAppearance, normalizeResultPagination, parseShowCue } from '@filmovy-kviz/quiz-domain';
 
 import { LiveSessionError } from './errors.js';
 import { buildPublicSessionState } from './publication.js';
 import { applyLiveSessionAction, applyMediaPlaybackReport } from './session-machine.js';
+import { parseInterimReturn } from './show-mode.js';
 import type {
   LiveMediaCommand,
   LiveMediaPlaybackState,
@@ -123,12 +125,17 @@ export function parseSession(snapshot: DocumentSnapshot): PrivateLiveSession {
   const currentSlideId = typeof data.currentSlideId === 'string' ? data.currentSlideId : undefined;
   const recapQuestionId = typeof data.recapQuestionId === 'string' ? data.recapQuestionId : undefined;
   const recapQuestionPosition = optionalInteger(data, 'recapQuestionPosition');
+  if (isObject(data.interimResults)) normalizeResultPagination(data.interimResults);
+  if (isObject(data.finalReveal)) normalizeResultPagination(data.finalReveal);
   return {
     sessionId: snapshot.id,
     ...(typeof data.eventId === "string" ? { eventId: data.eventId } : {}),
     ...(typeof data.snapshotId === "string" ? { snapshotId: data.snapshotId } : {}),
     ...(isObject(data.finalReveal) ? { finalReveal: data.finalReveal as unknown as NonNullable<PrivateLiveSession["finalReveal"]> } : {}),
     ...(isObject(data.interimResults) ? { interimResults: data.interimResults as unknown as NonNullable<PrivateLiveSession["interimResults"]> } : {}),
+    ...(data.interimReturn === undefined ? {} : { interimReturn: parseInterimReturn(data.interimReturn) }),
+    ...(typeof data.lastInterimVersionId === 'string' ? { lastInterimVersionId: data.lastInterimVersionId } : {}),
+    ...(data.showCue === undefined ? {} : { showCue: parseShowCue(data.showCue) }),
     quizId: requiredString(data, 'quizId', 'Live session'),
     quizTitle: requiredString(data, 'quizTitle', 'Live session'),
     slideCount: requiredNumber(data, 'slideCount', 'Live session'),
@@ -163,6 +170,7 @@ function parseSlide(snapshot: DocumentSnapshot): PrivateSlide {
     position: requiredNumber(data, 'position', 'Quiz slide'),
     kind: requiredString(data, 'kind', 'Quiz slide'),
     isQuestion: data.isQuestion === true,
+    ...(typeof data.hidden === 'boolean' ? { hidden: data.hidden } : {}),
     ...(typeof data.roundId === 'string' ? { roundId: data.roundId } : {}),
     ...(typeof data.roundTitle === 'string' ? { roundTitle: data.roundTitle } : {}),
     ...(Number.isInteger(data.questionNumber) ? { questionNumber: data.questionNumber as number } : {}),
@@ -174,15 +182,22 @@ function parseSlide(snapshot: DocumentSnapshot): PrivateSlide {
     presentation: isObject(data.presentation) ? data.presentation : {},
     ...copy('backgroundImage'), ...copy('questionImage'), ...copy('answerImage'), ...copy('mediaSource'),
     ...copy('backgroundOverlay'), ...copy('clipStartSeconds'), ...copy('clipEndSeconds'),
-    ...copy('imageLayout'), ...copy('answerExplanation'), ...copy('correctAnswer'), ...copy('moderatorNote'), ...copy('legacy'),
+    ...copy('imageLayout'), ...copy('answerExplanation'), ...copy('correctAnswer'), ...copy('moderatorNote'), ...copy('legacy'), ...copy('design'), ...copy('answerDesign'),
   };
 }
 
 export async function loadSlide(transaction: Transaction, quizId: string, position: number, snapshotId?: string): Promise<PrivateSlide> {
-  const query = db.collection(snapshotId ? 'quizSnapshots' : 'quizzes').doc(snapshotId ?? quizId).collection('slides').where('position', '==', position).limit(2);
+  const rootRef = db.collection(snapshotId ? 'quizSnapshots' : 'quizzes').doc(snapshotId ?? quizId);
+  const query = rootRef.collection('slides').where('position', '==', position).limit(2);
   const snapshot = await transaction.get(query);
   if (snapshot.size !== 1) throw new LiveSessionError('failed-precondition', 'Quiz slide position is missing or ambiguous.');
-  return parseSlide(snapshot.docs[0]!);
+  const slide = parseSlide(snapshot.docs[0]!);
+  const metadata = await transaction.getAll(rootRef, ...(slide.roundId ? [rootRef.collection('rounds').doc(slide.roundId)] : []));
+  const root = metadata[0]!.data();
+  const roundDesign: unknown = metadata[1]?.data()?.design;
+  const appearance = resolveLegacySlideAppearance(root?.defaultAppearance, slide);
+  return { ...slide, ...(root?.defaultDesign === undefined ? {} : { defaultDesign: root.defaultDesign }), ...(roundDesign === undefined ? {} : { roundDesign }),
+    ...appearance };
 }
 
 function response(session: PrivateLiveSession): ControlResponse {
@@ -258,12 +273,27 @@ async function mutateSession(request: CallableRequest<unknown>, kind: MutationKi
       let action: LiveSessionAction;
       if (kind === 'end-session') action = { type: kind };
       else if (kind === 'go-to-slide' || kind === 'next-slide' || kind === 'previous-slide') {
-        const position = kind === 'go-to-slide' ? requested! : session.currentSlidePosition + (kind === 'next-slide' ? 1 : -1);
+        let position = requested;
+        if (kind !== 'go-to-slide') {
+          const rootRef = db.collection(session.snapshotId ? 'quizSnapshots' : 'quizzes').doc(session.snapshotId ?? session.quizId);
+          const direction = kind === 'next-slide' ? 1 : -1;
+          let cursor = session.currentSlidePosition;
+          for (let scanned = 0; scanned < 400 && position === undefined; scanned += 1) {
+            const candidates = await transaction.get(rootRef.collection('slides').where('position', direction === 1 ? '>' : '<', cursor).orderBy('position', direction === 1 ? 'asc' : 'desc').limit(1));
+            const candidate = candidates.docs[0]?.data();
+            if (!candidate) break;
+            cursor = Number(candidate.position);
+            const information = { kind: String(candidate.kind), isQuestion: candidate.isQuestion === true, ...(typeof candidate.roundId === 'string' ? { roundId: candidate.roundId } : {}) };
+            if (!(candidate.hidden === true && canHideInfoSlide(information))) position = cursor;
+          }
+        }
+        if (position === undefined) throw new LiveSessionError('invalid-argument', 'No visible slide remains in this direction.');
         if (!Number.isInteger(position) || position < 1 || position > session.slideCount) {
           throw new LiveSessionError('invalid-argument', 'Slide position is outside the quiz range.');
         }
         slide = await loadSlide(transaction, session.quizId, position, session.snapshotId);
-        action = kind === 'go-to-slide' ? { type: kind, position, slideId: slide.id } : { type: kind, slideId: slide.id };
+        if (slide.hidden === true && canHideInfoSlide(slide)) throw new LiveSessionError('failed-precondition', 'Hidden information slide cannot be published.');
+        action = { type: 'go-to-slide', position, slideId: slide.id };
       } else if (kind === 'select-recap-question') {
         if (session.presentationMode !== 'recap' || session.currentSlidePosition < 1) {
           throw new LiveSessionError('failed-precondition', 'Recap mode is not active.');

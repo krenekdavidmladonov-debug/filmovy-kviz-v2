@@ -77,6 +77,8 @@ The PDF Print Center adds `/admin/events/:eventId/print` and a binary HTTPS Func
 
 ## Firebase services
 
+Whole-evening visual authoring adds bounded quiz/round/slide design inheritance and frozen result/print templates to these same boundaries. The moderator preview consumes the actual public payload; questions, scores and results retain their original authoritative sources. See [WHOLE_EVENING_DESIGN.md](WHOLE_EVENING_DESIGN.md).
+
 - Authentication: staff sign-in; authorization through current server-managed membership, permissions and resource scopes.
 - Firestore: operational and public projection data.
 - Storage: quiz media, with metadata/access controlled by Firestore and Rules.
@@ -107,7 +109,39 @@ Event-bound moderation and explicitly reviewed cumulative result versions use th
 
 Final reveal extends the same event-bound live session with private immutable finalVersions, revisioned finalOperations and an explicitly revealed public page. Staff confirmation, corrections, closure and moderator-only synthetic sound are documented in [FINAL_REVEAL.md](FINAL_REVEAL.md). No Rules, indexes or cloud data change is required by this implementation.
 
+Show Mode extends these same confirmed-result transactions and public session
+allowlist; it does not create another score or ranking source. New show versions
+use six-row server pages, while missing historical pagination metadata continues
+to mean classic eight-row pages. Interim entry captures a private return intent
+and publishes an answer-free static slide backdrop; hide reconstructs the previous
+explicit answer/recap from the same authoritative snapshot only with current
+answer permission, always with media stopped and a new generation. Final lower-rank
+bulk reveal and separately paged revealed history contain only explicitly released
+groups. Server cue metadata authorizes visual presentation, never future rows or
+client-driven navigation. Event-scoped show preferences/audio bindings and a narrow
+authenticated media gateway let moderators play linked owned MP3/WAV locally.
+The integrated moderator queue serializes live and result commands. Details and
+verification are in [SHOW_MODE_IMPLEMENTATION.md](SHOW_MODE_IMPLEMENTATION.md);
+the deployment inventory is a local plan, not deployment authorization.
+
 ## Event organizational email
+
+Registration email has a backward-compatible, explicit recipient policy in the
+trusted runtime. Missing `REGISTRATION_EMAIL_RECIPIENT_POLICY` means `selected`,
+preserving the existing single-recipient staging activation. The opt-in
+`future-public-registration` policy admits only the three transactional
+registration message types for canonical online registrations created at or after
+one shared activation cutoff. The server records the registration creation time
+and policy on each new intent; dispatch and every delivery claim reject unmarked
+backlog and pre-cutoff registrations before queueing/lease/provider access. Public
+create/update/cancel receipts and management capabilities retain their existing
+contract. No email is added for no-op/replay/manual staff operations.
+
+This is a prepared source capability, not wider cloud activation. Read-only
+staging metadata on 2026-10-15 still showed selected-recipient configuration and a
+PAUSED queue. Enabling normal delivery requires approval of the exact five email
+Functions, shared fresh cutoff and queue activation. Organizational campaigns
+remain outside this policy; no new service, secret, IAM or Rules is introduced.
 
 Admin-only preview/confirmation creates an immutable emailCampaigns record and recipient snapshots in the existing emailIntents outbox. The shared task worker delivers plain-text organizational messages without management capabilities or changes to registration confirmation status. All client campaign/intent access remains denied; safe history and status are exposed only through fresh-admin callables. Atomic recipient limits, snapshot/idempotence contracts and offline tests: [EVENT_TEAM_EMAIL.md](EVENT_TEAM_EMAIL.md).
 

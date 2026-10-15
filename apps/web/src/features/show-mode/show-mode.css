@@ -1,0 +1,107 @@
+.show-mode-canvas { --slide-ink: var(--color-text); --slide-muted: var(--color-text-muted); --slide-gold: var(--color-accent); --slide-scale: 1; --brand-ink: var(--slide-ink); --brand-accent: var(--slide-gold); --sm-panel: var(--color-surface); position: relative; isolation: isolate; container-type: inline-size; aspect-ratio: 16 / 9; width: 100%; height: 100%; overflow: hidden; color: var(--slide-ink); background: var(--color-background); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.show-mode-canvas *, .show-mode-canvas *::before, .show-mode-canvas *::after { box-sizing: border-box; }
+.show-mode-canvas h1, .show-mode-canvas p { max-width: none; margin: 0; }
+.show-mode-canvas .result-background, .show-mode-canvas .result-background-overlay { z-index: -2; }
+.show-mode-canvas .result-background-overlay { z-index: -1; }
+.show-mode-canvas .result-custom-logo { width: 10cqw; height: 2.5cqw; }
+.sm-slide-backdrop { position: absolute; inset: 0; z-index: -1; }
+.sm-slide-backdrop > .slide-renderer { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; }
+.sm-dimmer { position: absolute; inset: 0; background: rgb(3 9 18 / 77%); }
+.sm-interim-panel { position: absolute; isolation: isolate; left: 13%; top: 8.9%; width: 74%; height: 82.2%; padding: 2.35cqw 3.35cqw 1.45cqw; border: 1px solid var(--color-border); border-top: .22cqw solid var(--slide-gold); border-radius: .9cqw; background: var(--sm-panel); box-shadow: 0 1cqw 4cqw rgb(0 0 0 / 30%); }
+.sm-interim-heading { display: flex; justify-content: space-between; align-items: center; gap: 1cqw; padding-bottom: 1.4cqw; }
+.sm-eyebrow { color: var(--slide-gold); font-size: 1.04cqw; font-weight: 750; line-height: 1.3; letter-spacing: .15em; overflow-wrap: anywhere; }
+.sm-interim-heading h1 { font-size: min(3.18cqw, calc(3.18cqw * var(--slide-scale))); letter-spacing: -.04em; font-weight: 780; line-height: 1.14; margin-top: .5cqw; max-height: 7.3cqw; overflow: hidden; }
+.sm-interim-heading > .brand-wordmark { font-size: 1.8cqw; }
+.sm-subtitle { color: var(--slide-muted); font-size: 1.1cqw; line-height: 1.3; overflow-wrap: anywhere; max-height: 3cqw; overflow: hidden; }
+.sm-interim-heading .sm-subtitle { margin-top: .4cqw; font-size: .95cqw; max-height: 2.5cqw; }
+.sm-dense-copy .sm-interim-heading h1 { font-size: 2.2cqw; max-height: 5cqw; }
+.sm-dense-copy .sm-interim-heading .sm-subtitle { max-height: 1.3cqw; }
+.sm-table-heading { display: grid; grid-template-columns: 5.4cqw minmax(0, 1fr) 6cqw; padding: .55cqw .8cqw .65cqw; color: var(--slide-muted); font-size: .75cqw; font-weight: 700; letter-spacing: .13em; }
+.sm-table-heading > :last-child, .sm-with-movement .sm-table-heading > :nth-last-child(2) { text-align: right; }
+.sm-row { display: grid; grid-template-columns: 5.4cqw minmax(0, 1fr) 6cqw; align-items: center; min-height: 4.35cqw; padding: .55cqw .8cqw; border-top: 1px solid color-mix(in srgb, var(--slide-ink) 17%, transparent); font-variant-numeric: tabular-nums; }
+.sm-with-movement .sm-row, .sm-with-movement .sm-table-heading { grid-template-columns: 5.4cqw minmax(0, 1fr) 5.8cqw 6cqw; }
+.sm-scene-interim .sm-table .sm-row:first-of-type, .sm-scene-interim .sm-table .sm-row:nth-child(2) { background: color-mix(in srgb, var(--slide-ink) 4%, transparent); border-radius: .3cqw; }
+.sm-rank { color: var(--slide-muted); font-size: 1.65cqw; font-weight: 600; }
+.sm-team { font-size: min(1.65cqw, calc(1.65cqw * var(--slide-scale))); font-weight: 650; letter-spacing: -.015em; overflow-wrap: anywhere; line-height: 1.2; padding-right: .8cqw; }
+.sm-points { font-size: 1.9cqw; text-align: right; font-weight: 750; letter-spacing: -.03em; }
+.sm-scene-interim .sm-row:nth-child(2) .sm-rank, .sm-scene-interim .sm-row:nth-child(2) .sm-points { color: var(--slide-gold); }
+.sm-move { font-size: 1.07cqw; text-align: right; padding-right: .25cqw; color: var(--slide-muted); }
+.sm-move.sm-up { color: var(--color-success); }
+.sm-interim-footer { display: flex; align-items: center; justify-content: space-between; gap: 1cqw; padding-top: 1.1cqw; margin-top: .7cqw; border-top: 1px solid var(--color-border); color: var(--slide-muted); font-size: .85cqw; }
+.sm-interim-footer > :first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sm-page { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--slide-muted); font-size: .85cqw; }
+.sm-stage-header { position: absolute; top: 3.4cqw; left: 5cqw; right: 5cqw; display: flex; align-items: center; justify-content: space-between; gap: 2cqw; }
+.sm-stage-header > span:first-child { color: var(--slide-muted); font-size: .85cqw; font-weight: 650; letter-spacing: .14em; max-width: 75%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-transform: uppercase; }
+.sm-slash { color: var(--color-border-strong); margin: 0 1cqw; }
+.sm-stage-header .brand-wordmark { font-size: 1.9cqw; }
+.sm-finale-layout { position: absolute; top: 13.1cqw; bottom: 8cqw; left: 8cqw; right: 8cqw; display: grid; grid-template-columns: 1.1fr 1fr; gap: 8cqw; align-items: center; }
+.sm-rank-feature { border-left: .2cqw solid var(--slide-gold); padding-left: 3cqw; display: flex; flex-direction: column; align-items: start; max-height: 100%; }
+.sm-feature-number { font-size: 13cqw; line-height: .95; margin-top: 1.25cqw; margin-left: -.55cqw; letter-spacing: -.075em; font-weight: 750; color: var(--slide-gold); }
+.sm-feature-label { margin-top: .5cqw !important; font-size: 1.1cqw; font-weight: 650; letter-spacing: .2em; color: var(--slide-muted); }
+.sm-feature-teams { width: 100%; margin-top: 2.1cqw; display: grid; gap: .7cqw; }
+.sm-feature-teams h1 { font-size: min(4.5cqw, calc(4.5cqw * var(--slide-scale))); font-weight: 780; line-height: 1.05; letter-spacing: -.045em; overflow-wrap: anywhere; }
+.sm-feature-score { margin-top: 1.25cqw !important; color: var(--slide-muted); font-size: 1.5cqw; }
+.sm-feature-score strong { font-size: 2.15cqw; font-weight: 650; color: var(--slide-ink); font-variant-numeric: tabular-nums; margin-right: .25cqw; }
+.sm-rank-feature > .sm-page { margin-top: 1cqw; }
+.sm-rank-feature:not(.sm-count-1) .sm-feature-number { font-size: 7cqw; }
+.sm-rank-feature:not(.sm-count-1) .sm-feature-teams h1 { font-size: 2.4cqw; }
+.sm-rank-feature.sm-count-4 .sm-feature-teams h1, .sm-rank-feature.sm-count-5 .sm-feature-teams h1, .sm-rank-feature.sm-count-6 .sm-feature-teams h1 { font-size: 1.8cqw; }
+.sm-rank-feature.sm-long-names .sm-feature-teams h1 { font-size: 2.5cqw; }
+.sm-rank-feature.sm-very-long-names .sm-feature-teams h1 { font-size: 1.8cqw; }
+.sm-rank-feature:not(.sm-count-1).sm-long-names .sm-feature-teams h1 { font-size: 1.6cqw; }
+.sm-rank-feature.sm-count-5 .sm-feature-teams, .sm-rank-feature.sm-count-6 .sm-feature-teams { gap: .4cqw; margin-top: 1cqw; }
+.sm-rank-feature.sm-count-5 .sm-feature-number, .sm-rank-feature.sm-count-6 .sm-feature-number { font-size: 5cqw; margin-top: .7cqw; }
+.sm-rank-feature.sm-count-5.sm-long-names .sm-feature-teams h1, .sm-rank-feature.sm-count-6.sm-long-names .sm-feature-teams h1 { font-size: 1.4cqw; }
+.sm-rank-feature.sm-count-5.sm-long-names .sm-feature-number, .sm-rank-feature.sm-count-6.sm-long-names .sm-feature-number { font-size: 4cqw; }
+.sm-history { align-self: center; }
+.sm-history > .sm-eyebrow { font-size: .86cqw; margin: 0 0 1.2cqw .8cqw; color: var(--slide-muted); }
+.sm-history .sm-row { grid-template-columns: 3.1cqw minmax(0, 1fr) 5cqw; min-height: 4.8cqw; padding: .8cqw; }
+.sm-history .sm-team { font-size: 1.45cqw; }
+.sm-history .sm-rank { font-size: 1.4cqw; }
+.sm-history .sm-points { font-size: 1.6cqw; }
+.sm-history-page { display: flex; justify-content: space-between; gap: .5cqw; margin-top: 1cqw !important; padding: 0 .8cqw; color: var(--slide-muted); font-size: .8cqw; }
+.sm-no-history { color: var(--slide-muted); font-size: 1.3cqw; line-height: 1.5; }
+.sm-stage-footer { position: absolute; left: 5cqw; right: 5cqw; bottom: 3cqw; border-top: 1px solid var(--color-border); padding-top: 1.3cqw; padding-right: 7cqw; display: flex; justify-content: space-between; gap: 1cqw; color: var(--slide-muted); font-size: .75cqw; font-weight: 600; letter-spacing: .14em; }
+.sm-winner { position: absolute; inset: 12.4cqw 7cqw 8cqw; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.sm-winner-label { display: flex; align-items: center; gap: 1.8cqw; color: var(--slide-gold); font-size: 1.05cqw; font-weight: 700; letter-spacing: .18em; overflow-wrap: anywhere; }
+.sm-winner-label > span { flex-shrink: 0; height: 1px; width: 4cqw; background: var(--slide-gold); }
+.sm-winner-place { margin-top: 1.6cqw; color: var(--slide-gold); font-size: 4.1cqw; font-weight: 550; line-height: 1; letter-spacing: -.08em; }
+.sm-winner-names { width: 100%; margin-top: 1.55cqw; display: grid; gap: .5cqw; }
+.sm-winner-names h1 { font-size: min(7cqw, calc(7cqw * var(--slide-scale))); line-height: 1.1; font-weight: 800; letter-spacing: -.055em; overflow-wrap: anywhere; }
+.sm-winner-score { display: flex; align-items: baseline; gap: .7cqw; margin-top: 1.7cqw !important; }
+.sm-winner-score strong { font-size: 3.3cqw; font-weight: 650; letter-spacing: -.04em; color: var(--slide-gold); font-variant-numeric: tabular-nums; }
+.sm-winner-score span { font-size: 1.4cqw; color: var(--slide-muted); }
+.sm-winner-message { margin-top: 2.5cqw !important; font-size: 1.25cqw; color: var(--slide-muted); letter-spacing: .01em; max-height: 3.5cqw; overflow: hidden; }
+.sm-winner > .sm-page { margin-top: 1cqw; }
+.sm-winner:not(.sm-count-1) .sm-winner-place { font-size: 2.5cqw; margin-top: 1cqw; }
+.sm-winner:not(.sm-count-1) .sm-winner-names { margin-top: 1.4cqw; }
+.sm-winner:not(.sm-count-1) .sm-winner-names h1 { font-size: 3.8cqw; }
+.sm-winner.sm-long-names .sm-winner-names h1 { font-size: 5cqw; }
+.sm-winner.sm-very-long-names .sm-winner-names h1 { font-size: 3.8cqw; }
+.sm-winner:not(.sm-count-1).sm-long-names .sm-winner-names h1 { font-size: 2.8cqw; }
+.sm-winner.sm-count-4 .sm-winner-names, .sm-winner.sm-count-5 .sm-winner-names, .sm-winner.sm-count-6 .sm-winner-names { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1cqw 2cqw; }
+.sm-winner.sm-count-4 .sm-winner-names h1, .sm-winner.sm-count-5 .sm-winner-names h1, .sm-winner.sm-count-6 .sm-winner-names h1 { font-size: 2.5cqw; }
+.sm-winner.sm-count-4.sm-long-names .sm-winner-names h1, .sm-winner.sm-count-5.sm-long-names .sm-winner-names h1, .sm-winner.sm-count-6.sm-long-names .sm-winner-names h1 { font-size: 1.9cqw; }
+.sm-winner:not(.sm-count-1) .sm-winner-score { margin-top: 1.3cqw !important; }
+.sm-winner:not(.sm-count-1) .sm-winner-message { margin-top: 1.4cqw !important; }
+.sm-intro { position: absolute; left: 8cqw; right: 8cqw; top: 18cqw; border-left: .22cqw solid var(--slide-gold); padding-left: 3cqw; }
+.sm-intro h1 { font-size: 6cqw; line-height: 1.07; letter-spacing: -.045em; margin-top: 1.5cqw; overflow-wrap: anywhere; }
+.sm-intro > p:last-child { font-size: 1.8cqw; color: var(--slide-muted); line-height: 1.35; margin-top: 2cqw; }
+.sm-final-table { position: absolute; inset: 10cqw 13cqw 7cqw; }
+.sm-final-table h1 { font-size: 3cqw; margin: .7cqw 0 1cqw; line-height: 1.15; letter-spacing: -.035em; }
+.sm-final-table > .sm-page { display: block; margin-top: 1cqw; text-align: right; }
+.sm-static *, .sm-static *::before, .sm-static *::after { animation: none !important; transition: none !important; }
+.sm-animate .sm-interim-panel { animation: sm-rise 360ms cubic-bezier(.2,.7,.2,1) both; }
+.sm-animate .sm-row { animation: sm-rise 300ms ease-out both; }
+.sm-animate .sm-row:nth-child(3) { animation-delay: 40ms; }
+.sm-animate .sm-row:nth-child(4) { animation-delay: 80ms; }
+.sm-animate .sm-row:nth-child(5) { animation-delay: 120ms; }
+.sm-animate .sm-row:nth-child(6) { animation-delay: 160ms; }
+.sm-animate .sm-row:nth-child(7) { animation-delay: 200ms; }
+.sm-animate .sm-feature-teams, .sm-animate .sm-intro { animation: sm-rise 420ms 80ms ease-out both; }
+.sm-animate .sm-winner-names { animation: sm-winner-enter 520ms 100ms cubic-bezier(.2,.7,.2,1) both; }
+.sm-motion-show .sm-winner-names { animation-duration: 700ms; }
+.sm-motion-show .sm-feature-number { animation: sm-rise 500ms ease-out both; }
+@keyframes sm-rise { from { opacity: 0; transform: translateY(.7cqw); } to { opacity: 1; transform: none; } }
+@keyframes sm-winner-enter { from { opacity: 0; transform: translateY(.8cqw) scale(.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .show-mode-canvas *, .show-mode-canvas *::before, .show-mode-canvas *::after { animation: none !important; transition: none !important; } }

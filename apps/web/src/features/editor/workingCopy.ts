@@ -1,4 +1,4 @@
-import type { EditorAppearance } from '@filmovy-kviz/quiz-domain';
+import type { EditorAppearance, SlideDesign, ResultTemplates, PrintTemplate } from '@filmovy-kviz/quiz-domain';
 import type { EditorMutationResponse, EditorQuiz, EditorSlide } from './types';
 import { quizWithDraft } from '../preflight/validation';
 
@@ -15,6 +15,9 @@ export interface PendingMetadata {
   readonly title: string;
   readonly description: string;
   readonly appearance: EditorAppearance;
+  readonly defaultDesign?: SlideDesign;
+  readonly resultTemplates?: ResultTemplates;
+  readonly printTemplate?: PrintTemplate;
 }
 
 export function overlayEntries(quiz: EditorQuiz, entries: EditorEntries): EditorQuiz {
@@ -32,9 +35,9 @@ export function overlayEntries(quiz: EditorQuiz, entries: EditorEntries): Editor
 
 interface SaveOperations {
   updateSlide(quizId: string, revision: number, slide: EditorSlide): Promise<EditorMutationResponse>;
-  createSlide(quizId: string, revision: number, position: number, slide: EditorSlide, scope?: 'quiz'): Promise<EditorMutationResponse>;
+  createSlide(quizId: string, revision: number, position: number, slide: EditorSlide, scope?: 'quiz', roundId?: string): Promise<EditorMutationResponse>;
   updateRound(quizId: string, revision: number, roundId: string, title: string): Promise<EditorMutationResponse>;
-  updateMetadata(quizId: string, revision: number, title: string, description: string, appearance: EditorAppearance): Promise<EditorMutationResponse>;
+  updateMetadata(quizId: string, revision: number, title: string, description: string, appearance: EditorAppearance, defaultDesign?: SlideDesign, resultTemplates?: ResultTemplates, printTemplate?: PrintTemplate): Promise<EditorMutationResponse>;
 }
 
 /** Acknowledge each revision separately: a later failure must not resend earlier writes. */
@@ -50,7 +53,7 @@ export async function saveEditorEntries(base: EditorQuiz, pending: EditorEntries
       if (entry.dirtySlide && entry.draft !== null) {
         const result = entry.pendingCreate === null
           ? await operations.updateSlide(quiz.id, quiz.revision, entry.draft)
-          : await operations.createSlide(quiz.id, quiz.revision, entry.pendingCreate.position, entry.draft, entry.pendingCreate.semanticKey.startsWith('system:') ? 'quiz' : undefined);
+          : await operations.createSlide(quiz.id, quiz.revision, entry.pendingCreate.position, entry.draft, entry.pendingCreate.semanticKey.startsWith('system:') ? 'quiz' : undefined, entry.pendingCreate.semanticKey.startsWith('round:') ? entry.roundId : undefined);
         const slide = { ...entry.draft, id: result.selectedSlideId ?? entry.draft.id };
         quiz = { ...overlayEntries(quiz, { [key]: { ...entry, draft: slide, dirtyRound: false } }), ...result, id: quiz.id };
         if (entry.pendingCreate !== null) created[key] = slide.id;
@@ -65,8 +68,8 @@ export async function saveEditorEntries(base: EditorQuiz, pending: EditorEntries
       if (!entry.dirtySlide && !entry.dirtyRound) delete remaining[key];
     }
     if (metadata !== null) {
-      const result = await operations.updateMetadata(quiz.id, quiz.revision, metadata.title.trim(), metadata.description, metadata.appearance);
-      quiz = { ...quiz, ...result, title: metadata.title.trim(), description: metadata.description, defaultAppearance: metadata.appearance };
+      const result = await operations.updateMetadata(quiz.id, quiz.revision, metadata.title.trim(), metadata.description, metadata.appearance, metadata.defaultDesign, metadata.resultTemplates, metadata.printTemplate);
+      quiz = { ...quiz, ...result, title: metadata.title.trim(), description: metadata.description, defaultAppearance: metadata.appearance, ...(metadata.defaultDesign === undefined ? {} : { defaultDesign: metadata.defaultDesign }), ...(metadata.resultTemplates === undefined ? {} : { resultTemplates: metadata.resultTemplates }), ...(metadata.printTemplate === undefined ? {} : { printTemplate: metadata.printTemplate }) };
       metadataPending = false; acknowledged++;
     }
     return { quiz, remaining, metadataPending, created, acknowledged, error: null };

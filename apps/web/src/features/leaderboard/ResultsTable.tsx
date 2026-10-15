@@ -1,17 +1,22 @@
-import { Brand } from '../../ui/Brand';
+import type { ResultTemplate } from '@filmovy-kviz/quiz-domain';
+import { slideDesignStyle } from '../presentation/design';
+import { ResultBackdrop, ResultBrand } from '../presentation/ResultBackdrop';
 import type { ResultRow } from './types';
 import './leaderboard.css';
-export function ResultsTable({ roundNumber, page, pageCount, rows, final = false }: {
+export function ResultsTable({ roundNumber, page, pageCount, rows, final = false, template, mediaSessionId }: {
+    template?: ResultTemplate | undefined;
+    mediaSessionId?: string | undefined;
     roundNumber?: number;
     final?: boolean;
     page: number;
     pageCount: number;
     rows: readonly ResultRow[];
 }) {
-    return <article className="results-canvas" aria-label={final ? "Konečné pořadí" : "Průběžné výsledky"}>
-    <header><p><Brand /> · {final ? "konečné" : "průběžné"} pořadí</p><h1>{final ? "Konečné pořadí" : `Průběžné výsledky po ${roundNumber}. kole`}</h1></header>
+    return <article style={slideDesignStyle(template?.design)} className={`results-canvas result-layout-${template?.design?.layout ?? 'classic'}`} aria-label={final ? "Konečné pořadí" : "Průběžné výsledky"}>
+    <ResultBackdrop template={template} mediaSessionId={mediaSessionId} />
+    <header><p><ResultBrand template={template} mediaSessionId={mediaSessionId} /><span>{final ? "KONEČNÉ POŘADÍ" : `PO ${roundNumber}. KOLE`}</span></p><h1>{template?.title || (final ? "Konečné pořadí" : "Jak si vedete?")}</h1>{template?.subtitle && <p className="results-subtitle">{template.subtitle}</p>}</header>
     <table><thead><tr><th scope="col">Pořadí</th><th scope="col">Tým</th><th scope="col">Body</th></tr></thead>
-      <tbody>{rows.map((row, i) => <tr key={page * 8 + i}><td>{row.rank}.</td><th scope="row" title={row.teamName}>{row.teamName}</th><td>{Number(row.halfPoints / 2).toLocaleString('cs-CZ')}</td></tr>)}</tbody>
+      <tbody>{rows.map((row, i) => <tr className={row.rank <= 3 ? `result-rank-${row.rank}` : undefined} key={page * 8 + i}><td><span>{row.rank}.</span></td><th scope="row" title={row.teamName}>{row.teamName}</th><td>{Number(row.halfPoints / 2).toLocaleString('cs-CZ')}</td></tr>)}</tbody>
     </table><footer>Strana {page + 1} z {pageCount} · Shodné body znamenají shodné umístění.</footer>
   </article>;
 }

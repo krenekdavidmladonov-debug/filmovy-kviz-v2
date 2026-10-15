@@ -53,7 +53,12 @@ test('five isolated identities: UI invitation, verified signup, scoped editor, m
     expect((await f.db.doc(`memberships/${f.owner.uid}`).get()).get('role')).toBe('owner');
     const replacement = randomUUID(); await owner.getByLabel('Aktuální heslo', { exact: true }).fill(f.owner.password); await owner.getByLabel('Nové heslo', { exact: true }).fill(replacement); await owner.getByLabel('Zopakovat nové heslo', { exact: true }).fill(replacement);
     await owner.getByRole('button', { name: 'Změnit heslo', exact: true }).click(); await expect(owner.getByRole('button', { name: 'Vytvořit osobní účet', exact: true })).toBeVisible();
-    await login(owner, { ...f.owner, password: replacement }); await owner.reload(); await expect(owner.getByRole('link', { name: 'Uživatelé a přístupy' })).toBeVisible();
+    await login(owner, { ...f.owner, password: replacement }); await owner.reload();
+    await owner.getByRole('link', { name: 'Nastavení', exact: true }).click();
+    await owner.getByRole('link', { name: 'Spravovat přístupy', exact: true }).click();
+    await expect(owner.getByRole('heading', { name: 'Uživatelé a přístupy', exact: true })).toBeVisible();
+    await expect(owner.getByRole('button', { name: 'Pozvat člověka', exact: true })).toBeEnabled();
+    expect((await f.db.doc(`memberships/${f.owner.uid}`).get()).get('role')).toBe('owner');
     await owner.goto('/account'); const updatedEmail = `changed-${randomUUID()}@example.test`;
     await owner.getByLabel('Aktuální heslo', { exact: true }).fill(replacement); await owner.getByLabel('Nový přihlašovací e-mail', { exact: true }).fill(updatedEmail);
     await owner.getByRole('button', { name: 'Ověřit a změnit e-mail', exact: true }).click(); await expect(owner.getByText('Firebase odeslal ověření na nový e-mail.', { exact: false })).toBeVisible();

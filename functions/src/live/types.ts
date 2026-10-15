@@ -8,7 +8,10 @@ export interface PrivateLiveSession {
   readonly sessionId: string;
   readonly eventId?: string;
   readonly snapshotId?: string;
-  readonly interimResults?: { versionId: string; roundNumber: number; page: number; pageCount: number };
+  readonly interimResults?: { versionId: string; roundNumber: number; page: number; pageCount: number } & import('@filmovy-kviz/quiz-domain').ResultPagination;
+  readonly interimReturn?: InterimReturn;
+  readonly lastInterimVersionId?: string;
+  readonly showCue?: import('@filmovy-kviz/quiz-domain').ShowCue;
   readonly finalReveal?: FinalRevealState;
   readonly quizId: string;
   readonly quizTitle: string;
@@ -33,7 +36,19 @@ export interface PrivateLiveSession {
   readonly updatedAt: unknown;
 }
 
+/** Server-captured intent only; never stores answer content or playback. */
+export interface InterimReturn {
+  snapshotId: string; slideId: string; slidePosition: number;
+  presentationMode: LivePresentationMode; answerRevealed: boolean;
+  recapQuestionId?: string; recapQuestionPosition?: number; capturedRevision: number;
+}
+
 export interface PrivateSlide {
+  readonly hidden?: boolean;
+  readonly defaultDesign?: unknown;
+  readonly roundDesign?: unknown;
+  readonly design?: unknown;
+  readonly answerDesign?: unknown;
   readonly id: string;
   readonly position: number;
   readonly kind: string;
@@ -74,6 +89,9 @@ export interface PublicPresentation {
 }
 
 export interface PublicLiveSession {
+  readonly design?: import('@filmovy-kviz/quiz-domain').SlideDesign;
+  readonly roundTitle?: string;
+  readonly subtitle?: string;
   readonly sessionId: string;
   readonly status: LiveSessionStatus;
   readonly quizTitle: string;

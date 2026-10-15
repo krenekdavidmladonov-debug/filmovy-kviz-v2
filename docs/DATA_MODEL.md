@@ -29,6 +29,8 @@ Quiz readiness is intentionally not stored on this document. `PreflightResult` i
 
 ### `quizzes/{quizId}/slides/{slideId}`
 
+Optional `defaultDesign`, `resultTemplates` and `printTemplate` on the quiz root are validated visual metadata, frozen into each event snapshot. Slide `design` and private `answerDesign` contain sparse overrides. Round-header design is also maintained on its derived round document for bounded live reads. Optional `hidden` is restricted to standalone information slides. Details and compatibility rules: [WHOLE_EVENING_DESIGN.md](WHOLE_EVENING_DESIGN.md).
+
 Private, globally ordered presentation source. It preserves every V1 slide, including non-question intro, agenda, recap, round content, and end slides. Fields include `position`, `kind`, `isQuestion`, title/text, options, classified media, presentation controls, optional `roundId`, moderator-only fields, and private `legacy.raw`. A private `correctAnswer` may be present for question slides. Public and projector clients never read this collection directly.
 
 The separate slide stream is intentionally lossless, presentation-oriented, and authoritative for editor order. The nested rounds/questions remain an operational projection for the library and future scoring logic. The editor derives its round-first facade rather than migrating this stream. Trusted slide, round, and question Functions refresh known derived fields after every structural mutation while merge-preserving private legacy extensions.
@@ -42,6 +44,8 @@ Known editor fields include `title`, `text`, `moderatorNote`, general string `op
 Round metadata: `title`, `position`, `type` (`classic`, `picture`, `audio`), `slideCount`, `questionCount`, source slide range, and future optional presentation settings.
 
 V1-migrated rounds may contain private `legacy` source metadata. A generated implicit round is explicitly marked when V1 slides precede the first round header.
+
+A stored non-question `intro` with a `roundId` also serves as a legacy round header. Renaming or duplicating its round updates that header's `title`, every member's derived `roundTitle`, and the derived round document together; later ordering operations must retain the same name. An unscoped quiz introduction remains a quiz-level slide.
 
 ### `quizzes/{quizId}/rounds/{roundId}/questions/{questionId}`
 
@@ -97,6 +101,18 @@ Implemented safe listing data: title, venue display/public location, start time/
 
 ### `publicSessions/{sessionId}`
 
+Show Mode adds optional `presentationStyle` and `pageSize` to confirmed result
+versions and their private pointers: show/6 or classic/8. Public show payloads
+carry explicit show/6; classic public payloads omit both fields to preserve old
+strict projector readers. Missing historical/public metadata means classic/8.
+Public final mode additionally accepts
+`lower`; optional final `history` is a separate six-row page of previously revealed
+groups only, excluding the current group. It is absent on intro/lower/table.
+Public `showCue` is bounded visual metadata (server ID/time/duration, kind, motion,
+intensity, podium/winner switches). `interimBackdrop` is an explicit static slide
+allowlist without answer, answer appearance or playback sources. These fields are
+removed on hide/end; no public result-version collection is introduced.
+
 Server-generated projector snapshot: `sessionId`, `status`, `quizTitle`, `slidePosition`, `presentationMode`, `renderMode`, moderator `mediaCommand`, confirmed `mediaPlaybackState`, monotonic `mediaGeneration`, `introGeneration`, `answerRevealed`, `revision`, and `updatedAt`. An active snapshot may add allowlisted `slideKind`, title, text, primitive options, normalized media roles, question numbering, overlay, and clip controls. A selected recap also publishes its non-sensitive `recapQuestionPosition` so transport validation can prove the answer belongs to an explicit selection. In normal AUDIO mode its source is deliberately omitted. `revealedAnswer` and optional answer image exist only for the single selected recap question or the retained compatibility reveal operation. Correct-answer source fields, moderator notes, `legacy`, `raw`, recap overrides, private references, and complete slide/question objects are forbidden.
 
 Anonymous clients may get one document when they already know its random session ID, but cannot list the collection or write any public state. Every state change replaces the whole public document in the same transaction as the private session update, removing stale reveal fields.
@@ -105,6 +121,29 @@ Anonymous clients may get one document when they already know its random session
 
 Event-bound sessions add private eventId/snapshotId and an interimResults version/page pointer. Private session child collections interimVersions and interimOperations hold immutable reviewed totals and idempotent audit receipts. The existing public session document contains only the currently published page of at most eight rank/teamName/halfPoints rows plus version/scope/page metadata. There is no public leaderboard subcollection. Hide/end/cancel/archive remove this payload. See [INTERIM_RESULTS.md](INTERIM_RESULTS.md).
 
+Show interim versions additionally store private `rowTeamIds` and `teamRanks`;
+session `lastInterimVersionId` retains the last confirmed comparison after hide.
+Only a numeric `movement` delta may cross the public row allowlist, and only when
+stable IDs exist in the prior confirmed version. Names and unconfirmed scores
+never substitute for stable identity. Six-row show pages coexist with legacy
+eight-row pages; the browser never truncates a server page.
+
+Private session `interimReturn` contains only snapshot/slide identity and position,
+presentationMode, prior explicit answerRevealed/recap selection and capturedRevision.
+It stores neither answer text nor playback state. It survives result page/version
+changes and is cleared on hide, navigation to final, END and event closure. A private
+`showCue` copy supports current-state verification without publishing future teams.
+
+Private `events/{eventId}.showPreferences` stores schemaVersion 1, visual motion,
+lowerRanks, topThree/winnerAnimation switches, audioEnabled, volume/fades and five
+optional owned asset references: intro/interim/suspense/reveal/winner. Private
+`showAudioBindings` pins each linked audio reference to its validated generation;
+MIME and size are validated against the ready asset on assignment and reads.
+Configuring these fields advances the existing event revision;
+neither field is copied to publicEvents or immutable question snapshots. New cue
+configuration and media reads use trusted Functions, never direct browser writes.
+See [SHOW_MODE_IMPLEMENTATION.md](SHOW_MODE_IMPLEMENTATION.md).
+
 ## Server-only registration flow
 
 The public client calls a Function. The Function validates shape and limits, checks event state/capacity transactionally, normalizes data, writes the private registration, updates authoritative counters, and returns only a receipt/status. Browser-supplied timestamps, role, status, price, or capacity values are ignored.
@@ -112,6 +151,18 @@ The public client calls a Function. The Function validates shape and limits, che
 ## Retention and audit
 
 Transactional registration email adds server-only event child collections `emailIntents` (operation snapshot and safe delivery audit), `emailSecrets` (authenticated ciphertext envelope only) and `registrationOperations` (payload fingerprints and replay receipts). The existing staff-readable registration contains a safe `emailDelivery` summary. Delivery progresses through `pending → processing → sent/failed`, with transient retries returning to pending. Intents store an expiring lease, at most five submission attempts, a nullable next-attempt timestamp and allowlisted error codes; terminal intents are never resent by queue replay. Neither a raw capability nor a secret URL enters those documents. Retention must coordinate encrypted token envelopes, creation receipts and decryption keys before cloud rollout. See [TRANSACTIONAL_EMAIL.md](TRANSACTIONAL_EMAIL.md).
+
+The optional future-public-registration email policy adds two private fields only
+to newly eligible registration intents: `recipientPolicy:
+'future-public-registration'` and `registrationCreatedAt: Timestamp`. Both are
+derived by trusted code from the canonical registration, never browser fields.
+Eligibility requires a non-manual online registration with its management-token
+verifier, an original creation time at/after the activation cutoff, and a new
+intent time at/after that same cutoff. An update/cancellation cannot substitute
+its current operation time for an older registration's creation time. Unmarked
+historical intents are not backfilled or upgraded. Selected-recipient/default-off
+stored shapes and all public registration responses remain unchanged. A rejected
+pre-cutoff create stores no email intent, delivery summary or token envelope.
 
 Contact data needs an explicit retention policy before launch. Important mutations should record server-derived actor and timestamp fields. Avoid indefinite logs containing contact data.
 

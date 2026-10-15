@@ -8,6 +8,7 @@ export function slideView(slideId: string, data: Record<string, unknown>, answer
   if (Array.isArray(safeData.options)) safeData.options = safeData.options.map((value: unknown) => typeof value === 'string' ? value : '');
   const slide = mapEditorSlide(slideId, safeData);
   return { ...slide, correctAnswer: answers ? slide.correctAnswer : '', answerImage: answers ? slide.answerImage : '',
+    answerDesign: answers ? slide.answerDesign : undefined,
     answerExplanation: answers ? slide.answerExplanation : '', moderatorNote: notes ? slide.moderatorNote : '',
     media: slide.media.filter(m => m.role === 'prompt' || m.role === 'background' || (answers && m.role === 'answer')),
     presentation: { ...slide.presentation, answerOverlay: answers ? slide.presentation.answerOverlay : null } };

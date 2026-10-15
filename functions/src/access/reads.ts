@@ -1,4 +1,4 @@
-import { eventDisposition, hasPermission } from '@filmovy-kviz/quiz-domain';
+import { eventDisposition, hasPermission, normalizeSlideDesign, normalizeResultTemplates, normalizePrintTemplate } from '@filmovy-kviz/quiz-domain';
 import { assertEventReadable } from '../events/guards.js';
 import { deletionInventory } from '../events/deletion.js';
 import { FieldPath, getFirestore, Timestamp, type DocumentSnapshot, type Query, type Transaction } from 'firebase-admin/firestore';
@@ -97,7 +97,8 @@ export const readAccessData = onCall({ region: 'europe-west1', cors: true, maxIn
       if (data.operation === 'mediaAssets') {
         const assets = await tx.get(ref.collection('mediaAssets').limit(201));
         if (assets.size > 200) throw new HttpsError('resource-exhausted', 'Příliš mnoho médií.');
-        const visibleSources = new Set(mapped.flatMap(s => [s.backgroundImage, s.questionImage, s.answerImage, s.mediaSource, ...s.media.map(m => m.source)]));
+        const defaults = normalizeSlideDesign(root.defaultDesign), templates = normalizeResultTemplates(root.resultTemplates);
+        const visibleSources = new Set([normalizePrintTemplate(root.printTemplate).logoImage, defaults.backgroundImage, defaults.logoImage, templates.interim?.design?.backgroundImage, templates.interim?.design?.logoImage, templates.final?.design?.backgroundImage, templates.final?.design?.logoImage, ...mapped.flatMap(s => [s.backgroundImage, s.questionImage, s.answerImage, s.mediaSource, s.design?.backgroundImage, s.design?.logoImage, s.answerDesign?.backgroundImage, s.answerDesign?.logoImage, ...s.media.map(m => m.source)])]);
         return wire(assets.docs.filter(d => member.permissions.includes('quiz.answers.read') || visibleSources.has(quizAssetReference(quizId, d.id))).map(d => ({ id: d.id, data: pick(d.data(), ['quizId', 'assetId', 'kind', 'contentType', 'size', 'status', 'createdBy', 'createdAt', 'generation']) })));
       }
       const rounds = await tx.get(ref.collection('rounds').orderBy('position').limit(401));

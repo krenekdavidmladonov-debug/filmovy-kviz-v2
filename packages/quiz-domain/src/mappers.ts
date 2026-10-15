@@ -9,6 +9,7 @@ import {
   type EditorSlide,
 } from './types.js';
 
+import { normalizeSlideDesign, normalizeResultTemplates, normalizePrintTemplate } from './design.js';
 type DocumentData = Record<string, unknown>;
 const kindSet = new Set<string>(editableSlideKinds);
 const mediaKinds = new Set<string>(['image', 'audio', 'video', 'unknown']);
@@ -108,6 +109,9 @@ export function mapEditorSlide(id: string, data: DocumentData): EditorSlide {
   return {
     id,
     position,
+    ...(typeof data.hidden === 'boolean' ? { hidden: data.hidden } : {}),
+    ...(object(data.design) ? { design: normalizeSlideDesign(data.design) } : {}),
+    ...(object(data.answerDesign) ? { answerDesign: normalizeSlideDesign(data.answerDesign) } : {}),
     storedKind,
     kind: (kindSet.has(storedKind) ? storedKind : 'legacy') as EditableSlideKind,
     isQuestion: data.isQuestion === true,
@@ -157,6 +161,9 @@ export function mapEditorQuiz(id: string, data: DocumentData, slides: readonly E
     questionCount: requiredCount(data, 'questionCount'),
     roundCount: requiredCount(data, 'roundCount'),
     slides: ordered,
+    ...(object(data.printTemplate) ? { printTemplate: normalizePrintTemplate(data.printTemplate) } : {}),
+    ...(object(data.defaultDesign) ? { defaultDesign: normalizeSlideDesign(data.defaultDesign) } : {}),
+    ...(object(data.resultTemplates) ? { resultTemplates: normalizeResultTemplates(data.resultTemplates) } : {}),
     ...(appearance ? {defaultAppearance: {
       backgroundImage: typeof appearance.backgroundImage === 'string' ? appearance.backgroundImage : '',
       backgroundOverlay: typeof appearance.backgroundOverlay === 'number' ? appearance.backgroundOverlay : 0,

@@ -106,6 +106,23 @@ async function orderedSlides() {
   return (await getDocs(query(collection(quizRef, 'slides'), orderBy('position')))).docs;
 }
 
+async function assertRoundTitleConsistency(roundId, title) {
+  const slides = (await orderedSlides()).map(item => item.data());
+  const members = slides.filter(item => item.roundId === roundId);
+  const header = members.find(item => item.kind === 'round')
+    ?? members.find(item => item.kind === 'intro' && item.isQuestion !== true);
+  assert.equal(header.title, title);
+  assert.equal(members.every(item => item.roundTitle === title), true);
+  const round = (await getDoc(doc(db, 'quizzes', quizId, 'rounds', roundId))).data();
+  assert.equal(round.title, title);
+  assert.equal(round.slideCount, members.length);
+  assert.equal(round.questionCount, members.filter(item => item.isQuestion === true).length);
+  const quiz = (await getDoc(quizRef)).data();
+  assert.equal(quiz.slideCount, slides.length);
+  assert.equal(quiz.questionCount, slides.filter(item => item.isQuestion === true).length);
+  assert.equal(quiz.roundCount, new Set(slides.map(item => item.roundId).filter(Boolean)).size);
+}
+
 async function run() {
   await expectFunctionError(
     () => invoke('createQuiz', { title: 'Denied', requestId: 'anonymous-create' }),
@@ -415,6 +432,8 @@ async function run() {
   });
   assert.equal(renamedRound.revision, 9);
   assert.equal((await getDoc(doc(db, 'quizzes', quizId, 'rounds', 'live-round'))).data().title, 'Přejmenované syntetické kolo');
+  assert.equal((await getDoc(slideRef('slide-001'))).data().kind, 'intro');
+  await assertRoundTitleConsistency('live-round', 'Přejmenované syntetické kolo');
 
   const reorderedQuestion = await invoke('reorderQuizQuestion', {
     quizId, slideId: 'slide-002', direction: 1, expectedRevision: 9,
@@ -423,6 +442,7 @@ async function run() {
   const reorderedLiveQuestions = (await getDocs(query(collection(quizRef, 'slides'), orderBy('position')))).docs
     .filter((item) => item.data().roundId === 'live-round' && item.data().isQuestion === true);
   assert.equal(reorderedLiveQuestions[1].id, 'slide-002');
+  await assertRoundTitleConsistency('live-round', 'Přejmenované syntetické kolo');
 
   const movedQuestion = await invoke('moveQuizQuestionToRound', {
     quizId, slideId: 'slide-002', targetRoundId: roundHeader.roundId, expectedRevision: 10,
@@ -443,6 +463,8 @@ async function run() {
     .filter((item) => item.data().roundId === duplicatedRoundId);
   assert.equal(duplicatedRoundSlides.length > 0, true);
   assert.equal(duplicatedRoundSlides.every((item) => item.data().roundTitle.endsWith('– kopie')), true);
+  await assertRoundTitleConsistency(duplicatedRoundId, 'Přejmenované syntetické kolo – kopie');
+  await assertRoundTitleConsistency('live-round', 'Přejmenované syntetické kolo');
 
   const movedRound = await invoke('moveQuizRound', {
     quizId, roundId: duplicatedRoundId, direction: 1, expectedRevision: 12,
@@ -527,6 +549,7 @@ async function run() {
     directWritesDenied: true, staleAndConcurrentWritesVerified: true,
     legacyRoundTripPreserved: true, orderedCrudVerified: true,
     implicitRoundCreatedAndCleaned: true, semanticRoundAndQuestionOperationsVerified: true,
+    legacyIntroRoundRenameAndDuplicateConsistencyVerified: true,
     guidedChoiceAndTimingRepairVerified: true, repairAuthorizationAndStaleRevisionVerified: true,
     repairResponseSanitized: true,
     safeRoundRemovalModesVerified: true, publicSessionUntouched: true,

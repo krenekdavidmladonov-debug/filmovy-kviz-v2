@@ -164,6 +164,17 @@ describe('same-device public channel security', () => {
     expect(parseProjectorChannelMessage({ type: 'public-state', state: { ...recap, answers: ['A', 'B'] } })).toBeUndefined();
   });
 
+  test('accepts authoritative direct reveal recap while refusing channel fast-path authority', () => {
+    const direct = publicState({ renderMode: 'recap', answerRevealed: true, revealedAnswer: 'Explicit revealed answer', answerImage: 'https://example.test/answer.png', revision: 5 });
+    expect(sanitizedChannelState(direct)).toEqual(direct);
+    expect(parseProjectorChannelMessage({ type: 'public-state', state: direct })).toEqual({ type: 'public-state', state: direct });
+    expect(projectorPresentationAuthority(direct)).toBe('authoritative-only');
+    expect(shouldAcceptProjectorFastPath('safe-session', 4, 4, direct)).toBe(false);
+    for (const invalid of [{ ...direct, answerRevealed: false }, { ...direct, revealedAnswer: undefined }, { ...direct, status: 'waiting' }, { ...direct, status: 'ended' }, { ...direct, slidePosition: 0 }, { ...direct, recapQuestionPosition: 1 }, { ...direct, correctAnswer: 'private' }]) expect(parseProjectorChannelMessage({ type: 'public-state', state: invalid })).toBeUndefined();
+    expect(parseProjectorChannelMessage({ type: 'public-state', state: publicState({ renderMode: 'recap' }) })).toBeUndefined();
+    expect(parseProjectorChannelMessage({ type: 'public-state', state: { ...direct, slideKind: 'audio', mediaSource: 'https://example.test/private.mp3' } })).toBeUndefined();
+  });
+
   test('rejects private extras, unknown message types, and malformed playback reports', () => {
     expect(parseProjectorChannelMessage({ type: 'public-state', state: { ...publicState(), correctAnswer: 'SENTINEL' } })).toBeUndefined();
     expect(parseProjectorChannelMessage({ type: 'unknown', state: publicState() })).toBeUndefined();

@@ -50,6 +50,16 @@ it.each<Partial<EventRecord>>([
 it('does not read quiz content without the complete selection permissions', async () => {
   access.allowed = false; await render(); expect(listQuizzes).not.toHaveBeenCalled(); expect(getEditorQuiz).not.toHaveBeenCalled();
 });
+it('compares the source on request without changing the version of an ongoing event', async () => {
+  vi.mocked(getEvent).mockResolvedValue(record({ liveSessionId: 'live' }));
+  vi.mocked(getEditorQuiz).mockResolvedValue({ id: 'quiz', title: 'Novější kvíz', description: '', revision: 4, slideCount: 0, roundCount: 0, questionCount: 0, slides: [] });
+  await render();
+  expect(getEditorQuiz).not.toHaveBeenCalled();
+  await act(async () => [...host.querySelectorAll('button')].find(button => button.textContent === 'Ověřit novější změny v knihovně')!.click());
+  expect(host.textContent).toContain('V knihovně je novější verze 4');
+  expect(host.textContent).toContain('Tato akce stále používá připravenou verzi 1');
+  expect(host.querySelector('[data-testid="event-quiz-assignment"]')?.textContent).toContain('Zdrojová revize 1');
+});
 it('shows the event before the optional library arrives, then runs real preflight and keeps blockers enforced', async () => {
   let resolve!: (quizzes: readonly QuizSummary[]) => void;
   vi.mocked(listQuizzes).mockImplementationOnce(() => new Promise(done => { resolve = done; }));

@@ -18,8 +18,8 @@ export async function eventSessions(tx: Transaction, eventId: string, allowMissi
 }
 export function closeSessions(tx: Transaction, sessions: Awaited<ReturnType<typeof eventSessions>>, actorUid: string) {
   for (const { ref, session } of sessions) {
-    const { interimResults, finalReveal, ...clean } = session;
-    void interimResults; void finalReveal;
+    const { interimResults, finalReveal, interimReturn, showCue, ...clean } = session;
+    void interimResults; void finalReveal; void interimReturn; void showCue;
     const ended = session.status === 'ended' ? clean : applyLiveSessionAction(clean, { type: 'end-session' }, session.revision, actorUid, Timestamp.now());
     tx.set(ref, ended);
     tx.set(getFirestore().doc('publicSessions/' + session.sessionId), buildPublicSessionState(ended));

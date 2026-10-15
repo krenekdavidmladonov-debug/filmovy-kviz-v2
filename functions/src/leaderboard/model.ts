@@ -68,7 +68,8 @@ export function calculateResults(rounds: ResultRound[], throughRoundId: string, 
             rank++;
         return { rank, teamName: t.teamName, halfPoints: t.halfPoints };
     });
-    return { throughRoundId, roundNumber: index + 1, includedRounds: included, rows, missing,
+    const teamRanks = Object.fromEntries(totals.map((team, index) => [team.id, rows[index]!.rank]));
+    return { throughRoundId, roundNumber: index + 1, includedRounds: included, rows, teamRanks, rowTeamIds: totals.map(t => t.id), missing,
         complete: teams.length > 0 && missing.length === 0,
         sourceFingerprint: fingerprint([included, canonicalTeams, sources]) };
 }

@@ -95,7 +95,8 @@ test('three-round finale: two panels, referee, private preview, each raw public 
     await expect(panel(page).getByRole('button', { name: 'Zobrazit celé konečné pořadí' })).toBeDisabled();
     await projector.evaluate(sessionId => { const c = new BroadcastChannel('filmovy-kviz-projector-' + sessionId); c.postMessage({ type: 'public-state', state: { sessionId, revision: 99999, finalReveal: { mode: 'table', rows: [{ rank: 1, teamName: 'FORGED WINNER', halfPoints: 999 }] } } }); c.close(); }, f.sessionId);
     await expect(projector.getByText('FORGED WINNER')).toHaveCount(0);
-    await reveal(page).click(); await expect(projector.getByRole('heading', { name: '4. místo' })).toBeVisible();
+    await reveal(page).click(); await expect(projector.getByRole('heading', { name: 'Gratulujeme', exact: true })).toBeVisible();
+    await expect(projector.locator('.final-canvas .final-rank')).toHaveText('4. místo · sdílené umístění');
     assertFinalPayload(await f.rawPublic(), preview.rows.filter(r => r.rank === 4).slice(0, 8), 'group');
     await panel(page).getByRole('button', { name: 'Další stránka finále' }).click(); await expect(projector.getByText('Strana 2 z 2 · 4. místo')).toBeVisible();
     assertFinalPayload(await f.rawPublic(), preview.rows.filter(r => r.rank === 4).slice(8), 'group');

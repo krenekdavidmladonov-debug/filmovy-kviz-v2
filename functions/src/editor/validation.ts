@@ -1,4 +1,4 @@
-import { parseQuizAsset } from '@filmovy-kviz/quiz-domain';
+import { parseQuizAsset, normalizeSlideDesign, slideDesignKeys, normalizePrintTemplate, printTemplateKeys, type PrintTemplate, type SlideDesign, type ResultTemplates } from '@filmovy-kviz/quiz-domain';
 import { HttpsError } from 'firebase-functions/v2/https';
 
 import { QuizEditorError } from './errors.js';
@@ -76,7 +76,27 @@ function boundedString(value: unknown, field: string, maximum: number, allowEmpt
   return value;
 }
 
-export function validateQuizMetadata(value: unknown): { readonly title: string; readonly description: string; readonly defaultAppearance?: { readonly backgroundImage: string; readonly backgroundOverlay: number; readonly imageLayout: 'split' | 'stacked' } } {
+export function validateSlideDesign(value: unknown): SlideDesign {
+  if (!isObject(value) || Object.keys(value).some(key => !(slideDesignKeys as readonly string[]).includes(key))) throw new QuizEditorError('invalid-argument', 'Design is invalid.');
+  const normalized = normalizeSlideDesign(value);
+  if (Object.keys(normalized).length !== Object.keys(value).length) throw new QuizEditorError('invalid-argument', 'Design is invalid.');
+  return normalized;
+}
+export function validateResultTemplates(value: unknown): ResultTemplates {
+  if (!isObject(value) || Object.keys(value).some(key => !['interim', 'final'].includes(key))) throw new QuizEditorError('invalid-argument', 'Result templates are invalid.');
+  return Object.fromEntries(Object.entries(value).map(([key, template]) => {
+    if (!isObject(template) || Object.keys(template).some(field => !['title', 'subtitle', 'design'].includes(field))) throw new QuizEditorError('invalid-argument', 'Result template is invalid.');
+    return [key, { ...(template.title === undefined ? {} : { title: boundedString(template.title, 'result title', 500) }), ...(template.subtitle === undefined ? {} : { subtitle: boundedString(template.subtitle, 'result subtitle', 2000) }), ...(template.design === undefined ? {} : { design: validateSlideDesign(template.design) }) }];
+  }));
+}
+export function validatePrintTemplate(value: unknown): PrintTemplate {
+  if (!isObject(value) || Object.keys(value).some(key => !(printTemplateKeys as readonly string[]).includes(key))) throw new QuizEditorError('invalid-argument', 'Print template is invalid.');
+  for (const [field, maximum] of [['title', 120], ['instructions', 400], ['footer', 160], ['logoText', 40]] as const) if (value[field] !== undefined) boundedString(value[field], field, maximum);
+  const normalized = normalizePrintTemplate(value);
+  if (Object.keys(normalized).length !== Object.keys(value).length) throw new QuizEditorError('invalid-argument', 'Print template is invalid.');
+  return normalized;
+}
+export function validateQuizMetadata(value: unknown): { readonly title: string; readonly description: string; readonly printTemplate?: PrintTemplate; readonly defaultDesign?: SlideDesign; readonly resultTemplates?: ResultTemplates; readonly defaultAppearance?: { readonly backgroundImage: string; readonly backgroundOverlay: number; readonly imageLayout: 'split' | 'stacked' } } {
   if (!isObject(value)) throw new QuizEditorError('invalid-argument', 'Quiz metadata is required.');
   let defaultAppearance;
   if (value.defaultAppearance !== undefined) {
@@ -87,6 +107,9 @@ export function validateQuizMetadata(value: unknown): { readonly title: string; 
     defaultAppearance = {backgroundImage:validateNormalizedImage(appearance.backgroundImage,'default background'),backgroundOverlay:overlay,imageLayout:appearance.imageLayout as 'split' | 'stacked'};
   }
   return {
+    ...(value.printTemplate === undefined ? {} : { printTemplate: validatePrintTemplate(value.printTemplate) }),
+    ...(value.defaultDesign === undefined ? {} : { defaultDesign: validateSlideDesign(value.defaultDesign) }),
+    ...(value.resultTemplates === undefined ? {} : { resultTemplates: validateResultTemplates(value.resultTemplates) }),
     ...(defaultAppearance === undefined ? {} : {defaultAppearance}),
     title: boundedString(value.title, 'title', 300, false),
     description: boundedString(value.description, 'description', 5_000),
@@ -214,6 +237,8 @@ export function validateSlideInput(value: unknown): EditorSlideInput {
   if (!Array.isArray(value.options) || value.options.length > 30) {
     throw new QuizEditorError('invalid-argument', 'options must contain at most 30 values.');
   }
+  if (value.hidden !== undefined && typeof value.hidden !== 'boolean') throw new QuizEditorError('invalid-argument', 'hidden is invalid.');
+  if (value.resetAppearance !== undefined && value.resetAppearance !== true) throw new QuizEditorError('invalid-argument', 'Appearance reset is invalid.');
   const options = value.options.map((option) => boundedString(option, 'option', 1_000));
   const presentation = validatePresentation(value.presentation);
   const clipStartSeconds = value.clipStartSeconds === undefined
@@ -229,6 +254,10 @@ export function validateSlideInput(value: unknown): EditorSlideInput {
     if (value[field] !== undefined && !allowed.includes(value[field] as string)) throw new QuizEditorError('invalid-argument', field + ' is invalid.');
   }
   return {
+    ...(value.resetAppearance === true ? { resetAppearance: true as const } : {}),
+    ...(value.hidden === undefined ? {} : { hidden: value.hidden }),
+    ...(value.design === undefined ? {} : { design: validateSlideDesign(value.design) }),
+    ...(value.answerDesign === undefined ? {} : { answerDesign: validateSlideDesign(value.answerDesign) }),
     ...(value.authoringStatus === undefined ? {} : { authoringStatus: value.authoringStatus as 'draft' | 'ready' }),
     ...(value.answerMode === undefined ? {} : { answerMode: value.answerMode as 'open' | 'choice' }),
     ...(value.imageLayout === undefined ? {} : { imageLayout: value.imageLayout as 'split' | 'stacked' }),

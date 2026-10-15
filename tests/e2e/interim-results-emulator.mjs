@@ -45,7 +45,11 @@ try {
     await f.db.doc(`events/${f.eventId}/registrations/${f.teamIds[0]}`).update({ teamName: 'Renamed Alfa', revision: 2 });
     assert.deepEqual(await f.publicState(), first);
     pass();
-    assert.deepEqual(await f.call('controlInterimResults', request), published);
+    const replayed = await f.call('controlInterimResults', request);
+    assert.equal(replayed.sessionId, published.sessionId);
+    assert.equal(replayed.revision, published.revision);
+    assert.equal(replayed.replayed, true);
+    assert.equal(replayed.showCue, undefined);
     await deny(f.call('controlInterimResults', { ...request, sourceFingerprint: 'changed' }), 'already-exists');
     await assert.rejects(setDoc(doc(f.admin.store, 'publicSessions', f.sessionId), { interimResults: { rows: [] } }), e => e.code === 'permission-denied');
     await assert.rejects(getDoc(doc(f.anonymous.store, 'sessions', f.sessionId, 'interimVersions', first.interimResults.versionId)), e => e.code === 'permission-denied');

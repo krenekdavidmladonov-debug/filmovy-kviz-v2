@@ -1,4 +1,4 @@
-import { validateQuestion, mapEditorSlide, directMediaKind, youtubeVideoId, parseQuizAsset } from '@filmovy-kviz/quiz-domain';
+import { validateQuestion, mapEditorSlide, directMediaKind, youtubeVideoId, parseQuizAsset, mergeStoredDesign, canHideInfoSlide, type ResultTemplates } from '@filmovy-kviz/quiz-domain';
 import { createHash } from 'node:crypto';
 
 import { QuizEditorError } from './errors.js';
@@ -191,6 +191,11 @@ export function applyKnownSlideUpdate(
     media: mergeEditorMedia(current.media, input.media),
     presentation: mergePresentation(current.presentation, input.presentation),
   };
+  for (const field of ['design', 'answerDesign'] as const) if (input[field] !== undefined) result[field] = mergeStoredDesign(current[field], input[field]);
+  if (input.hidden !== undefined) {
+    if (!canHideInfoSlide({ kind: String(result.kind), isQuestion: result.isQuestion === true, ...(typeof result.roundId === 'string' ? { roundId: result.roundId } : {}) })) throw new QuizEditorError('invalid-argument', 'Only standalone information slides can be hidden.');
+    result.hidden = input.hidden;
+  }
   if (input.moderatorNote === '' && !Object.hasOwn(current, 'moderatorNote')) delete result.moderatorNote;
   else result.moderatorNote = keepMalformedText(current.moderatorNote, input.moderatorNote);
   if (input.correctAnswer === '' && !Object.hasOwn(current, 'correctAnswer')) delete result.correctAnswer;
@@ -225,6 +230,14 @@ export function applyKnownSlideUpdate(
     applyOptionalNumber(result, current, 'clipEndSeconds', input.clipEndSeconds);
   }
   preserveRedactedFields(current, input, result);
+  if (input.resetAppearance === true) {
+    result.backgroundImage = '';
+    delete result.backgroundOverlay;
+    delete result.imageLayout;
+    const presentation = isObject(result.presentation) ? { ...result.presentation } : {};
+    delete presentation.backgroundOverlay;
+    result.presentation = presentation;
+  }
   if ((result.authoringStatus === 'ready' || (input.answerMode !== undefined && result.authoringStatus !== 'draft')) && validateQuestion(mapEditorSlide('current', { position: 1, ...result })).some(issue => issue.severity === 'error')) throw new QuizEditorError('invalid-argument', 'Otázka není dokončená. Uložte ji jako soukromý koncept.');
   return result;
 }
@@ -247,6 +260,21 @@ export function duplicateSlideData(current: Record<string, unknown>, position: n
   return { ...current, position };
 }
 
+export function mergeStoredResultTemplates(current: unknown, input: ResultTemplates): Record<string, unknown> {
+  const result = isObject(current) ? { ...current } : {};
+  for (const key of ['interim', 'final'] as const) {
+    const previous = isObject(result[key]) ? result[key] : {};
+    const template = input[key];
+    const preserved = { ...previous };
+    for (const field of ['title', 'subtitle', 'design']) delete preserved[field];
+    const extensionDesign = mergeStoredDesign(previous.design, {});
+    if (Object.keys(extensionDesign).length) preserved.design = extensionDesign;
+    if (template === undefined) { if (Object.keys(preserved).length) result[key] = preserved; else delete result[key]; }
+    else result[key] = { ...preserved, ...template, ...(template.design === undefined ? {} : { design: mergeStoredDesign(previous.design, template.design) }) };
+  }
+  return result;
+}
+
 export function sortedSlides(slides: readonly StoredEditorSlide[]): readonly StoredEditorSlide[] {
   const result = [...slides].sort((left, right) => Number(left.data.position) - Number(right.data.position));
   result.forEach((slide, index) => {
@@ -255,4 +283,9 @@ export function sortedSlides(slides: readonly StoredEditorSlide[]): readonly Sto
     }
   });
   return result;
+}
+
+export function validateExistingRoundHeaderTarget(slides: readonly StoredEditorSlide[], roundId: string, position: number): void {
+  const members = slides.filter(slide => slide.data.roundId === roundId);
+  if (!members.length || members.some(slide => isRoundKind(slide.data.kind as EditorSlideKind) || (slide.data.kind === 'intro' && slide.data.isQuestion !== true)) || position !== members[0]?.data.position) throw new QuizEditorError('failed-precondition', 'Existing round needs an introduction at its first position.');
 }

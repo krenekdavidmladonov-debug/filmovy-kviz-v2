@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "mode": "LOCAL_RELEASE_INVENTORY_NOT_AUTHORIZATION",
+  "sourceBaseSha": "9404e1c5e96b085af875c0eefb641247a6388c0e",
+  "releaseSha": "a45cec55d5e0dfe7f632b143a80353ab6429563c",
+  "projectId": null,
+  "region": "europe-west1",
+  "cloudReadApproved": false,
+  "cloudWritesApproved": false,
+  "deploymentApproved": false,
+  "hosting": true,
+  "functions": [
+    "archiveEvent",
+    "cancelEvent",
+    "configureEventShow",
+    "controlFinalReveal",
+    "controlInterimResults",
+    "createEventLiveSession",
+    "createLiveSession",
+    "deleteEvent",
+    "endLiveSession",
+    "finishMedia",
+    "goToSlide",
+    "hideAnswer",
+    "nextSlide",
+    "playMedia",
+    "previewFinalResults",
+    "previewInterimResults",
+    "previousSlide",
+    "readEventShowPreferences",
+    "readQuizMedia",
+    "replayMedia",
+    "reportMediaPlayback",
+    "restoreEvent",
+    "revealAnswer",
+    "selectRecapQuestion",
+    "startIntro",
+    "stopMedia",
+    "trashEvent",
+    "updateEvent"
+  ],
+  "newFunctions": ["configureEventShow", "readEventShowPreferences"],
+  "firestoreRules": false,
+  "storageRules": false,
+  "indexes": false,
+  "newSecrets": false,
+  "dataMigration": false,
+  "automaticCleanup": false,
+  "dependencyReview": [
+    {
+      "sources": ["functions/src/leaderboard/callables.ts", "functions/src/leaderboard/model.ts"],
+      "exports": ["createEventLiveSession", "previewInterimResults", "controlInterimResults"],
+      "reason": "Event/session binding, new private stable rank identities, frozen pagination, exact return, backdrop and cue publication share this module."
+    },
+    {
+      "sources": ["functions/src/final-reveal/callables.ts", "functions/src/final-reveal/model.ts"],
+      "exports": ["previewFinalResults", "controlFinalReveal"],
+      "reason": "Confirmed result source, lower/group/table/history pagination and new revisioned presentation commands."
+    },
+    {
+      "sources": ["functions/src/live/callables.ts", "functions/src/live/session-machine.ts", "functions/src/live/show-mode.ts", "functions/src/live/types.ts", "functions/src/live/publication.ts"],
+      "exports": ["createLiveSession", "endLiveSession", "finishMedia", "goToSlide", "hideAnswer", "nextSlide", "playMedia", "previousSlide", "reportMediaPlayback", "replayMedia", "revealAnswer", "selectRecapQuestion", "startIntro", "stopMedia"],
+      "reason": "Existing live entry points must preserve/validate new private session fields and invalidate show return/cue state during authoritative navigation and closure. The unchanged creation export is included for coherent live module rollout."
+    },
+    {
+      "sources": ["functions/src/live/event-lifecycle.ts", "functions/src/events/management.ts", "functions/src/events/callables.ts", "functions/src/events/deletion.ts"],
+      "exports": ["archiveEvent", "cancelEvent", "trashEvent", "restoreEvent", "updateEvent", "deleteEvent"],
+      "reason": "All direct eventSessions/closeSessions consumers share the changed private parser. Cancel/trash clear return/cue state; archive/restore/update/delete retain the same current-session guard and ownership checks. No new deletion collection or cleanup is added."
+    },
+    {
+      "sources": ["functions/src/show-mode/callables.ts", "functions/src/show-mode/audio-model.ts", "functions/src/access/authorization.ts"],
+      "exports": ["configureEventShow", "readEventShowPreferences"],
+      "reason": "Only the two new policy names are added to event.live; existing unrelated policy branches retain their behavior. New event revisioned preferences and pinned audio links require current membership and resource scope."
+    },
+    {
+      "sources": ["functions/src/media/endpoint.ts", "functions/src/media/model.ts", "functions/src/access/media.ts", "functions/src/show-mode/audio-model.ts"],
+      "exports": ["readQuizMedia"],
+      "reason": "Authenticated exact event-linked audio generation and current public backdrop images, with authority rechecked after IO. Upload grant/finalization and Storage Rules are unchanged."
+    },
+    {
+      "sources": ["apps/web/src", "packages/quiz-domain/src/show-mode.ts", "packages/quiz-domain/src/final-reveal.ts"],
+      "hosting": true,
+      "reason": "Ship matching public parsers, show renderers, moderator queue and local audio with the server protocol. Existing open browser tabs require a fresh web load before Show Mode use."
+    }
+  ],
+  "explicitExclusions": [
+    { "target": "production and existing V1 application", "reason": "Outside scope; no access or deployment authorization." },
+    { "target": "all email endpoints and workers", "reason": "Unrelated to Show Mode; no send, task queue resume, email secrets or new recipient grant." },
+    { "target": "Firebase Rules, indexes, Storage objects and lifecycle cleanup", "reason": "No source change or migration is required by this implementation." },
+    { "target": "unrelated editor, print, registration, scoring, referee and membership management exports", "reason": "They do not consume the changed live session parser or new media gateway branch; shared policy gains only two explicit new operation names." },
+    { "target": "lockEventQuiz", "reason": "Immutable snapshot/source guards are unchanged; Show Mode event preferences never rewrite the snapshot." },
+    { "target": "beginQuizMediaUpload and finalizeQuizMediaUpload", "reason": "Existing grant and ready MP3/WAV protocol is reused without semantic changes; neither calls the changed publication read gate." },
+    { "target": "readAccessData and health", "reason": "Unchanged behavior; show preferences use a dedicated authorized callable." }
+  ],
+  "requiredBeforeDeployment": [
+    "Freeze and record the reviewed release SHA and complete local check/rules/emulator/browser evidence.",
+    "Obtain explicit current-conversation approval for that source SHA, named non-production V2 environment, Hosting and the complete function list.",
+    "Perform the repository staging compatibility/identity/target preflight under that approval; this local inventory has not queried cloud state.",
+    "Deploy the matching web and complete transitive callable/gateway set; this file is not an executable deployment instruction."
+  ]
+}

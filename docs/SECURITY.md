@@ -12,6 +12,8 @@
 
 ## Preventing answer leakage
 
+Visual metadata follows the same boundary: `answerDesign` is private answer content and is merged into the public design only on explicit reveal. Public design/result copy uses bounded allowlists; unknown private extensions and private print templates are never published. Owned design images require current publication and existing quiz/media permissions. The full contract is in [WHOLE_EVENING_DESIGN.md](WHOLE_EVENING_DESIGN.md).
+
 The projector reads only one `publicSessions/{sessionId}` document. The trusted `buildPublicSessionState` allowlist builds this projection from private quiz data. In ordinary question mode it copies only explicitly safe title/text/options, normalized visual media, and presentation controls; AUDIO source is omitted entirely. In explicit recap mode it adds only the selected question's display-form `revealedAnswer` and allowed answer image—not the private slide or question. Hiding an answer in React state, CSS, a network response, an error, or an unread UI branch is not acceptable.
 
 The projector ignores inbound BroadcastChannel presentation state entirely. Only Firestore may supply a slide or an explicitly reviewed interim-results page. The projector rejects cache-only data, stale revisions and foreign sessions, invalidates old callbacks, and performs a fresh server read on reconnect. Channel player lifecycle reports contain only session ID, generation and an allowlisted state; authenticated staff and the trusted Function still validate them.
@@ -39,6 +41,27 @@ Manual team add/edit requires an active membership, `event.manage`, `event.conta
 Registration uses callable Functions rather than direct Firestore writes. It validates fields/types, normalization/limits, contact format, team-size bounds, server-time window, unique names, and both capacities transactionally. Management tokens are random bearer capabilities; registration records store only SHA-256 verifiers and invalid combinations are non-enumerating. Guarded local email and eligible explicit staging mode use a separate authenticated ciphertext envelope denied to every client role. Default-off cloud creates no intents/envelopes, binds no email secrets and does not require the vault. Local vault/fake-provider access requires both a demo project and a localhost emulator, and the real Gmail adapter refuses emulator execution. Email intents/receipts remain server-only. The six email endpoints remain excluded from the frozen [70-target restart inventory](../tools/staging/restart-release-manifest.json); the separately approved five-Function staging activation now binds the create keyring and private worker's OAuth/keyring secrets with dedicated identities. [Actual execution evidence](EMAIL_ACTIVATION_EXECUTION.md) verifies private invocation, selected-recipient/cutoff restrictions and one owner-confirmed message. Staging configuration remains active for that recipient, with queue `PAUSED`; no wider recipient rollout or resume is authorized. Responses reveal no other teams or contacts. Production abuse controls remain a launch prerequisite. See [TRANSACTIONAL_EMAIL.md](TRANSACTIONAL_EMAIL.md).
 
 ## Firebase configuration and secrets
+
+The prepared `REGISTRATION_EMAIL_RECIPIENT_POLICY=future-public-registration`
+opt-in is restricted to the same exact V2 staging runtime and requires a valid
+shared activation cutoff. Absence or `selected` retains the existing one-recipient
+contract; unknown policy values fail closed. Future mode derives eligibility from
+the canonical online registration's original creation time and management-token
+verifier, excludes manual registrations, and writes private policy/time provenance
+onto the intent. Browser-supplied provenance is ignored. The dispatch and worker
+allowlist requires this marker and both creation times at/after the current cutoff
+before enqueue or lease/secrets/provider access. Old tasks, fresh edits of old
+registrations and organizational campaigns therefore cannot become mail solely
+because the queue resumes. No historical outbox rewrite/backfill is introduced.
+
+This source change does not authorize its deployment, broader recipients or queue
+resume. The 2026-10-15 read-only operating-state check still found the queue PAUSED,
+five matching selected-recipient configurations and a non-public worker. A future
+approved activation preserves the existing sender, keyring/OAuth secret versions
+and dedicated identities; IAM, public worker invocation and new credentials are
+not prerequisites. Rollout keeps the queue paused until all five matching versions
+and settings are verified. Existing retry/lease limits and the possibility of a
+duplicate physical message after ambiguous Gmail acceptance remain unchanged.
 
 Firebase web configuration is not a secret, but project selection is safety-critical. Local defaults use a `demo-*` project and emulators. Cloud access additionally requires explicit staging mode and the exact allowlisted V2 staging project/app/domain. Other cloud and production builds are rejected. Service-account keys and secrets are forbidden in Git. The isolated staging bootstrap uses only operator CLI OAuth in memory and synthetic data; its generated passwords/tokens remain under ignored `.local-data/staging`. See `STAGING.md`.
 
@@ -74,6 +97,29 @@ Interim result publication checks current Auth at invocation and rechecks active
 
 
 Final reveal extends the same event-bound live session with private immutable finalVersions, revisioned finalOperations and an explicitly revealed public page. Staff confirmation, corrections, closure and moderator-only synthetic sound are documented in [FINAL_REVEAL.md](FINAL_REVEAL.md). No Rules, indexes or cloud data change is required by this implementation.
+
+Show Mode retains these same result/version/revision boundaries. The interim
+backdrop is rebuilt by the server as a static allowlist without answer fields,
+answerDesign or audio/video sources. Private return intent cannot be supplied by
+the browser. Restoring a formerly explicit answer/recap rereads the same current
+snapshot binding and requires current `event.answers.read` in the transaction;
+revocation falls back to the ordinary slide while allowing an authorized event.live
+operator to hide results. It never resumes playback. Only explicitly revealed
+groups enter final lower/current/history pages, each bounded by its server pageSize.
+Stable team IDs used for movement stay private. Receipt replay neither changes
+the public document nor grants a showCue/winner sound attempt.
+
+`configureEventShow` and `readEventShowPreferences` require fresh Auth, active
+membership, `event.live` and event scope with transaction rechecks. Attaching a
+new owned audio reference additionally checks current source-quiz read scope and
+answer-media visibility. Upload permission remains a separate quiz grant. The
+authenticated eventId media gateway accepts only an exact currently attached
+MP3/WAV reference with matching pinned generation and validated MIME/size, and repeats current
+authorization/attachment checks after IO. Event scope grants no arbitrary source
+quiz or Storage access. Public gateway access is extended only to images actually
+present in the current sanitized interimBackdrop. Show audio references, bindings,
+contacts and future result rows never enter publicSessions/publicEvents.
+See [SHOW_MODE_IMPLEMENTATION.md](SHOW_MODE_IMPLEMENTATION.md).
 
 ## Event organizational email
 

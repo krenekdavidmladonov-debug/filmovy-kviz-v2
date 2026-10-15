@@ -44,7 +44,6 @@ export function QuizSettingsForm({
   disabled,
   onTitle,
   onDescription,
-  appearance, onAppearance,
 }: {
   readonly appearance?: EditorAppearance;
   readonly onAppearance?: (value: EditorAppearance) => void;
@@ -60,12 +59,6 @@ export function QuizSettingsForm({
       <header className="content-form-heading"><span>Kvíz</span><h2 id="quiz-settings-title">Základní údaje</h2><p>{quiz.roundCount} kol · {quiz.questionCount} otázek</p></header>
       <label className="form-field" data-preflight-field="quizTitle">Název kvízu *<input disabled={disabled} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
       <label className="form-field">Popis<textarea rows={5} disabled={disabled} value={description} onChange={(event) => onDescription(event.target.value)} /></label>
-      {appearance && onAppearance && <details className="editor-extra"><summary>Výchozí vzhled nových otázek</summary>
-        <MediaUploadField kind="image" label="Výchozí pozadí" value={appearance.backgroundImage} disabled={disabled} onReady={value => onAppearance({...appearance,backgroundImage:value})} />
-        <label className="form-field">Výchozí ztmavení<input type="range" min="0" max="100" value={appearance.backgroundOverlay} disabled={disabled} onChange={event=>onAppearance({...appearance,backgroundOverlay:Number(event.target.value)})}/></label>
-        <label className="form-field">Výchozí rozložení obrázku<select disabled={disabled} value={appearance.imageLayout} onChange={event=>onAppearance({...appearance,imageLayout:event.target.value as 'split'|'stacked'})}><option value="split">Obrázek vedle zadání</option><option value="stacked">Obrázek pod zadáním</option></select></label>
-        <p>Změna určuje vzhled nových otázek. U existující otázky lze použít Obnovit výchozí vzhled; uložené snapshoty akcí se nemění.</p>
-      </details>}
       <p className="field-help">Další nastavení upravíte v části Úvod kvízu. Změny se uloží až tlačítkem Uložit.</p>
     </section>
   );
@@ -88,19 +81,22 @@ export function SystemSectionForm({
   if (section.key === 'agenda') {
     const automatic = slide.automaticAgenda === true;
     const items = automatic ? generatedAgendaOptions(model.rounds) : slide.options;
-    return (
-      <section className="editor-form-stack" data-preflight-field="agenda">
-        <header className="content-form-heading"><span>Úvod kvízu</span><h2>Harmonogram</h2><p>{automatic ? 'Automaticky podle pořadí a názvů kol' : 'Uložený ruční harmonogram'}</p></header>
-        <ol className="generated-agenda">{items.map((item) => <li key={item}>{item}</li>)}</ol>
-        <p className="field-help">{automatic ? 'Harmonogram je odvozený. Nevytváříte ani neřadíte technický slide.' : 'Původní obsah je zachovaný. Změna názvů nebo pořadí kol tento harmonogram nepřepisuje.'}</p>
-      </section>
-    );
+    return <section className="editor-form-stack" data-preflight-field="agenda">
+      <header className="content-form-heading"><span>Úvod kvízu</span><h2>Harmonogram</h2><p>{automatic ? 'Automaticky podle pořadí a názvů kol' : 'Uložený ruční harmonogram'}</p></header>
+      <label className="form-field">Nadpis<input disabled={disabled} value={slide.title} onChange={event => set('title', event.target.value)} /></label>
+      <label className="form-field">Doprovodný text<textarea disabled={disabled} value={slide.text} onChange={event => set('text', event.target.value)} /></label>
+      <label className="binary-answer"><input type="checkbox" disabled={disabled} checked={automatic} onChange={event => onChange({ ...slide, automaticAgenda: event.target.checked, options: [...items] })} /> Automaticky podle kol</label>
+      {automatic ? <ol className="generated-agenda">{items.map(item => <li key={item}>{item}</li>)}</ol> : <label className="form-field">Položky · každá na vlastní řádek<textarea rows={6} disabled={disabled} value={slide.options.join('\n')} onChange={event => set('options', event.target.value.split('\n'))} /></label>}
+      <p className="field-help">Automatické položky se mění podle kol. Vlastní položky zůstanou zachované.</p>
+    </section>;
   }
   if (section.key === 'rules') {
     const rules = slide.options.length > 0 ? slide.options : defaultRules;
     return (
       <section className="editor-form-stack">
         <header className="content-form-heading"><span>Úvod kvízu</span><h2>Pravidla</h2></header>
+        <label className="form-field">Nadpis<input disabled={disabled} value={slide.title} onChange={event => set('title', event.target.value)} /></label>
+        <label className="form-field">Doprovodný text<textarea disabled={disabled} value={slide.text} onChange={event => set('text', event.target.value)} /></label>
         <fieldset className="editor-fieldset" disabled={disabled}>
           <legend>Pravidla pro hráče</legend>
           {rules.map((rule, index) => (
@@ -121,7 +117,6 @@ export function SystemSectionForm({
       <header className="content-form-heading"><span>Úvod kvízu</span><h2>Úvodní obrazovka</h2></header>
       <label className="form-field">Název na úvodní obrazovce<input disabled={disabled} value={slide.title} onChange={(event) => set('title', event.target.value)} /></label>
       <label className="form-field">Podtitulek<textarea rows={3} disabled={disabled} value={slide.text} onChange={(event) => set('text', event.target.value)} /></label>
-      <VisualFields slide={slide} disabled={disabled} onChange={onChange} />
     </section>
   );
 }
@@ -145,20 +140,9 @@ export function RoundSettingsForm({
     <section className="editor-form-stack">
       <header className="content-form-heading"><span>{round.position}. kolo</span><h2>Nastavení kola</h2><p>{round.questions.length} otázek</p></header>
       <label className="form-field" data-preflight-field="roundTitle">Název kola *<input disabled={disabled || round.id === 'roundless'} value={title} onChange={(event) => onTitle(event.target.value)} /></label>
-      {slide && <VisualFields slide={slide} disabled={disabled} onChange={onChange} />}
+      {slide && <label className="form-field">Doprovodný text úvodu kola<textarea disabled={disabled} value={slide.text} onChange={event => onChange({ ...slide, text: event.target.value })} /></label>}
       {!slide && <p className="field-help">Toto kolo nemá samostatnou úvodní obrazovku. Název kola lze přesto bezpečně upravit.</p>}
     </section>
-  );
-}
-
-function VisualFields({ slide, disabled, onChange }: { readonly slide: EditorSlide; readonly disabled: boolean; readonly onChange: (slide: EditorSlide) => void }) {
-  const set = <K extends keyof EditorSlide>(field: K, value: EditorSlide[K]) => onChange({ ...slide, [field]: value });
-  return (
-    <fieldset className="editor-fieldset visual-fields">
-      <legend>Vzhled slidu</legend>
-      <MediaUploadField key={slide.id + ":background"} kind="image" label="Pozadí" value={slide.backgroundImage} disabled={disabled} onReady={value => set("backgroundImage", value)} />
-      <label className="form-field">Ztmavení pozadí <span>{slide.backgroundOverlay ?? 0} %</span><input type="range" disabled={disabled} min="0" max="100" value={slide.backgroundOverlay ?? 0} onChange={(event) => set('backgroundOverlay', Number(event.target.value))} /></label>
-    </fieldset>
   );
 }
 
@@ -349,7 +333,6 @@ export function QuestionForm({
   answersEditable = true,
   notesReadable = true,
   notesEditable = true,
-  defaultAppearance,
   slide,
   number,
   disabled,
@@ -407,9 +390,6 @@ export function QuestionForm({
         <MediaUploadField key={slide.id + ':answer'} kind="image" label="Obrázek odpovědi (soukromý)" value={slide.answerImage} disabled={disabled || !answersEditable} onReady={value => onChange({ ...slide, answerImage: value })} />
         <label className="form-field">Vysvětlení pro hráče po odhalení<textarea disabled={disabled || !answersEditable} value={slide.answerExplanation ?? ''} onChange={event => onChange({ ...slide, answerExplanation: event.target.value })} /></label>
       </details>}
-      <details className="editor-extra"><summary>Vzhled slidu</summary><button type="button" disabled={disabled} onClick={() => onChange({ ...slide, ...(defaultAppearance ?? { backgroundImage: '', backgroundOverlay: 0, imageLayout: 'split' }) })}>Obnovit výchozí vzhled</button><VisualFields slide={slide} disabled={disabled} onChange={onChange} />
-        {type === 'image' && <label className="form-field">Rozložení obrázku<select disabled={disabled} value={slide.imageLayout ?? 'split'} onChange={event => onChange({ ...slide, imageLayout: event.target.value as 'split' | 'stacked' })}><option value="split">Obrázek vedle zadání</option><option value="stacked">Obrázek pod zadáním</option></select></label>}
-      </details>
       {notesReadable && <details className="editor-extra"><summary>Poznámka moderátora</summary><label className="form-field">Poznámka moderátora<textarea rows={3} disabled={disabled || !notesEditable} value={slide.moderatorNote} onChange={event => onChange({ ...slide, moderatorNote: event.target.value })} /></label></details>}
       {(showAllIssues || issues.some((issue) => issue.severity === 'warning')) && <ReadinessSummary slide={slide} />}
     </section>
@@ -421,27 +401,48 @@ export function SystemContentForm({ slide, disabled, onChange }: { readonly slid
   const recap = slide.kind === 'recap';
   return (
     <section className="editor-form-stack">
-      <header className="content-form-heading"><span>Systémová část</span><h2>{recap ? 'Rekapitulace' : slide.kind === 'end' ? 'Závěr kvízu' : 'Starší obsah'}</h2></header>
+      <header className="content-form-heading"><span>Systémová část</span><h2>{recap ? 'Rekapitulace' : slide.kind === 'end' ? 'Závěr kvízu' : 'Informační slide'}</h2></header>
       {recap && <p className="system-content-note">Rekapitulace se sestavuje z otázek tohoto kola. Původní nastavení zůstává zachované.</p>}
       <label className="form-field">Titulek<input disabled={disabled} value={slide.title} onChange={(event) => set('title', event.target.value)} /></label>
       <label className="form-field">Text<textarea rows={4} disabled={disabled} value={slide.text} onChange={(event) => set('text', event.target.value)} /></label>
-      <VisualFields slide={slide} disabled={disabled} onChange={onChange} />
     </section>
   );
 }
 
-export function EditorPreview({ slide, quizTitle, showAnswer, onShowAnswer }: {
+export function EditorPreview({ slide, quizTitle, showAnswer, onShowAnswer, onEdit }: {
   readonly slide: EditorSlide;
   readonly quizTitle: string;
   readonly showAnswer: boolean;
   readonly onShowAnswer: (value: boolean) => void;
+  readonly onEdit?: () => void;
 }) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  useEffect(() => {
+    let observer: ResizeObserver | undefined;
+    const frame = requestAnimationFrame(() => {
+      const stage = stageRef.current?.querySelector<HTMLElement>('.slide-renderer');
+      if (!stage) return;
+      const check = () => {
+        const area = stage.getBoundingClientRect();
+        setOverflowing([...stage.querySelectorAll<HTMLElement>('.slide-copy h1, .slide-copy p, .slide-centered h1, .slide-centered p, .slide-options li, .agenda-items li, .slide-answer strong, .slide-answer p')].some(item => {
+          const bounds = item.getBoundingClientRect();
+          return bounds.width > 0 && (bounds.left < area.left - 1 || bounds.right > area.right + 1 || bounds.top < area.top - 1 || bounds.bottom > area.bottom + 1 || item.scrollWidth > item.clientWidth + 2 || item.scrollHeight > item.clientHeight + 2);
+        }));
+      };
+      check();
+      if (typeof ResizeObserver !== 'undefined') { observer = new ResizeObserver(check); observer.observe(stage); }
+    });
+    return () => { cancelAnimationFrame(frame); observer?.disconnect(); };
+  }, [slide, showAnswer]);
   return (
     <aside className="round-editor-preview editor-panel-preview">
-      <header className="preview-heading"><span>Náhled</span><strong>Co uvidí projektor</strong></header>
+      <header className="preview-heading"><span>Náhled</span><strong>Co uvidí projektor</strong>{onEdit && <button type="button" className="secondary-button" onClick={onEdit}>Upravit slide</button>}</header>
       <div className="local-preview-label">Lokální náhled · nepublikováno</div>
-      <SlidePreview slide={slide} quizTitle={quizTitle} position={slide.position} showAnswer={showAnswer} />
+      <div ref={stageRef}><SlidePreview slide={slide} quizTitle={quizTitle} position={slide.position} showAnswer={showAnswer} /></div>
       {slide.isQuestion && <label className="answer-preview-toggle"><input type="checkbox" checked={showAnswer} onChange={(event) => onShowAnswer(event.target.checked)} /> Náhled odpovědi</label>}
+      {slide.text.length + slide.title.length + slide.options.join('').length > 650 && <p className="field-validation warning" role="status">Slide obsahuje mnoho textu. Zkontrolujte zalomení a velikost v náhledu; uložení je možné.</p>}
+      {overflowing && <p className="field-validation warning" role="status">Část obsahu přesahuje promítanou plochu. Zmenšete text nebo zvolte vhodnější rozložení; uložení je možné.</p>}
       <p className="field-help">Reaguje na rozepsané změny bez uložení a nic neposílá do živé relace.</p>
     </aside>
   );

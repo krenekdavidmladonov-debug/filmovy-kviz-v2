@@ -1,3 +1,4 @@
+import type { SlideDesign } from '@filmovy-kviz/quiz-domain';
 export const editorSlideKinds = [
   'intro',
   'agenda',
@@ -46,6 +47,10 @@ export interface EditorPresentationInput {
 }
 
 export interface EditorSlideInput {
+  readonly resetAppearance?: true;
+  readonly hidden?: boolean;
+  readonly design?: SlideDesign;
+  readonly answerDesign?: SlideDesign;
   readonly authoringStatus?: 'draft' | 'ready';
   readonly answerMode?: 'open' | 'choice';
   readonly imageLayout?: 'split' | 'stacked';

@@ -10,6 +10,7 @@ const prompt=p=>p.getByLabel('Otázka *',{exact:true});
 const save=async p=>{await p.getByRole('button',{name:'Uložit vše',exact:true}).click();await expect(p.locator('.save-state')).toHaveText('Uloženo');};
 const round=(p,n)=>p.locator('.outline-round').nth(n);
 const expand=async(p,name)=>{const summary=p.locator('details.editor-extra').locator('summary').filter({hasText:name});if((await summary.locator('..').getAttribute('open'))===null)await summary.click();};
+const layout=async(p,value)=>{const fields=p.locator('.slide-design-editor').first(),details=fields.locator('details.editor-extra');if(await details.getAttribute('open')===null)await details.locator('summary').first().click();await fields.getByLabel(/^Rozložení /).selectOption(value);};
 const timing=async p=>{await p.getByLabel('Začátek ukázky *').fill('0:01');await p.getByLabel('Konec ukázky *').fill('0:03');await p.getByLabel('Konec ukázky *').press('Tab');};
 const link=async(p,label,url)=>{const field=p.getByRole('region',{name:label,exact:true});await field.getByRole('button',{name:'Vložit odkaz',exact:true}).click();await field.getByRole('textbox').fill(url);await field.getByRole('button',{name:'Použít odkaz',exact:true}).click();await expect(field.getByRole('textbox')).toHaveCount(0);};
 const select=async(p,text)=>{await p.locator('.outline-question').filter({hasText:text}).click();await expect(prompt(p)).toHaveValue(text);};
@@ -33,12 +34,12 @@ test('entire quiz from empty library through normal UI, private drafts, structur
     await expect(page).toHaveURL(/\/admin\/quizzes$/);
     await expect(page.getByRole('heading',{name:'Zatím tu nejsou žádné kvízy'})).toBeVisible();await page.screenshot({path:dir+'/01-empty-library.png'});
     await page.getByRole('link',{name:'+ Nový kvíz',exact:true}).first().click();await page.getByLabel('Název kvízu').fill('Celý syntetický kvíz');await page.getByRole('button',{name:'Vytvořit',exact:true}).click();await expect(page).toHaveURL(/\/edit$/);quizId=page.url().split('/').at(-2);
-    await expand(page,'Výchozí vzhled');await link(page,'Výchozí pozadí','http://127.0.0.1:5198/qa.png');await page.getByLabel('Výchozí rozložení obrázku').selectOption('stacked');await save(page);expect((await identity.db.doc('quizzes/'+quizId).get()).get('defaultAppearance')).toMatchObject({imageLayout:'stacked',backgroundImage:'http://127.0.0.1:5198/qa.png'});
+    await link(page,/^Pozadí · (děděné|vlastní)$/,'http://127.0.0.1:5198/qa.png');await layout(page,'image-first');await save(page);expect((await identity.db.doc('quizzes/'+quizId).get()).get('defaultDesign')).toMatchObject({layout:'image-first',backgroundImage:'http://127.0.0.1:5198/qa.png'});
     await page.getByRole('button',{name:'Úvodní obrazovka',exact:false}).click();await page.getByLabel('Název na úvodní obrazovce').fill('Syntetický filmový večer');await page.getByLabel('Podtitulek').fill('Tři kola vytvořená běžným UI');await save(page);
     await page.getByRole('button',{name:'Pravidla',exact:false}).click();await page.getByLabel('Pravidlo 1',{exact:true}).fill('Syntetické pravidlo fair play');await save(page);
     const systemParts=(await identity.db.collection('quizzes/'+quizId+'/slides').get()).docs.map(d=>d.data());expect(systemParts.find(s=>s.kind==='intro')?.title).toBe('Syntetický filmový večer');expect(systemParts.find(s=>s.kind==='rules')?.options[0]).toBe('Syntetické pravidlo fair play');
     for(let r=0;r<3;r++){await page.getByRole('button',{name:'+ Přidat kolo',exact:true}).click();await expect(page.locator('.outline-round')).toHaveCount(r+1);await page.getByLabel('Název kola *').fill('Kolo '+(r+1));await save(page);if(r===1)await page.screenshot({path:dir+'/02-second-round.png'});}
-    await round(page,1).getByRole('button',{name:'Nastavení kola',exact:true}).click();await page.getByLabel('Název kola *').fill('Druhé filmové kolo');await save(page);
+    await round(page,1).getByRole('button',{name:'Úvod a vzhled kola',exact:true}).click();await page.getByLabel('Název kola *').fill('Druhé filmové kolo');await save(page);
     const types=['ABCD','Volná odpověď','Obrázek','Audio','Video'];
     for(let r=0;r<3;r++)for(let t=0;t<5;t++){
       const text=`K${r+1} ${types[t]} syntetická otázka`;if(!await page.getByRole('dialog',{name:/Typ otázky/}).count())await round(page,r).getByRole('button',{name:'+ Přidat otázku',exact:true}).click();await page.getByRole('dialog',{name:/Typ otázky/}).getByRole('button',{name:types[t],exact:true}).click();await prompt(page).fill(text);
@@ -46,7 +47,7 @@ test('entire quiz from empty library through normal UI, private drafts, structur
       if(t===2){if(r===1)await link(page,'Obrázek otázky','http://127.0.0.1:5198/qa.png');else if(r===2){const picker=page.getByRole('region',{name:'Obrázek otázky',exact:true});await picker.getByRole('button',{name:'Vybrat z médií tohoto kvízu'}).click();await picker.getByRole('button',{name:/Vybrat médium 1/}).click();}else{await page.getByLabel('Obrázek otázky — soubor',{exact:true}).setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:syntheticImage()});await expect(page.getByRole('button',{name:'Zrušit nahrávání'})).toHaveCount(0);}}
       if(t===3){if(r===1)await link(page,'Zdroj ukázky','http://127.0.0.1:5198/qa.wav');else{await page.getByLabel('Zdroj ukázky — soubor',{exact:true}).setInputFiles({name:'synthetic.wav',mimeType:'audio/wav',buffer:syntheticAudio(5)});await expect(page.getByRole('button',{name:'Zrušit nahrávání'})).toHaveCount(0);}await timing(page);}
       if(t===4){await link(page,'Zdroj ukázky','http://127.0.0.1:5198/qa.webm');await timing(page);}
-      if(r===0&&t===2){await expand(page,'Odpověď po odhalení');await page.getByLabel('Obrázek odpovědi (soukromý) — soubor',{exact:true}).setInputFiles({name:'answer.png',mimeType:'image/png',buffer:syntheticImage()});await expect(page.getByRole('button',{name:'Zrušit nahrávání'})).toHaveCount(0);await page.getByLabel('Vysvětlení pro hráče po odhalení').fill('Syntetické vysvětlení až po reveal');await expand(page,'Vzhled slidu');await page.getByLabel('Pozadí — soubor',{exact:true}).setInputFiles({name:'background.png',mimeType:'image/png',buffer:syntheticImage()});await expect(page.getByRole('button',{name:'Zrušit nahrávání'})).toHaveCount(0);await page.getByLabel('Rozložení obrázku').selectOption('stacked');}
+      if(r===0&&t===2){await expand(page,'Odpověď po odhalení');await page.getByLabel('Obrázek odpovědi (soukromý) — soubor',{exact:true}).setInputFiles({name:'answer.png',mimeType:'image/png',buffer:syntheticImage()});await expect(page.getByRole('button',{name:'Zrušit nahrávání'})).toHaveCount(0);await page.getByLabel('Vysvětlení pro hráče po odhalení').fill('Syntetické vysvětlení až po reveal');await expand(page,'Vzhled slidu');await page.locator('.slide-design-editor').first().getByLabel(/^Pozadí · (děděné|vlastní) — soubor$/).setInputFiles({name:'background.png',mimeType:'image/png',buffer:syntheticImage()});await expect(page.getByRole('button',{name:'Zrušit nahrávání'})).toHaveCount(0);await layout(page,'image-first');}
       await save(page);expected.push({text,choice,kind:t===0?'question':t===1?'free':t===2?'image':t===3?'audio':'video'});
       if(r===0){await page.screenshot({path:dir+'/form-'+t+'.png'});if(t===4){await page.getByRole('button',{name:'Přehrát ukázku',exact:true}).click();await expect.poll(()=>page.locator('video').evaluate(v=>v.currentTime)).toBeGreaterThan(1);await page.getByRole('button',{name:'Stop',exact:true}).click();await expect.poll(()=>page.locator('video').evaluate(v=>v.paused)).toBe(true);await page.getByRole('button',{name:'Pustit znovu',exact:true}).click();await expect(page.getByText('Ukázka dohrála.',{exact:true})).toBeVisible();}}
       if(r===0&&t===0) {await page.getByRole('button',{name:'Uložit a přidat další',exact:true}).click();await expect(page.getByRole('dialog',{name:/Typ otázky/})).toBeVisible();}
@@ -57,7 +58,7 @@ test('entire quiz from empty library through normal UI, private drafts, structur
     await expand(page,'Poznámka moderátora');await page.getByLabel('Poznámka moderátora',{exact:true}).fill('Soukromá poznámka uložená při odchodu');await page.locator('.outline-question').filter({hasText:expected[0].text}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await save(page);await expect(prompt(page)).toHaveValue(expected[0].text);await select(page,'Soukromý nedokončený koncept');
     await expect(identity.call('createLiveSession',{quizId})).rejects.toThrow();await page.getByLabel('Správná odpověď *',{exact:true}).fill('Dokončená soukromá odpověď');await page.getByRole('button',{name:'Dokončit otázku',exact:true}).click();await expect(page.locator('.save-state')).toHaveText('Uloženo');
     await page.getByRole('button',{name:'Duplikovat',exact:true}).click();await expect(page.locator('.outline-question')).toHaveCount(17);await prompt(page).fill('Přesunutá duplikovaná otázka');await save(page);await page.getByLabel('Přesunout do kola',{exact:true}).selectOption({label:'2. kolo – Druhé filmové kolo'});await expect(round(page,1)).toContainText('Přesunutá duplikovaná otázka');
-    await round(page,1).getByRole('button',{name:'Nastavení kola',exact:true}).click();await page.getByRole('button',{name:'Přesunout nahoru',exact:true}).click();await expect(round(page,0)).toContainText('Druhé filmové kolo');await page.getByRole('button',{name:'Odstranit kolo…',exact:true}).click();await expect(page.getByRole('dialog')).toContainText('6 otázek');await page.getByRole('dialog').getByRole('button',{name:'Zrušit',exact:true}).click();
+    await round(page,1).getByRole('button',{name:'Úvod a vzhled kola',exact:true}).click();await page.getByRole('button',{name:'Přesunout nahoru',exact:true}).click();await expect(round(page,0)).toContainText('Druhé filmové kolo');await page.getByRole('button',{name:'Odstranit kolo…',exact:true}).click();await expect(page.getByRole('dialog')).toContainText('6 otázek');await page.getByRole('dialog').getByRole('button',{name:'Zrušit',exact:true}).click();
     await page.getByRole('button',{name:'+ Přidat kolo',exact:true}).click();await expect(page.locator('.outline-round')).toHaveCount(4);await page.getByRole('button',{name:'Odstranit kolo…',exact:true}).click();await page.getByRole('button',{name:'Odstranit kolo včetně 0 otázek',exact:true}).click();await expect(page.locator('.outline-round')).toHaveCount(3);
     await page.getByRole('button',{name:'+ Závěrečná obrazovka',exact:true}).click();await page.getByLabel('Titulek',{exact:true}).fill('Syntetický konec');await save(page);
     await page.getByRole('link',{name:'← Knihovna kvízů'}).click();await page.getByRole('link',{name:'Celý syntetický kvíz',exact:true}).click();await page.getByRole('link',{name:'Otevřít editor'}).click();await page.reload();
@@ -128,7 +129,7 @@ test('minimal quiz authored through UI rehearses exactly the persisted live stre
     const agendaForm = page.locator('[data-preflight-field="agenda"]');
     await expect(agendaForm).toContainText('Automaticky podle pořadí a názvů kol');
     await expect(agendaForm.locator('ol')).toContainText('Jediné kolo');
-    await round(page, 0).getByRole('button', { name: 'Nastavení kola', exact: true }).click();
+    await round(page, 0).getByRole('button', { name: 'Úvod a vzhled kola', exact: true }).click();
     await page.getByLabel('Název kola *').fill('Přejmenované jediné kolo');
     await save(page);
     const automaticAgenda = await agendaDto();
@@ -194,8 +195,8 @@ test('minimal quiz authored through UI rehearses exactly the persisted live stre
     expect(manualDto.options).toEqual(manualOptions);
     await page.getByRole('button', { name: /^Harmonogram/ }).click();
     await expect(agendaForm).toContainText('Uložený ruční harmonogram');
-    await expect(agendaForm.locator('ol')).toHaveText(manualOptions[0]);
-    await round(page, 0).getByRole('button', { name: 'Nastavení kola', exact: true }).click();
+    await expect(agendaForm.getByRole('textbox', { name: 'Položky · každá na vlastní řádek', exact: true })).toHaveValue(manualOptions.join('\n'));
+    await round(page, 0).getByRole('button', { name: 'Úvod a vzhled kola', exact: true }).click();
     await page.getByLabel('Název kola *').fill('Nový název při ruční agendě');
     await save(page);
     const preservedAgenda = (await agendaRef.get()).data();
@@ -205,10 +206,10 @@ test('minimal quiz authored through UI rehearses exactly the persisted live stre
     expect(preservedDto).not.toHaveProperty('automaticAgenda');
     expect(preservedDto.options).toEqual(manualOptions);
     await page.getByRole('button', { name: /^Harmonogram/ }).click();
-    await expect(agendaForm.locator('ol')).toHaveText(manualOptions[0]);
+    await expect(agendaForm.getByRole('textbox', { name: 'Položky · každá na vlastní řádek', exact: true })).toHaveValue(manualOptions.join('\n'));
     await practiceButton.click();
     await expect(practice.locator('.practice-stage')).toHaveAttribute('data-slide-id', automaticAgenda.id);
-    await expect(practice.locator('.agenda-items')).toHaveText(manualOptions[0]);
+    await expect(practice.locator('.agenda-items strong')).toHaveText(manualOptions);
     await practice.getByRole('button', { name: 'Zavřít zkoušku' }).click();
     await expect(practiceButton).toBeFocused();
     // Separate technical comparison; the quiz content above was authored only in UI.

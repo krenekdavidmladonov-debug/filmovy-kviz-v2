@@ -45,6 +45,14 @@ const quiz: EditorQuiz = {
   slideCount: 1, roundCount: 1, questionCount: 1, slides: [slide()],
 };
 
+test('immutable event source stores appearance and safe static result templates at lock time', () => {
+  const authored: EditorQuiz = { ...quiz, printTemplate: { title: 'Team sheet', layout: 'compact', logoImage: 'https://example.test/logo.png' }, defaultDesign: { textColor: '#fff' }, defaultAppearance: { backgroundImage: '', backgroundOverlay: 30, imageLayout: 'split' }, resultTemplates: { final: { title: 'Winners', design: { accentColor: '#abc' } } } };
+  const frozen = JSON.parse(JSON.stringify(buildQuizSnapshotMetadata(authored, { warningCount: 0 }, 'admin', 'now'))) as Record<string, unknown>;
+  const laterSource = { ...authored, defaultDesign: { textColor: '#000' }, resultTemplates: { final: { title: 'Changed later' } } };
+  expect(laterSource.resultTemplates.final.title).toBe('Changed later');
+  expect(frozen).toMatchObject({ quizRevision: 7, printTemplate: authored.printTemplate, defaultDesign: { textColor: '#fff' }, defaultAppearance: { backgroundOverlay: 30 }, resultTemplates: { final: { title: 'Winners', design: { accentColor: '#abc' } } } });
+});
+
 describe('event configuration', () => {
   test('accepts separate team, people, and per-team limits', () => {
     expect(validateEventCapacity(validConfiguration)).toEqual([]);

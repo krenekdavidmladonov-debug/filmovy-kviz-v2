@@ -1,7 +1,7 @@
 /* eslint @typescript-eslint/require-await: off -- SDK mocks perform no network IO. */
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { Timestamp } from 'firebase/firestore';
-import { allowedRegistrationEmailIntent, registrationEmailActivation, registrationEmailEnabled, registrationEmailRecipientEligible, registrationEmailSecrets } from '../functions/src/email/runtime';
+import { allowedRegistrationEmailIntent, futurePublicRegistrationEligible, registrationEmailActivation, registrationEmailEnabled, registrationEmailRecipientEligible, registrationEmailSecrets } from '../functions/src/email/runtime';
 
 const sdk = vi.hoisted(() => ({ firestore: vi.fn(), queue: vi.fn(), enqueue: vi.fn(async () => {}), defineSecret: vi.fn(), defineString: vi.fn() }));
 vi.mock('../functions/node_modules/firebase-admin/lib/esm/app/index.js', () => ({ getApps: () => [{}], initializeApp: vi.fn() }));
@@ -16,7 +16,7 @@ const intent = (patch: Record<string, unknown> = {}) => ({ eventId: 'event', reg
   createdAt: Timestamp.fromMillis(Date.parse(cutoff)), ...patch });
 const activation = { activatedAtMillis: Date.parse(cutoff), recipient: 'approved@example.test' };
 const envNames = ['GCLOUD_PROJECT', 'GOOGLE_CLOUD_PROJECT', 'FIREBASE_CONFIG', 'FUNCTIONS_EMULATOR', 'FIRESTORE_EMULATOR_HOST', 'FIREBASE_AUTH_EMULATOR_HOST',
-  'REGISTRATION_EMAIL_MODE', 'REGISTRATION_EMAIL_ACTIVATED_AT', 'REGISTRATION_EMAIL_ALLOWED_RECIPIENT'];
+  'REGISTRATION_EMAIL_MODE', 'REGISTRATION_EMAIL_ACTIVATED_AT', 'REGISTRATION_EMAIL_ALLOWED_RECIPIENT', 'REGISTRATION_EMAIL_RECIPIENT_POLICY'];
 function installEnv(values: NodeJS.ProcessEnv) {
   const emulatorNames = [...Object.keys(process.env), ...Object.keys(values)].filter(name => name.endsWith('_EMULATOR_HOST'));
   for (const name of new Set([...envNames, ...emulatorNames])) vi.stubEnv(name, values[name]);
@@ -34,6 +34,10 @@ describe('registration-only explicit server activation', () => {
     expect(registrationEmailActivation(cloud)).toEqual(activation);
     expect(registrationEmailSecrets(cloud)).toEqual(['EMAIL_TOKEN_KEYRING']);
     expect(registrationEmailActivation({ ...cloud, GOOGLE_CLOUD_PROJECT: cloud.GCLOUD_PROJECT, FIREBASE_CONFIG: JSON.stringify({ projectId: cloud.GCLOUD_PROJECT }) })).toEqual(activation);
+  });
+  test('selected policy is the unchanged default; unknown policies fail closed', () => {
+    expect(registrationEmailActivation({ ...cloud, REGISTRATION_EMAIL_RECIPIENT_POLICY: 'selected' })).toEqual(activation);
+    for (const policy of ['', 'all', '*', 'future']) expect(() => registrationEmailActivation({ ...cloud, REGISTRATION_EMAIL_RECIPIENT_POLICY: policy })).toThrow('configuration-invalid');
   });
   const invalid: NodeJS.ProcessEnv[] = [
     { ...cloud, REGISTRATION_EMAIL_MODE: 'true' }, { ...cloud, REGISTRATION_EMAIL_MODE: '' },
@@ -71,6 +75,138 @@ describe('registration-only explicit server activation', () => {
     expect(registrationEmailRecipientEligible('other@example.test', cloud)).toBe(false);
     expect(registrationEmailRecipientEligible('approved@example.test', { GCLOUD_PROJECT: cloud.GCLOUD_PROJECT })).toBe(false);
     expect(registrationEmailRecipientEligible('other@example.test', { GCLOUD_PROJECT: 'demo-test', FIRESTORE_EMULATOR_HOST: 'localhost:8080' })).toBe(true);
+  });
+});
+
+describe('future public registration email opt-in', () => {
+  const futureCloud = { ...cloud, REGISTRATION_EMAIL_RECIPIENT_POLICY: 'future-public-registration' };
+  const future = { activatedAtMillis: Date.parse(cutoff), recipientPolicy: 'future-public-registration' as const };
+  const createdAt = Timestamp.fromMillis(future.activatedAtMillis);
+  const registration = (patch: Record<string, unknown> = {}) => ({ createdAt, managementTokenHash: 'a'.repeat(64), contactEmail: 'new@example.test', ...patch });
+  const futureIntent = (patch: Record<string, unknown> = {}) => intent({ recipient: 'new@example.test', recipientPolicy: future.recipientPolicy, registrationCreatedAt: createdAt, ...patch });
+  test('only explicit policy widens recipients; old private selected value may remain unused', () => {
+    expect(registrationEmailActivation(futureCloud)).toEqual(future);
+    expect(registrationEmailActivation({ ...futureCloud, REGISTRATION_EMAIL_ALLOWED_RECIPIENT: undefined })).toEqual(future);
+    expect(registrationEmailSecrets(futureCloud)).toEqual(['EMAIL_TOKEN_KEYRING']);
+    expect(registrationEmailRecipientEligible('new@example.test', futureCloud)).toBe(true);
+    expect(registrationEmailRecipientEligible('new@example.test', cloud)).toBe(false);
+    expect(registrationEmailRecipientEligible('bad\r\nBcc: hidden@example.test', futureCloud)).toBe(false);
+    expect(() => registrationEmailActivation({ ...futureCloud, GCLOUD_PROJECT: 'foreign-project' })).toThrow('configuration-invalid');
+    expect(() => registrationEmailActivation({ ...futureCloud, FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080' })).toThrow('configuration-invalid');
+  });
+  test('canonical online registration must originate after cutoff, regardless of fresh operation time', () => {
+    expect(futurePublicRegistrationEligible(registration(), future.activatedAtMillis, future)).toBe(true);
+    for (const patch of [{ source: 'manual' }, { managementTokenHash: null }, { managementTokenHash: 'client' },
+      { createdAt: Timestamp.fromMillis(future.activatedAtMillis - 1) }, { createdAt: undefined },
+      { createdAt: Timestamp.fromMillis(future.activatedAtMillis + 1) }]) {
+      expect(futurePublicRegistrationEligible(registration(patch), future.activatedAtMillis, future)).toBe(false);
+    }
+    expect(futurePublicRegistrationEligible(registration(), future.activatedAtMillis - 1, future)).toBe(false);
+    expect(futurePublicRegistrationEligible(registration(), future.activatedAtMillis, activation)).toBe(false);
+  });
+  test('all three types require new server marker and both dates; old backlog and team messages remain denied', () => {
+    for (const type of ['registration-confirmed', 'registration-updated', 'registration-cancelled']) expect(allowedRegistrationEmailIntent(futureIntent({ type }), future)).toBe(true);
+    for (const patch of [{ recipientPolicy: undefined }, { recipientPolicy: 'selected' }, { registrationCreatedAt: undefined },
+      { registrationCreatedAt: Timestamp.fromMillis(future.activatedAtMillis - 1) }, { createdAt: Timestamp.fromMillis(future.activatedAtMillis - 1) },
+      { registrationCreatedAt: Timestamp.fromMillis(future.activatedAtMillis + 1) }, { type: 'event-team-message' }, { recipient: 'invalid' }]) {
+      expect(allowedRegistrationEmailIntent(futureIntent(patch), future)).toBe(false);
+    }
+    expect(allowedRegistrationEmailIntent(intent(), future)).toBe(false); // Historical selected task, even with the new cutoff timestamp.
+    expect(allowedRegistrationEmailIntent(futureIntent(), { ...future, activatedAtMillis: future.activatedAtMillis + 1 })).toBe(false); // New activation never admits an older batch.
+    expect(allowedRegistrationEmailIntent(intent(), activation)).toBe(true);
+  });
+  test('enqueue records server canonical provenance, never creates old/manual messages or summaries', async () => {
+    installEnv(futureCloud);
+    const { enqueueRegistrationEmail } = await import('../functions/src/email/intent');
+    const create = vi.fn(), update = vi.fn(), ref = { id: 'intent' };
+    const eventRef = { id: 'event', collection: () => ({ doc: () => ref }) } as unknown as Parameters<typeof enqueueRegistrationEmail>[1];
+    const registrationRef = { id: 'registration' } as Parameters<typeof enqueueRegistrationEmail>[2];
+    const tx = { create, update } as unknown as Parameters<typeof enqueueRegistrationEmail>[0];
+    const event = { title: 'Synthetic', startsAt: createdAt, timeZone: 'Europe/Prague', venue: { name: 'Synthetic', publicLocation: 'Synthetic' } };
+    for (const type of ['registration-confirmed', 'registration-updated', 'registration-cancelled'] as const) {
+      expect(enqueueRegistrationEmail(tx, eventRef, registrationRef, 'intent', type, event, registration({ teamName: 'Synthetic', memberCount: 2 }), createdAt)).toBe(true);
+      expect(create.mock.lastCall?.[1]).toMatchObject({ type, recipientPolicy: 'future-public-registration', registrationCreatedAt: createdAt, recipient: 'new@example.test' });
+    }
+    expect(create).toHaveBeenCalledTimes(3); expect(update).toHaveBeenCalledTimes(3); create.mockClear(); update.mockClear();
+    for (const patch of [{ source: 'manual' }, { createdAt: Timestamp.fromMillis(future.activatedAtMillis - 1) }, { managementTokenHash: null }]) {
+      expect(enqueueRegistrationEmail(tx, eventRef, registrationRef, 'intent', 'registration-updated', event, registration(patch), createdAt)).toBe(false);
+    }
+    expect(create).not.toHaveBeenCalled(); expect(update).not.toHaveBeenCalled();
+  });
+  test('dispatcher denies unmarked old tasks and new changes to old registrations before enqueue', async () => {
+    installEnv(futureCloud); const { dispatchRegistrationEmail } = await import('../functions/src/email/worker');
+    for (const patch of [{ recipientPolicy: undefined }, { registrationCreatedAt: Timestamp.fromMillis(future.activatedAtMillis - 1) }, { type: 'event-team-message' }]) {
+      await dispatchRegistrationEmail.run({ data: { exists: true, data: () => futureIntent(patch) }, params: { eventId: 'event', intentId: 'intent' } } as unknown as Parameters<typeof dispatchRegistrationEmail.run>[0]);
+    }
+    expect(sdk.enqueue).not.toHaveBeenCalled();
+    await dispatchRegistrationEmail.run({ data: { exists: true, data: () => futureIntent() }, params: { eventId: 'event', intentId: 'intent' } } as unknown as Parameters<typeof dispatchRegistrationEmail.run>[0]);
+    expect(sdk.enqueue).toHaveBeenCalledOnce();
+  });
+  test('worker rejects old/unmarked/manual-shaped intents without lease writes or provider/vault resolution', async () => {
+    installEnv(futureCloud); const { deliverEmailTask } = await import('../functions/src/email/worker');
+    const eventRef = {}, ref = { path: 'events/event/emailIntents/intent', parent: { parent: eventRef } }, update = vi.fn();
+    for (const patch of [{ recipientPolicy: undefined }, { registrationCreatedAt: Timestamp.fromMillis(future.activatedAtMillis - 1) }, { type: 'event-team-message' }]) {
+      const get = vi.fn(async (selected: unknown) => selected === eventRef ? { data: () => ({ lifecycleStatus: 'ready' }) } : { exists: true, data: () => futureIntent(patch) });
+      const runTransaction = vi.fn(async (callback: (tx: { get: typeof get; update: typeof update }) => Promise<unknown>) => callback({ get, update }));
+      sdk.firestore.mockReturnValue({ collection: () => ({ doc: () => ({ collection: () => ({ doc: () => ref }) }) }), runTransaction });
+      await deliverEmailTask.run({ data: { eventId: 'event', intentId: 'intent' } } as Parameters<typeof deliverEmailTask.run>[0]);
+      expect(get).toHaveBeenCalledTimes(2); expect(update).not.toHaveBeenCalled();
+    }
+    expect(sdk.queue).not.toHaveBeenCalled();
+  });
+  test('actual public create/update/cancel handlers mint only future canonical provenance and preserve retries/noops', async () => {
+    installEnv(futureCloud);
+    vi.stubEnv('EMAIL_TOKEN_KEYRING', JSON.stringify({ activeKeyId: 'synthetic', keys: { synthetic: Buffer.alloc(32, 7).toString('base64') } }));
+    const { Timestamp: AdminTimestamp } = await import('../functions/node_modules/firebase-admin/lib/firestore/index.js');
+    const records = new Map<string, Record<string, unknown>>(); let sequence = 0;
+    const snapshot = (selected: { path: string }) => ({ id: selected.path.split('/').at(-1), exists: records.has(selected.path), data: () => records.has(selected.path) ? { ...records.get(selected.path)! } : undefined });
+    interface FakeReference { id: string; path: string; collection: (name: string) => { doc: (id?: string) => FakeReference } }
+    const reference = (selected: string): FakeReference => ({ id: selected.split('/').at(-1)!, path: selected, collection: name => ({ doc: child => reference(selected + '/' + name + '/' + (child ?? 'generated-' + ++sequence)) }) });
+    const db = { collection: (name: string) => ({ doc: (child?: string) => reference(name + '/' + (child ?? 'generated-' + ++sequence)) }), doc: reference,
+      runTransaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+        const writes: (() => void)[] = [];
+        const tx = { get: async (ref: FakeReference) => snapshot(ref),
+          create: (ref: FakeReference, data: Record<string, unknown>) => { expect(records.has(ref.path)).toBe(false); writes.push(() => { records.set(ref.path, data); }); },
+          update: (ref: FakeReference, data: Record<string, unknown>) => { writes.push(() => { records.set(ref.path, { ...records.get(ref.path)!, ...data }); }); },
+          set: (ref: FakeReference, data: Record<string, unknown>) => { writes.push(() => { records.set(ref.path, data); }); },
+          delete: (ref: FakeReference) => { writes.push(() => { records.delete(ref.path); }); } };
+        const result = await callback(tx); writes.forEach(write => { write(); }); return result;
+      } };
+    sdk.firestore.mockReturnValue(db);
+    const event = { revision: 1, lifecycleStatus: 'scheduled', registrationPublished: true, registrationOpensAt: AdminTimestamp.fromMillis(future.activatedAtMillis - 60000),
+      registrationClosesAt: AdminTimestamp.fromMillis(future.activatedAtMillis + 60000), teamCapacity: 20, peopleCapacity: 40, teamSizeMin: 1, teamSizeMax: 4,
+      title: 'Synthetic', startsAt: AdminTimestamp.fromMillis(future.activatedAtMillis + 100000), timeZone: 'Europe/Prague', venue: { name: 'Synthetic', publicLocation: 'Synthetic' } };
+    records.set('events/event', event);
+    const handlers = await import('../functions/src/registrations/callables');
+    const invoke = (name: 'createEventRegistration' | 'updateEventRegistration' | 'cancelEventRegistration', data: Record<string, unknown>) => handlers[name].run({ data } as Parameters<typeof handlers[typeof name]['run']>[0]) as Promise<Record<string, unknown>>;
+    const intents = () => [...records].filter(([name]) => /^events\/event\/emailIntents\/[^/]+$/u.test(name)).map(([, data]) => data);
+    const secrets = () => [...records.keys()].filter(name => name.includes('/emailSecrets/'));
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(future.activatedAtMillis - 1000);
+      const oldInput = { eventId: 'event', teamName: 'Old registration', memberCount: 2, contactEmail: 'old@example.test', requestKey: 'a'.repeat(43), recipientPolicy: 'future-public-registration', registrationCreatedAt: createdAt };
+      const old = await invoke('createEventRegistration', oldInput);
+      expect(intents()).toHaveLength(0); expect(secrets()).toHaveLength(0);
+      vi.setSystemTime(future.activatedAtMillis + 1000);
+      await invoke('updateEventRegistration', { ...oldInput, teamName: 'Old changed now', registrationId: old.registrationId, token: old.managementToken, requestId: 'old-update', createdAt, registrationCreatedAt: createdAt });
+      await invoke('cancelEventRegistration', { eventId: 'event', registrationId: old.registrationId, token: old.managementToken, recipientPolicy: 'future-public-registration', registrationCreatedAt: createdAt });
+      expect(intents()).toHaveLength(0); expect(secrets()).toHaveLength(0);
+      const input = { eventId: 'event', teamName: 'New registration', memberCount: 2, contactEmail: 'new@example.test', requestKey: 'b'.repeat(43),
+        source: 'manual', recipientPolicy: 'selected', registrationCreatedAt: AdminTimestamp.fromMillis(0), createdAt: AdminTimestamp.fromMillis(0) };
+      const team = await invoke('createEventRegistration', input), original = intents()[0]!;
+      expect(intents()).toHaveLength(1); expect(secrets()).toHaveLength(1); expect(original.recipientPolicy).toBe('future-public-registration');
+      expect((original.registrationCreatedAt as { toMillis: () => number }).toMillis()).toBe(future.activatedAtMillis + 1000);
+      expect(team).not.toHaveProperty('recipientPolicy'); expect(team).not.toHaveProperty('registrationCreatedAt');
+      const replay = await invoke('createEventRegistration', input);
+      expect(replay.registrationId).toBe(team.registrationId); expect(replay.managementToken === team.managementToken).toBe(true); expect(intents()).toHaveLength(1); expect(secrets()).toHaveLength(1);
+      const managed = { eventId: 'event', registrationId: team.registrationId, token: team.managementToken, teamName: input.teamName, memberCount: 2, contactEmail: input.contactEmail };
+      await invoke('updateEventRegistration', { ...managed, requestId: 'noop' }); expect(intents()).toHaveLength(1);
+      const changed = { ...managed, teamName: 'New changed', requestId: 'change' };
+      await invoke('updateEventRegistration', changed); await invoke('updateEventRegistration', changed); expect(intents()).toHaveLength(2);
+      await invoke('cancelEventRegistration', managed); await invoke('cancelEventRegistration', managed); expect(intents()).toHaveLength(3);
+      expect(intents().map(value => value.type)).toEqual(['registration-confirmed', 'registration-updated', 'registration-cancelled']);
+      expect(intents().every(value => allowedRegistrationEmailIntent(value, future))).toBe(true);
+    } finally { vi.useRealTimers(); }
   });
 });
 
