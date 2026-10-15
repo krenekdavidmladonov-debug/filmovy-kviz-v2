@@ -189,6 +189,12 @@ export function AdminEventDetailPage() {
             : <a className="primary-button" href="#event-quiz">Dokončit přípravu</a>)}
       </section>
 
+      {!hidden && can('event.export') && <section className="event-section" aria-labelledby="event-materials-title">
+        <div className="event-section-heading"><div><p className="eyebrow">Dokumenty na večer</p><h2 id="event-materials-title">Tisk a materiály</h2></div>{locked && <span>Kvíz připraven</span>}</div>
+        <p className="event-muted">Odpovědní archy pro týmy, bodovací tabulka a klíč správných odpovědí pro oprávněnou obsluhu.</p>
+        <Link className="secondary-link" to={`/admin/events/${event.id}/print`}>Otevřít tisk a materiály</Link>
+      </section>}
+
       {!hidden && can('event.read') && event.lifecycleStatus === 'completed' && <section className="event-section">
         <div className="event-section-heading"><div><p className="eyebrow">Dokončená akce</p><h2>Konečné výsledky</h2></div></div>
         <p className="event-muted">Potvrzené konečné pořadí této akce, pouze pro čtení.</p>
@@ -218,7 +224,7 @@ export function AdminEventDetailPage() {
       </section>
 
       <section className="event-section" id="event-quiz" data-testid="event-quiz-assignment">
-        <div className="event-section-heading"><div><p className="eyebrow">Kvíz</p><h2>{locked ? 'Kvíz připraven' : 'Vybrat kvíz'}</h2></div>{locked && <span>Zdrojová revize {locked.quizRevision}</span>}</div>
+        <div className="event-section-heading"><div><p className="eyebrow">Kvíz</p><h2>{locked ? 'Kvíz připraven' : 'Vybrat kvíz'}</h2></div>{locked && <span>Připravená verze {locked.quizRevision}</span>}</div>
         {locked && <div className="event-locked-quiz"><strong>{locked.quizTitle}</strong><span>{locked.roundCount} kol · {locked.questionCount} otázek</span><small>Hraje se připravená verze {locked.quizRevision}. Další úpravy v knihovně ji nezmění.</small>
           {sourceRevision !== undefined ? <p role="status">{sourceRevision > locked.quizRevision ? `V knihovně je novější verze ${sourceRevision}. Tato akce stále používá připravenou verzi ${locked.quizRevision}.` : 'Připravená verze odpovídá naposledy ověřené verzi v knihovně.'}</p> : <p>Novější změny v knihovně zatím nejsou ověřené.</p>}
           {canChooseQuiz && <button className="secondary-button" type="button" disabled={checkingLibrary} onClick={() => {
@@ -238,19 +244,13 @@ export function AdminEventDetailPage() {
             {quizzesLoading && <p role="status">Načítám nabídku kvízů…</p>}
             {quizzesError && <p role="alert">Nabídku kvízů se nepodařilo načíst. <button type="button" className="secondary-button" onClick={() => void load()}>Zkusit znovu</button></p>}
             <label className="editor-field"><span>{locked ? 'Aktualizovat kvíz pro akci' : 'Kvíz'}</span><select disabled={quizzesLoading || quizzesError} value={selectedQuizId} onChange={(change) => setSelectedQuizId(change.target.value)}><option value="">Vyberte kvíz</option>{quizzes.map((quiz) => <option value={quiz.id} key={quiz.id}>{quiz.title}</option>)}</select></label>
-            {selectedQuiz && preflight && <div className={`event-readiness status-${preflight.status.toLowerCase()}`} data-preflight-status={preflight.status}><strong>{selectedQuiz.title}</strong><span>{preflight.roundCount} kol · {preflight.questionCount} otázek</span><p>{preflight.blockerCount > 0 ? `${preflight.blockerCount} blockerů brání přípravě.` : preflight.warningCount > 0 ? `${preflight.warningCount} upozornění vyžaduje potvrzení.` : 'Kvíz je připraven bez blockerů.'}</p>{preflight.blockerCount > 0 && <Link className="secondary-link" to={`/admin/quizzes/${selectedQuiz.id}/readiness`}>Otevřít kontrolu kvízu</Link>}{preflight.warningCount > 0 && preflight.blockerCount === 0 && <label className="warning-confirmation"><input type="checkbox" checked={acknowledgeWarnings} onChange={(change) => setAcknowledgeWarnings(change.target.checked)} /> Potvrzuji upozornění pro tuto revizi kvízu.</label>}</div>}
+            {selectedQuiz && preflight && <div className={`event-readiness status-${preflight.status.toLowerCase()}`} data-preflight-status={preflight.status}><strong>{selectedQuiz.title}</strong><span>{preflight.roundCount} kol · {preflight.questionCount} otázek</span><p>{preflight.blockerCount > 0 ? `Přípravě brání problémy: ${preflight.blockerCount}.` : preflight.warningCount > 0 ? `${preflight.warningCount} upozornění vyžaduje potvrzení.` : 'Kvíz je připraven bez chyb.'}</p>{preflight.blockerCount > 0 && <Link className="secondary-link" to={`/admin/quizzes/${selectedQuiz.id}/readiness`}>Otevřít kontrolu kvízu</Link>}{preflight.warningCount > 0 && preflight.blockerCount === 0 && <label className="warning-confirmation"><input type="checkbox" checked={acknowledgeWarnings} onChange={(change) => setAcknowledgeWarnings(change.target.checked)} /> Potvrzuji upozornění pro tuto verzi kvízu.</label>}</div>}
             <button className="primary-button" type="button" disabled={lockDisabled} onClick={() => {
               if (!selectedQuiz) return;
-              void runAction(() => lockEventQuiz(event.id, event.revision, selectedQuiz.id, selectedQuiz.revision, acknowledgeWarnings), locked ? 'Kvíz pro akci byl aktualizován novým snapshotem.' : 'Kvíz byl zkontrolován a připraven.');
+              void runAction(() => lockEventQuiz(event.id, event.revision, selectedQuiz.id, selectedQuiz.revision, acknowledgeWarnings), locked ? 'Kvíz pro akci byl aktualizován.' : 'Kvíz byl zkontrolován a připraven.');
             }}>{pending ? 'Připravuji…' : locked ? 'Aktualizovat kvíz pro akci' : 'Zkontrolovat a připravit'}</button>
           </div>
         ) : <p className="event-muted">Výběr zdrojového kvízu vyžaduje správu akce a přístup ke kvízu včetně odpovědí a exportu.</p>}
-      </section>
-
-      <section className="event-section">
-        <div className="event-section-heading"><div><p className="eyebrow">Dokumenty</p><h2>Tiskové centrum</h2></div>{locked && <span>Neměnný snapshot</span>}</div>
-        <p className="event-muted">Hrací archy, privátní klíč odpovědí a bodovací tabulka pro ruční práci na místě.</p>
-        {!hidden && can('event.export') && <Link className="secondary-link" to={`/admin/events/${event.id}/print`}>Otevřít tiskové centrum</Link>}
       </section>
 
       {admin && !['archived', 'cancelled', 'completed'].includes(event.lifecycleStatus) && <RefereeAccessPanel eventId={event.id} canIssue={can('event.score')} />}

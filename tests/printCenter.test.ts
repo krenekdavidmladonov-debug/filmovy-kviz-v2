@@ -16,7 +16,7 @@ describe('PDF Print Center renderer', () => {
     const first = await renderPrintArtifact(event, options);
     const second = await renderPrintArtifact(event, options);
     expect(Buffer.from(first.bytes).equals(Buffer.from(second.bytes))).toBe(true);
-    expect(first.filename).toBe('hraci-archy.pdf');
+    expect(first.filename).toBe('odpovedni-archy.pdf');
     expect(first.pageCount).toBeGreaterThanOrEqual(20);
     const pdf = await PDFDocument.load(first.bytes);
     expect(pdf.getPageCount()).toBe(first.pageCount);
@@ -55,6 +55,24 @@ describe('PDF Print Center renderer', () => {
     expect(Buffer.from(first.bytes).equals(Buffer.from(second.bytes))).toBe(true);
   });
 
+  test('transient print choices preserve the frozen template and never require hidden logo bytes', async () => {
+    const event = syntheticPrintEvent();
+    event.quiz.printTemplate = { layout: 'comfortable', showLogo: true, instructions: 'Pokyny připraveného kvízu', footer: 'W'.repeat(160) };
+    const before = structuredClone(event.quiz.printTemplate);
+    event.logo = { bytes: new Uint8Array([1, 2, 3]), contentType: 'image/png' };
+    const result = await renderPrintArtifact(event, { artifactType: 'team-sheets', disposition: 'inline', mode: 'generic', teams: [], layout: 'compact', showLogo: false, showInstructions: false });
+    expect(result.pageCount).toBeLessThan(5);
+    expect(event.quiz.printTemplate).toEqual(before);
+    await expect(PDFDocument.load(result.bytes)).resolves.toBeDefined();
+  });
+
+  test('empty rosters require the explicit blank team-sheet mode', async () => {
+    const event = syntheticPrintEvent();
+    await expect(renderPrintArtifact(event, { artifactType: 'team-sheets', disposition: 'inline', mode: 'all', teams: [] })).rejects.toMatchObject({ code: 'missing-teams' });
+    await expect(renderPrintArtifact(event, { artifactType: 'score-table', disposition: 'inline', teams: [] })).rejects.toMatchObject({ code: 'missing-teams' });
+    expect((await renderPrintArtifact(event, { artifactType: 'team-sheets', disposition: 'inline', mode: 'generic', teams: [] })).pageCount).toBe(5);
+  });
+
   test('embeds a verified raster logo, and hiding it avoids reading its bytes', async () => {
     const event = syntheticPrintEvent();
     const png = new PNG({ width: 40, height: 10 });
@@ -73,7 +91,7 @@ describe('PDF Print Center renderer', () => {
   test('paginates long round names and continuing questions without exceeding A4', async () => {
     const event = syntheticPrintEvent();
     event.quiz.rounds = [{ number: 1, title: 'Velmi dlouhý název kola '.repeat(20), questions: Array.from({ length: 35 }, (_, index) => ({ number: index + 1, kind: 'free', answer: 'tajné' })) }];
-    event.quiz.printTemplate = { title: 'Dlouhý nadpis '.repeat(9), instructions: 'Čitelně zapisujte odpovědi. '.repeat(15), footer: 'Děkujeme za příjemný večer. '.repeat(5) };
+    event.quiz.printTemplate = { title: 'Dlouhý nadpis '.repeat(9), logoText: 'W'.repeat(80), instructions: 'Čitelně zapisujte odpovědi. '.repeat(15), footer: 'Děkujeme za příjemný večer. '.repeat(5) };
     const result = await renderPrintArtifact(event, { artifactType: 'team-sheets', disposition: 'inline', mode: 'single', teams: [syntheticTeams(20)[19]!] });
     expect(result.pageCount).toBeGreaterThan(1);
     expect((await PDFDocument.load(result.bytes)).getPages().every(page => page.getHeight() === 841.89)).toBe(true);

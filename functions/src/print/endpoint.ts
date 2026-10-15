@@ -73,13 +73,11 @@ async function resolvePrintOptions(eventId: string, request: PrintRequestOptions
       .collection('registrations').doc(request.teamId).get();
     const team = snapshot.exists ? registrationToPrintTeam(snapshot.id, record(snapshot.data())) : undefined;
     if (team === undefined) throw new PrintCenterError(404, 'team-not-found', 'Přijatý tým nebyl nalezen.');
-    return { artifactType: 'team-sheets', disposition: request.disposition, mode: 'single', teams: [team] };
+    return { ...request, teams: [team] };
   }
   const teams = await acceptedTeams(eventId);
   if (teams.length === 0) throw new PrintCenterError(409, 'missing-teams', 'Akce zatím nemá žádné přijaté týmy.');
-  return request.artifactType === 'score-table'
-    ? { ...request, teams }
-    : { ...request, teams };
+  return { ...request, teams };
 }
 
 export const generatePrintArtifact = onRequest(
@@ -119,11 +117,11 @@ export const generatePrintArtifact = onRequest(
       const eventData = record(eventSnapshot.data());
       const assignmentValue = eventData.quizAssignment;
       if (typeof assignmentValue !== 'object' || assignmentValue === null || Array.isArray(assignmentValue)) {
-        throw new PrintCenterError(409, 'event-not-locked', 'Nejdříve uzamkněte kvíz pro tuto akci. Potom bude možné připravit tiskové dokumenty.');
+        throw new PrintCenterError(409, 'event-not-locked', 'Nejdříve na detailu akce vyberte kvíz a použijte „Zkontrolovat a připravit“. Potom budou tiskové materiály dostupné.');
       }
       const assignment = assignmentValue as Record<string, unknown>;
       if (typeof assignment.snapshotId !== 'string' || assignment.snapshotId.length === 0) {
-        throw new PrintCenterError(409, 'event-not-locked', 'Nejdříve uzamkněte kvíz pro tuto akci. Potom bude možné připravit tiskové dokumenty.');
+        throw new PrintCenterError(409, 'event-not-locked', 'Nejdříve na detailu akce vyberte kvíz a použijte „Zkontrolovat a připravit“. Potom budou tiskové materiály dostupné.');
       }
 
       const snapshotRef = db.collection('quizSnapshots').doc(assignment.snapshotId);
@@ -132,7 +130,7 @@ export const generatePrintArtifact = onRequest(
         snapshotRef.collection('rounds').orderBy('position').limit(PRINT_LIMITS.rounds + 1).get(),
         snapshotRef.collection('slides').orderBy('position').limit(PRINT_LIMITS.slides + 1).get(),
       ]);
-      if (!snapshot.exists) throw new PrintCenterError(409, 'snapshot-missing', 'Uzamčený snapshot kvízu nebyl nalezen.');
+      if (!snapshot.exists) throw new PrintCenterError(409, 'snapshot-missing', 'Připravená verze kvízu nebyla nalezena. Zkontrolujte přípravu kvízu na detailu akce.');
       assertCurrentPrintSource(assignment, assignment, snapshot.data(), eventId);
 
       const printEvent = mapSnapshotToPrintEvent(
@@ -141,7 +139,8 @@ export const generatePrintArtifact = onRequest(
         rounds.docs.map((document) => ({ id: document.id, data: record(document.data()) })),
         slides.docs.map((document) => ({ id: document.id, data: record(document.data()) })),
       );
-      const logoReference = printEvent.quiz.printTemplate?.showLogo !== false ? printEvent.quiz.printTemplate?.logoImage : undefined;
+      const showLogo = requestedOptions.showLogo ?? printEvent.quiz.printTemplate?.showLogo ?? true;
+      const logoReference = showLogo ? printEvent.quiz.printTemplate?.logoImage : undefined;
       if (logoReference) {
         const parsed = parseQuizAsset(logoReference);
         const snapshotQuizId = record(snapshot.data()).quizId;

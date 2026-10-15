@@ -6,7 +6,13 @@ export interface PrintTeam {
   readonly name: string;
 }
 
-export type PrintOptions =
+export interface PrintPresentationOptions {
+  readonly layout?: 'compact' | 'spacious';
+  readonly showLogo?: boolean;
+  readonly showInstructions?: boolean;
+}
+
+export type PrintOptions = PrintPresentationOptions & (
   | {
       readonly artifactType: 'team-sheets';
       readonly disposition: 'inline' | 'attachment';
@@ -20,7 +26,7 @@ export type PrintOptions =
   | {
       readonly artifactType: 'score-table';
       readonly disposition: 'inline' | 'attachment';
-    };
+    });
 
 export interface PrintArtifactBlob {
   readonly blob: Blob;

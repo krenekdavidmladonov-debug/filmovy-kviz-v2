@@ -24,6 +24,8 @@ coverage/
 playwright-report/
 test-results/
 .eslintcache
+output/pdf/
+tmp/pdfs/
 
 # Editors and operating systems
 .idea/

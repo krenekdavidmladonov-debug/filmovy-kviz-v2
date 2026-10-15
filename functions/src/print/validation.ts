@@ -6,6 +6,7 @@ import type {
   PrintOptions,
   PrintRequestOptions,
   PrintTeam,
+  PrintPresentationOptions,
   TeamSheetMode,
 } from './types.js';
 
@@ -24,11 +25,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function assertExactKeys(value: Record<string, unknown>, allowed: readonly string[]): void {
-  const allowedSet = new Set(allowed);
+const PRESENTATION_KEYS = ['layout', 'showLogo', 'showInstructions'] as const;
+
+function assertExactKeys(value: Record<string, unknown>, allowed: readonly string[], presentation = false): void {
+  const allowedSet = new Set([...allowed, ...(presentation ? PRESENTATION_KEYS : [])]);
   if (Object.keys(value).some((key) => !allowedSet.has(key))) {
     throw new PrintCenterError(400, 'invalid-request', 'Požadavek obsahuje nepovolená pole.');
   }
+}
+
+function presentationOptions(value: Record<string, unknown>): PrintPresentationOptions {
+  if (value.layout !== undefined && value.layout !== 'compact' && value.layout !== 'spacious') {
+    throw new PrintCenterError(400, 'invalid-layout', 'Vyberte úsporné nebo prostorné archy.');
+  }
+  for (const key of ['showLogo', 'showInstructions'] as const) {
+    if (value[key] !== undefined && typeof value[key] !== 'boolean') {
+      throw new PrintCenterError(400, 'invalid-presentation', 'Nastavení tisku není platné.');
+    }
+  }
+  return {
+    ...(value.layout === undefined ? {} : { layout: value.layout }),
+    ...(value.showLogo === undefined ? {} : { showLogo: value.showLogo as boolean }),
+    ...(value.showInstructions === undefined ? {} : { showInstructions: value.showInstructions as boolean }),
+  };
 }
 
 function parseDisposition(value: unknown): PrintDisposition {
@@ -78,20 +97,21 @@ export function parsePrintRequestOptions(value: unknown): PrintRequestOptions {
   if (!isRecord(value)) throw new PrintCenterError(400, 'invalid-request', 'Neplatný požadavek na PDF.');
   const artifactType = parseArtifactType(value.artifactType);
   const disposition = parseDisposition(value.disposition);
+  const presentation = presentationOptions(value);
   if (artifactType === 'answer-key' || artifactType === 'score-table') {
-    assertExactKeys(value, ['artifactType', 'disposition']);
-    return { artifactType, disposition };
+    assertExactKeys(value, ['artifactType', 'disposition'], true);
+    return { artifactType, disposition, ...presentation };
   }
   const mode = parseMode(value.mode);
   if (mode === 'single') {
-    assertExactKeys(value, ['artifactType', 'disposition', 'mode', 'teamId']);
+    assertExactKeys(value, ['artifactType', 'disposition', 'mode', 'teamId'], true);
     if (typeof value.teamId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/u.test(value.teamId)) {
       throw new PrintCenterError(400, 'invalid-team', 'Neplatný tým.');
     }
-    return { artifactType, disposition, mode, teamId: value.teamId };
+    return { artifactType, disposition, mode, teamId: value.teamId, ...presentation };
   }
-  assertExactKeys(value, ['artifactType', 'disposition', 'mode']);
-  return { artifactType, disposition, mode };
+  assertExactKeys(value, ['artifactType', 'disposition', 'mode'], true);
+  return { artifactType, disposition, mode, ...presentation };
 }
 
 export function parsePrintOptions(value: unknown): PrintOptions {
@@ -100,22 +120,23 @@ export function parsePrintOptions(value: unknown): PrintOptions {
   }
   const artifactType = parseArtifactType(value.artifactType);
   const disposition = parseDisposition(value.disposition);
+  const presentation = presentationOptions(value);
 
   if (artifactType === 'answer-key') {
-    assertExactKeys(value, ['artifactType', 'disposition']);
-    return { artifactType, disposition };
+    assertExactKeys(value, ['artifactType', 'disposition'], true);
+    return { artifactType, disposition, ...presentation };
   }
 
   if (artifactType === 'score-table') {
-    assertExactKeys(value, ['artifactType', 'disposition', 'teams']);
+    assertExactKeys(value, ['artifactType', 'disposition', 'teams'], true);
     const teams = parseTeams(value.teams);
     if (teams.length === 0) {
       throw new PrintCenterError(400, 'missing-teams', 'Bodovací tabulka vyžaduje alespoň jeden tým.');
     }
-    return { artifactType, disposition, teams };
+    return { artifactType, disposition, teams, ...presentation };
   }
 
-  assertExactKeys(value, ['artifactType', 'disposition', 'mode', 'teams']);
+  assertExactKeys(value, ['artifactType', 'disposition', 'mode', 'teams'], true);
   const mode = parseMode(value.mode);
   const teams = parseTeams(value.teams);
   if (mode === 'generic' && teams.length !== 0) {
@@ -127,7 +148,7 @@ export function parsePrintOptions(value: unknown): PrintOptions {
   if (mode === 'all' && teams.length === 0) {
     throw new PrintCenterError(400, 'missing-teams', 'Společné PDF vyžaduje alespoň jeden tým.');
   }
-  return { artifactType, disposition, mode, teams };
+  return { artifactType, disposition, mode, teams, ...presentation };
 }
 
 export function authorizePrintArtifact(role: unknown, artifactType: PrintArtifactType): void {

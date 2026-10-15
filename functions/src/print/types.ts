@@ -43,7 +43,13 @@ export interface PrintTeam {
 export type PrintDisposition = 'inline' | 'attachment';
 export type TeamSheetMode = 'generic' | 'single' | 'all';
 
-export type PrintOptions =
+export interface PrintPresentationOptions {
+  layout?: 'compact' | 'spacious';
+  showLogo?: boolean;
+  showInstructions?: boolean;
+}
+
+export type PrintOptions = PrintPresentationOptions & (
   | {
       artifactType: 'team-sheets';
       disposition: PrintDisposition;
@@ -58,13 +64,13 @@ export type PrintOptions =
       artifactType: 'score-table';
       disposition: PrintDisposition;
       teams: PrintTeam[];
-    };
+    });
 
-export type PrintRequestOptions =
+export type PrintRequestOptions = PrintPresentationOptions & (
   | { artifactType: 'team-sheets'; disposition: PrintDisposition; mode: 'generic' | 'all' }
   | { artifactType: 'team-sheets'; disposition: PrintDisposition; mode: 'single'; teamId: string }
   | { artifactType: 'answer-key'; disposition: PrintDisposition }
-  | { artifactType: 'score-table'; disposition: PrintDisposition };
+  | { artifactType: 'score-table'; disposition: PrintDisposition });
 
 export interface RenderedPrintArtifact {
   bytes: Uint8Array;
