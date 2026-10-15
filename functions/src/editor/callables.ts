@@ -116,6 +116,11 @@ function slideRoundId(slide: StoredEditorSlide): string | undefined {
     : undefined;
 }
 
+function isStoredRoundHeader(slide: StoredEditorSlide): boolean {
+  return isRoundKind(storedKind(slide))
+    || (slideRoundId(slide) !== undefined && storedKind(slide) === 'intro' && slide.data.isQuestion !== true);
+}
+
 function stateCounts(slides: readonly StoredEditorSlide[]) {
   const roundIds = new Set(slides.map(slideRoundId).filter((value): value is string => value !== undefined));
   return {
@@ -613,7 +618,7 @@ export const updateQuizRound = securedOnCall('updateQuizRound', callableOptions,
       const updated = orderedWithPositions(state.slides.map((slide) => {
         if (slideRoundId(slide) !== roundId) return slide;
         const data: Record<string, unknown> = { ...slide.data, roundTitle: title };
-        if (isRoundKind(storedKind(slide))) data.title = title;
+        if (isStoredRoundHeader(slide)) data.title = title;
         return { ...slide, data };
       }));
       const result = writeQuizState(transaction, state, updated, actor);
@@ -716,7 +721,7 @@ export const duplicateQuizRound = securedOnCall('duplicateQuizRound', callableOp
       }
       const newRoundId = state.quizRef.collection('rounds').doc().id;
       const currentTitle = source.find((slide) => typeof slide.data.roundTitle === 'string')?.data.roundTitle
-        ?? source.find((slide) => isRoundKind(storedKind(slide)) && typeof slide.data.title === 'string')?.data.title;
+        ?? source.find((slide) => isStoredRoundHeader(slide) && typeof slide.data.title === 'string')?.data.title;
       const copiedTitle = typeof currentTitle === 'string' && currentTitle.trim() !== '' ? `${currentTitle} – kopie` : 'Kopie kola';
       const copies = source.map((slide) => ({
         id: state.quizRef.collection('slides').doc().id,
@@ -724,7 +729,7 @@ export const duplicateQuizRound = securedOnCall('duplicateQuizRound', callableOp
           ...slide.data,
           roundId: newRoundId,
           roundTitle: copiedTitle,
-          ...(isRoundKind(storedKind(slide)) ? { title: copiedTitle } : {}),
+          ...(isStoredRoundHeader(slide) ? { title: copiedTitle } : {}),
         },
       }));
       const sourceLastIndex = state.slides.reduce((found, slide, index) => slideRoundId(slide) === roundId ? index : found, -1);

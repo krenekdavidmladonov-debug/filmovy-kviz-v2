@@ -45,6 +45,8 @@ Round metadata: `title`, `position`, `type` (`classic`, `picture`, `audio`), `sl
 
 V1-migrated rounds may contain private `legacy` source metadata. A generated implicit round is explicitly marked when V1 slides precede the first round header.
 
+A stored non-question `intro` with a `roundId` also serves as a legacy round header. Renaming or duplicating its round updates that header's `title`, every member's derived `roundTitle`, and the derived round document together; later ordering operations must retain the same name. An unscoped quiz introduction remains a quiz-level slide.
+
 ### `quizzes/{quizId}/rounds/{roundId}/questions/{questionId}`
 
 Private question source: `prompt`, `type` (`text`, `image`, `audio`, `video`, or migration-only `legacy`), `position`, and the private `correctAnswer`. V1-migrated drafts may also carry `sourceSlidePosition`, `options`, `moderatorNote`, classified external `media`, video ranges, an audio trigger, overlays, and private `legacy.raw`. The legacy representation is the minimum lossless extension for V1 `pl`: the editor now presents its confirmed product meaning as locked **Pravda / Lež**, while its storage shape remains legacy-only and non-creatable. This collection is never readable by public/projector clients. The current admin view model selects only supported type, prompt, and position and does not expose the answer or migration metadata to list/detail components.
