@@ -5,6 +5,7 @@ import { mediaFixture, syntheticImage, syntheticAudio } from '../e2e/media-fixtu
 const imageFile = () => ({ name:'qa.png', mimeType:'image/png', buffer:syntheticImage() });
 const audioFile = () => ({ name:'qa.wav', mimeType:'audio/wav', buffer:syntheticAudio(5) });
 const picker = (page,label) => page.getByRole('region',{name:label,exact:true});
+const background = page => page.locator('.slide-design-editor').first().getByRole('region',{name:/^Pozadí · (děděné|vlastní)$/,exact:true});
 const extras = async page => { for (const name of ['Odpověď po odhalení','Vzhled slidu']) {const d=page.locator('details.editor-extra').filter({has:page.locator('summary').filter({hasText:name})}); if(await d.count() && await d.getAttribute('open')===null)await d.locator('summary').click();} };
 const save = async page => { await page.getByRole('button',{name:'Uložit vše',exact:true}).click(); await expect(page.locator('.save-state')).toHaveText('Uloženo'); };
 const questionText = page => page.locator('[data-preflight-field="prompt"] textarea');
@@ -33,15 +34,15 @@ test('new multimedia authoring, independent roles, replacement, library, failure
     await extras(page);
     await page.getByLabel('Obrázek odpovědi (soukromý) — soubor',{exact:true}).setInputFiles(imageFile());
     await expect(picker(page,'Obrázek odpovědi (soukromý)').getByText('Ověřené médium tohoto kvízu',{exact:false})).toBeVisible();
-    await page.getByLabel('Pozadí — soubor',{exact:true}).setInputFiles(imageFile());
-    await expect(picker(page,'Pozadí').getByText('Ověřené médium tohoto kvízu',{exact:false})).toBeVisible();
+    await background(page).getByLabel(/^Pozadí · (děděné|vlastní) — soubor$/).setInputFiles(imageFile());
+    await expect(background(page).getByText('Ověřené médium tohoto kvízu',{exact:false})).toBeVisible();
     await expect(page.locator('.round-editor-preview .slide-answer')).toHaveCount(0);
     await expect.poll(()=>page.locator('.round-editor-preview .slide-background img').evaluate(img=>img.naturalWidth)).toBe(8);
     await save(page); await reopen(page,'QA nová obrázková otázka');
     await page.screenshot({fullPage:true,path:'.local-data/media-authoring/image-background.png'});
     await link(page,'Obrázek otázky','http://127.0.0.1:5198/qa-image.png'); await save(page); await reopen(page,'QA nová obrázková otázka');
     const imagePicker=picker(page,'Obrázek otázky'); await imagePicker.getByRole('button',{name:'Vybrat z médií tohoto kvízu',exact:true}).click(); await imagePicker.getByRole('button',{name:/Vybrat médium 1/}).click(); await save(page);
-    await extras(page); await picker(page,'Pozadí').getByRole('button',{name:'Odebrat',exact:true}).click(); await picker(page,'Obrázek odpovědi (soukromý)').getByRole('button',{name:'Odebrat',exact:true}).click(); await save(page); await reopen(page,'QA nová obrázková otázka');
+    await extras(page); await background(page).getByRole('button',{name:'Odebrat',exact:true}).click(); await picker(page,'Obrázek odpovědi (soukromý)').getByRole('button',{name:'Odebrat',exact:true}).click(); await save(page); await reopen(page,'QA nová obrázková otázka');
     await expect(page.locator('.round-editor-preview .slide-background img')).toHaveCount(0);
     await newQuestion(page,'Audio','QA nové audio'); await page.getByLabel('Zdroj ukázky — soubor',{exact:true}).setInputFiles(audioFile()); await expect(picker(page,'Zdroj ukázky').getByText('Ověřené médium tohoto kvízu',{exact:false})).toBeVisible(); await timing(page); await save(page); await reopen(page,'QA nové audio');
     await page.getByRole('button',{name:'Přehrát ukázku',exact:true}).click(); await expect(page.getByText('Ukázka dohrála.',{exact:true})).toBeVisible(); await expect.poll(()=>page.locator('audio').evaluate(a=>a.paused)).toBe(true); await page.locator('.media-timing-editor').screenshot({path:'.local-data/media-authoring/audio.png'});

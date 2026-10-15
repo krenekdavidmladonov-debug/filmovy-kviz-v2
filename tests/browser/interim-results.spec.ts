@@ -33,7 +33,8 @@ test('moderator explicitly previews, publishes, updates and hides interim result
     await panel.getByRole('button', { name: 'Zobrazit výsledky', exact: true }).click();
     await expect(published).toBeVisible();
     await expect(page.getByRole('button', { name: 'Ukončit kvíz', exact: true })).toBeEnabled();
-    await expect(published.getByRole('heading')).toHaveText('Průběžné výsledky po 2. kole');
+    await expect(published.getByRole('heading')).toHaveText('Jak si vedete?');
+    await expect(published.getByText('PO 2. KOLE', { exact: true })).toBeVisible();
     const rows = published.locator('tbody tr');
     await expect(rows).toHaveCount(8);
     await expect(rows.nth(0)).toContainText('Alfa');

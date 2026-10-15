@@ -185,7 +185,7 @@ test('quiz metadata and round title survive selection, and invalid inactive cont
     await prompt(page).fill('a repaired'); await select(page, 1); await expect(prompt(page)).toHaveValue('b edited');
     await page.getByRole('button', { name: 'Základní údaje', exact: true }).click();
     await page.getByLabel('Název kvízu *', { exact: true }).fill('Nový název');
-    await page.getByRole('button', { name: 'Nastavení kola', exact: true }).click();
+    await page.getByRole('button', { name: 'Úvod a vzhled kola', exact: true }).click();
     await page.getByLabel('Název kola *', { exact: true }).fill('Nové kolo');
     await select(page, 0); await save(page); await expect(page.locator('.save-state')).toHaveText('Uloženo');
     expect((await f.root.get()).data().title).toBe('Nový název');
