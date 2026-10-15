@@ -1,5 +1,10 @@
 # JUSTKVÍZ SHOW MODE — lokální předání 2026-10-15
 
+**Aktualizace po předání:** verze `b456606` byla následně se souhlasem vlastníka
+nasazena na V2 staging v rozsahu Hosting + 44 Functions a ověřena online.
+Viz [záznam nasazení a QA](SHOW_MODE_STAGING_B456606.md).
+Následující text zachovává historický stav lokálního předání před nasazením.
+
 SHOW MODE je implementovaný v existující V2 aplikaci po schválení všech tří
 návrhových obrazovek. Výsledkový overlay, ručně řízené finále, vítězný moment,
 audio a synchronizace jsou propojené se skutečnými serverovými příkazy.

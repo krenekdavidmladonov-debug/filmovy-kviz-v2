@@ -1,0 +1,241 @@
+{
+  "status": "DEPLOYED_AND_VERIFIED",
+  "releaseSha": "b4566066e72c423136a29733384280b7c0d42c0d",
+  "projectId": "filmovy-kviz-v2-staging",
+  "region": "europe-west1",
+  "hosting": {
+    "url": "https://filmovy-kviz-v2-staging.web.app",
+    "version": "sites/filmovy-kviz-v2-staging/versions/a8e737029fb4a85f",
+    "release": "sites/filmovy-kviz-v2-staging/releases/1792059781698000"
+  },
+  "functions": [
+    {
+      "name": "archiveEvent",
+      "state": "ACTIVE",
+      "revision": "archiveevent-00007-jef"
+    },
+    {
+      "name": "cancelEvent",
+      "state": "ACTIVE",
+      "revision": "cancelevent-00007-jan"
+    },
+    {
+      "name": "configureEventShow",
+      "state": "ACTIVE",
+      "revision": "configureeventshow-00001-wiz"
+    },
+    {
+      "name": "controlFinalReveal",
+      "state": "ACTIVE",
+      "revision": "controlfinalreveal-00006-nih"
+    },
+    {
+      "name": "controlInterimResults",
+      "state": "ACTIVE",
+      "revision": "controlinterimresults-00007-voy"
+    },
+    {
+      "name": "createEventLiveSession",
+      "state": "ACTIVE",
+      "revision": "createeventlivesession-00006-bip"
+    },
+    {
+      "name": "createLiveSession",
+      "state": "ACTIVE",
+      "revision": "createlivesession-00006-zaw"
+    },
+    {
+      "name": "createQuizRound",
+      "state": "ACTIVE",
+      "revision": "createquizround-00004-hub"
+    },
+    {
+      "name": "createQuizSlide",
+      "state": "ACTIVE",
+      "revision": "createquizslide-00005-ses"
+    },
+    {
+      "name": "deleteEvent",
+      "state": "ACTIVE",
+      "revision": "deleteevent-00003-yiw"
+    },
+    {
+      "name": "deleteQuizSlide",
+      "state": "ACTIVE",
+      "revision": "deletequizslide-00005-zaw"
+    },
+    {
+      "name": "duplicateQuizRound",
+      "state": "ACTIVE",
+      "revision": "duplicatequizround-00005-qux"
+    },
+    {
+      "name": "duplicateQuizSlide",
+      "state": "ACTIVE",
+      "revision": "duplicatequizslide-00005-dub"
+    },
+    {
+      "name": "endLiveSession",
+      "state": "ACTIVE",
+      "revision": "endlivesession-00008-xut"
+    },
+    {
+      "name": "finishMedia",
+      "state": "ACTIVE",
+      "revision": "finishmedia-00008-hil"
+    },
+    {
+      "name": "generatePrintArtifact",
+      "state": "ACTIVE",
+      "revision": "generateprintartifact-00006-sox"
+    },
+    {
+      "name": "goToSlide",
+      "state": "ACTIVE",
+      "revision": "gotoslide-00008-vox"
+    },
+    {
+      "name": "hideAnswer",
+      "state": "ACTIVE",
+      "revision": "hideanswer-00008-goc"
+    },
+    {
+      "name": "lockEventQuiz",
+      "state": "ACTIVE",
+      "revision": "lockeventquiz-00007-yiz"
+    },
+    {
+      "name": "moveQuizQuestionToRound",
+      "state": "ACTIVE",
+      "revision": "movequizquestiontoround-00005-med"
+    },
+    {
+      "name": "moveQuizRound",
+      "state": "ACTIVE",
+      "revision": "movequizround-00005-voq"
+    },
+    {
+      "name": "moveQuizSlide",
+      "state": "ACTIVE",
+      "revision": "movequizslide-00005-xuw"
+    },
+    {
+      "name": "nextSlide",
+      "state": "ACTIVE",
+      "revision": "nextslide-00008-kal"
+    },
+    {
+      "name": "playMedia",
+      "state": "ACTIVE",
+      "revision": "playmedia-00008-yup"
+    },
+    {
+      "name": "previewFinalResults",
+      "state": "ACTIVE",
+      "revision": "previewfinalresults-00005-wej"
+    },
+    {
+      "name": "previewInterimResults",
+      "state": "ACTIVE",
+      "revision": "previewinterimresults-00006-qic"
+    },
+    {
+      "name": "previousSlide",
+      "state": "ACTIVE",
+      "revision": "previousslide-00008-zep"
+    },
+    {
+      "name": "readAccessData",
+      "state": "ACTIVE",
+      "revision": "readaccessdata-00004-kaf"
+    },
+    {
+      "name": "readEventShowPreferences",
+      "state": "ACTIVE",
+      "revision": "readeventshowpreferences-00001-tib"
+    },
+    {
+      "name": "readQuizMedia",
+      "state": "ACTIVE",
+      "revision": "readquizmedia-00005-gaf"
+    },
+    {
+      "name": "removeQuizRound",
+      "state": "ACTIVE",
+      "revision": "removequizround-00005-bil"
+    },
+    {
+      "name": "reorderQuizQuestion",
+      "state": "ACTIVE",
+      "revision": "reorderquizquestion-00005-jiy"
+    },
+    {
+      "name": "replayMedia",
+      "state": "ACTIVE",
+      "revision": "replaymedia-00008-nux"
+    },
+    {
+      "name": "reportMediaPlayback",
+      "state": "ACTIVE",
+      "revision": "reportmediaplayback-00008-rir"
+    },
+    {
+      "name": "restoreEvent",
+      "state": "ACTIVE",
+      "revision": "restoreevent-00003-yax"
+    },
+    {
+      "name": "revealAnswer",
+      "state": "ACTIVE",
+      "revision": "revealanswer-00008-rel"
+    },
+    {
+      "name": "selectRecapQuestion",
+      "state": "ACTIVE",
+      "revision": "selectrecapquestion-00008-vor"
+    },
+    {
+      "name": "startIntro",
+      "state": "ACTIVE",
+      "revision": "startintro-00008-zij"
+    },
+    {
+      "name": "stopMedia",
+      "state": "ACTIVE",
+      "revision": "stopmedia-00008-jot"
+    },
+    {
+      "name": "trashEvent",
+      "state": "ACTIVE",
+      "revision": "trashevent-00003-dur"
+    },
+    {
+      "name": "updateEvent",
+      "state": "ACTIVE",
+      "revision": "updateevent-00005-ker"
+    },
+    {
+      "name": "updateQuizMetadata",
+      "state": "ACTIVE",
+      "revision": "updatequizmetadata-00005-tiw"
+    },
+    {
+      "name": "updateQuizRound",
+      "state": "ACTIVE",
+      "revision": "updatequizround-00005-ses"
+    },
+    {
+      "name": "updateQuizSlide",
+      "state": "ACTIVE",
+      "revision": "updatequizslide-00006-qod"
+    }
+  ],
+  "unchangedOtherFunctions": 31,
+  "unchangedExistingTargetIam": 42,
+  "rulesDeployed": false,
+  "productionTouched": false,
+  "v1Touched": false,
+  "artifactReceiptSha256": "e1e6701c72ef08aa7dcf103d84d14a4bfb0ae7e8c33b5c4209a151fcdaf748bb",
+  "evidenceRoot": ".local-data/show-mode-staging",
+  "report": "docs/SHOW_MODE_STAGING_B456606.md"
+}
