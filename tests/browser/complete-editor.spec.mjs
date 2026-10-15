@@ -195,7 +195,7 @@ test('minimal quiz authored through UI rehearses exactly the persisted live stre
     expect(manualDto.options).toEqual(manualOptions);
     await page.getByRole('button', { name: /^Harmonogram/ }).click();
     await expect(agendaForm).toContainText('Uložený ruční harmonogram');
-    await expect(agendaForm.locator('ol')).toHaveText(manualOptions[0]);
+    await expect(agendaForm.getByLabel('Položky · každá na vlastní řádek', { exact: true })).toHaveValue(manualOptions.join('\n'));
     await round(page, 0).getByRole('button', { name: 'Úvod a vzhled kola', exact: true }).click();
     await page.getByLabel('Název kola *').fill('Nový název při ruční agendě');
     await save(page);
@@ -206,10 +206,10 @@ test('minimal quiz authored through UI rehearses exactly the persisted live stre
     expect(preservedDto).not.toHaveProperty('automaticAgenda');
     expect(preservedDto.options).toEqual(manualOptions);
     await page.getByRole('button', { name: /^Harmonogram/ }).click();
-    await expect(agendaForm.locator('ol')).toHaveText(manualOptions[0]);
+    await expect(agendaForm.getByLabel('Položky · každá na vlastní řádek', { exact: true })).toHaveValue(manualOptions.join('\n'));
     await practiceButton.click();
     await expect(practice.locator('.practice-stage')).toHaveAttribute('data-slide-id', automaticAgenda.id);
-    await expect(practice.locator('.agenda-items')).toHaveText(manualOptions[0]);
+    await expect(practice.locator('.agenda-items strong')).toHaveText(manualOptions);
     await practice.getByRole('button', { name: 'Zavřít zkoušku' }).click();
     await expect(practiceButton).toBeFocused();
     // Separate technical comparison; the quiz content above was authored only in UI.
