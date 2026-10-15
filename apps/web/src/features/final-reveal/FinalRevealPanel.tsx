@@ -144,7 +144,7 @@ export function FinalRevealPanel({ session, ending = false }: { session: LiveCon
     <h2>Finální vyhlášení</h2><p>Všechna kola včetně posledního. Vyhlášení i jeho ukončení řídíte ručně.</p>
     <p className="version-state">{state ? `Potvrzená verze ${state.versionId.slice(0, 12)} · ${state.visible && !ended ? 'na projektoru' : 'skrytá'} · odhaleno ${state.revealedCount}/${state.totalGroups} umístění` : 'Finále ještě nebylo potvrzeno.'}</p>
     {ended ? <p>Session je ukončená. Finále nelze obnovit.</p> : <>
-      <p>Po posledním kole či recapu otevřete konečný náhled před tlačítkem Ukončit kvíz.</p>
+      <p>Po posledním kole či rekapitulaci odpovědí otevřete náhled konečných výsledků před tlačítkem Ukončit kvíz.</p>
       {state && (changed === true ? <p role="alert">Podklady se změnily. Vyhlašujete stále potvrzenou verzi. Pro opravu načtěte nový náhled a výslovně nahraďte finále.</p> : changed === null ? <p>Shodu podkladů se právě nedaří potvrdit. Uložená verze se nemění.</p> : <p>Podklady odpovídají potvrzené verzi.</p>)}
       <button className="secondary-button" disabled={disabled || ending} onClick={() => void loadPreview()}>Načíst konečný náhled</button>
       {preview && <section aria-label="Soukromý konečný náhled"><h3>Konečný náhled — zatím nepotvrzeno</h3><p>Zahrnutá kola: {preview.includedRounds.map(r => r.title).join(', ')}</p>

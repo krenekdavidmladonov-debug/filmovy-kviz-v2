@@ -57,7 +57,7 @@ export function AdminShell() {
           <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
             <span><strong><Brand /></strong><small>Administrace</small></span>
           </NavLink>
-          {isStaging && <span className="admin-environment-label">Testovací verze</span>}
+          {isStaging && <span className="admin-environment-label" title="Samostatné prostředí V2 pro ověření vydání">V2 staging</span>}
         </div>
         <AdminNavigation />
         <div className="admin-account">
@@ -74,7 +74,7 @@ export function AdminShell() {
           <NavLink className="admin-brand" to="/admin" aria-label={`${productConfig.adminLabel} – přehled`}>
             <strong><Brand /></strong>
           </NavLink>
-          {isStaging && <span className="admin-environment-label">Testovací verze</span>}
+          {isStaging && <span className="admin-environment-label" title="Samostatné prostředí V2 pro ověření vydání">V2 staging</span>}
         </div>
         <details className="admin-nav-disclosure">
           <summary aria-label="Otevřít navigaci administrace">Menu</summary>
@@ -93,7 +93,6 @@ export function AdminShell() {
 
       <main className="admin-main" id="main-content">
         <div className="admin-content">
-          {isStaging && <p role="note" className="admin-environment-note">Pro zkoušení používejte pouze smyšlená data.</p>}
           <EventNavigation />
           <Outlet />
         </div>

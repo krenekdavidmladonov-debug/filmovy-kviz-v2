@@ -250,7 +250,9 @@ jobs:
       VITE_FIREBASE_USE_EMULATORS: "true"
       FIREBASE_STORAGE_EMULATOR_HOST: 127.0.0.1:9199
       WHOLE_EVENING_PYTHON: ${{ github.workspace }}/.local-data/closure-pdf/bin/python
+      PRODUCT_QA_PYTHON: ${{ github.workspace }}/.local-data/closure-pdf/bin/python
       WHOLE_EVENING_PDFTOPPM: /usr/bin/pdftoppm
+      REGISTRATION_EMAIL_MODE: 'off'
 
     steps:
       - name: Check out repository
@@ -296,6 +298,11 @@ jobs:
         run: >-
           pnpm exec firebase emulators:exec --only auth,firestore,functions,storage --project demo-filmovy-kviz-v2
           "pnpm test:e2e:show-mode && pnpm test:e2e:show-audio && pnpm test:e2e:show-browser && pnpm test:e2e:whole-evening"
+
+      - name: Product path through public registration, downloaded PDFs, SHOW and history
+        run: >-
+          pnpm exec firebase emulators:exec --only auth,firestore,functions,storage --project demo-filmovy-kviz-v2
+          "node tools/local-emulator-environment.mjs full node_modules/@playwright/test/cli.js test --config tests/browser/product-stabilization.config.ts"
 
   oauth-windows:
     name: Synthetic email Windows protection and compiler environment
