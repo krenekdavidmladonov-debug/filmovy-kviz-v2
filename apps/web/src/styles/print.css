@@ -1,0 +1,50 @@
+.print-center-page { width: min(1200px, 100%); margin-inline: auto; }
+.print-center-page .event-page-heading { align-items: center; gap: 20px; }
+.print-center-page .event-page-heading h1 { margin-block: 6px 10px; }
+.print-center-page .event-page-heading .eyebrow { max-width: 75ch; overflow-wrap: anywhere; }
+.print-center-page .print-artifact-grid { gap: 12px; }
+.print-center-page .print-artifact-card { min-height: 120px; padding: 20px; gap: 10px; border-radius: 12px; }
+.print-center-page .print-artifact-card strong { line-height: 1.35; }
+.print-center-page .print-artifact-card span { font-size: .9rem; line-height: 1.5; }
+.print-center-page .print-artifact-card.is-selected { background: var(--color-surface-elevated); border-color: var(--color-accent); box-shadow: inset 0 3px 0 var(--color-accent); }
+.print-center-page .print-artifact-card:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+.print-center-page .print-document-summary { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 24px; color: var(--color-text-muted); font-size: .9rem; line-height: 1.6; }
+.print-center-page .print-document-summary strong { color: var(--color-text); }
+.print-center-page .print-empty-roster { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; padding: 20px 24px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); }
+.print-center-page .print-empty-roster h2 { margin: 0 0 8px; font-size: 1rem; }
+.print-center-page .print-empty-roster p { margin: 0; max-width: 75ch; color: var(--color-text-muted); line-height: 1.6; }
+.print-center-page .print-inline-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.print-center-page .print-preview-panel { overflow: hidden; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface); }
+.print-center-page .print-preview-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; padding: 20px 24px; border-bottom: 1px solid var(--color-border); }
+.print-center-page .print-preview-heading h2 { margin: 0 0 6px; font-size: 1.1rem; }
+.print-center-page .print-preview-heading p { margin: 0; color: var(--color-text-muted); font-size: .85rem; }
+.print-center-page .print-actions { align-items: center; gap: 10px; }
+.print-center-page .print-actions a { text-decoration: none; }
+.print-center-page .print-actions [aria-disabled="true"] { pointer-events: none; opacity: .5; }
+.print-center-page .print-preview-frame { display: block; width: 100%; height: clamp(540px, 76vh, 900px); border: 0; border-radius: 0; background: #e8ebef; color-scheme: light; }
+.print-center-page .print-preview-message { min-height: 420px; padding: 32px 24px; display: grid; place-content: center; justify-items: center; gap: 12px; text-align: center; color: var(--color-text-muted); }
+.print-center-page .print-preview-message strong { color: var(--color-text); font-size: 1.05rem; }
+.print-center-page .print-preview-message p { margin: 0; max-width: 60ch; line-height: 1.6; }
+.print-center-page .print-private-note { margin: 0; padding: 12px 24px; border-bottom: 1px solid var(--color-border); color: var(--color-warning); font-size: .9rem; line-height: 1.6; }
+.print-center-page .print-advanced { border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); }
+.print-center-page .print-advanced > summary { padding: 18px 24px; cursor: pointer; font-weight: 700; }
+.print-center-page .print-advanced-content { padding: 4px 24px 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 24px; align-items: start; }
+.print-center-page .print-advanced-content .print-mode { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px 24px; }
+.print-center-page .print-mode legend { margin-bottom: 14px; }
+.print-center-page .print-mode label { gap: 8px; line-height: 1.5; }
+.print-center-page .print-advanced-content .field-help { margin: 0; align-self: center; line-height: 1.6; }
+.print-center-page .print-advanced-content > button { justify-self: start; }
+.print-center-page .print-lock-message { display: grid; gap: 24px; }
+.print-center-page .print-lock-message h2 { margin-top: 0; }
+.print-center-page .print-lock-message p { max-width: 75ch; line-height: 1.6; }
+@media (max-width: 760px) {
+  .print-center-page .print-artifact-grid { grid-template-columns: 1fr; }
+  .print-center-page .print-artifact-card { min-height: 0; padding: 16px; }
+  .print-center-page .print-empty-roster { grid-template-columns: 1fr; padding: 20px; }
+  .print-center-page .print-preview-heading { align-items: stretch; padding: 20px; }
+  .print-center-page .print-actions { width: 100%; }
+  .print-center-page .print-actions .primary-button { flex: 1; text-align: center; }
+  .print-center-page .print-preview-frame { height: 560px; }
+  .print-center-page .print-advanced-content { grid-template-columns: 1fr; padding: 4px 20px 20px; }
+  .print-center-page .print-advanced-content .print-mode { display: grid; }
+}

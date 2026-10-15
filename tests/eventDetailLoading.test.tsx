@@ -58,7 +58,7 @@ it('compares the source on request without changing the version of an ongoing ev
   await act(async () => [...host.querySelectorAll('button')].find(button => button.textContent === 'Ověřit novější změny v knihovně')!.click());
   expect(host.textContent).toContain('V knihovně je novější verze 4');
   expect(host.textContent).toContain('Tato akce stále používá připravenou verzi 1');
-  expect(host.querySelector('[data-testid="event-quiz-assignment"]')?.textContent).toContain('Zdrojová revize 1');
+  expect(host.querySelector('[data-testid="event-quiz-assignment"]')?.textContent).toContain('Připravená verze 1');
 });
 it('shows the event before the optional library arrives, then runs real preflight and keeps blockers enforced', async () => {
   let resolve!: (quizzes: readonly QuizSummary[]) => void;

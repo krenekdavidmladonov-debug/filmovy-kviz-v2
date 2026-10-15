@@ -95,9 +95,9 @@ try {
   const delivered = (await confirmed.ref.get()).data();
   check(delivered.attempts === 2 && delivered.sentAt && delivered.lastError === null, 'Persisted successful delivery');
   const message = capture.messages.get(confirmed.ref.path);
-  check(message.to === 'synthetic@example.test' && message.subject.includes('Potvrzení registrace'), 'Capture subject/recipient');
+  check(message.to === 'synthetic@example.test' && message.subject === 'JustKvíz | Registrace týmu Emailový tým potvrzena', 'Capture subject/recipient');
   check(message.text.includes('Syntetický sál') && message.text.includes('19:00') && message.text.includes('Počet hráčů: 4'), 'Capture content');
-  const link = new URL(/Spravovat přihlášku: (\S+)/u.exec(message.text)[1]);
+  const link = new URL(/Spravovat registraci: (\S+)/u.exec(message.text)[1]);
   const params = new URLSearchParams(link.hash.slice(1));
   check(params.get('token') === team.managementToken && params.get('registration') === team.registrationId, 'CTA belongs to original registration');
   check((await publicCall('getEventRegistration', { eventId, registrationId: params.get('registration'), token: params.get('token') })).registrationId === team.registrationId, 'Captured CTA authorizes management');
@@ -110,6 +110,10 @@ try {
   await Promise.all([publicCall('updateEventRegistration', change), publicCall('updateEventRegistration', change)]);
   await publicCall('updateEventRegistration', { ...change, requestId: noopId });
   check((await list(team)).length === 2, 'One real change, no no-op/retry message');
+  const changedIntent = (await list(team)).find(doc => doc.data().type === 'registration-updated');
+  const changedSecret = (await eventRef.collection('emailSecrets').doc(changedIntent.id).get()).data();
+  check(fixture.vault.open(changedSecret.envelope, changedIntent.ref.path) === team.managementToken, 'Update envelope contains the same verified capability');
+  check((await eventRef.collection('emailSecrets').get()).size === 2, 'Replay and no-op mint no further encrypted envelopes');
   await publicCall('updateEventRegistration', { ...managed(team), requestId: randomUUID(), ...input('Nejnovější tým', 2), contactEmail: 'updated@example.test' });
   await publicCall('updateEventRegistration', change);
   await publicCall('updateEventRegistration', { ...change, requestId: noopId });
@@ -128,15 +132,16 @@ try {
   check((await list(team)).length === 3 && (await list(other)).length === 1, 'No foreign-token email');
   console.log('PASS: cross-registration and cross-event tokens denied without messages');
 
-  phase = 'lost provider response and delivery deduplication';
+  phase = 'lost provider response requires review without automatic resubmission';
   const otherConfirmation = (await list(other))[0];
   const priorCaptureCount = capture.messages.size;
   capture.nextFailure = 'after-accept';
-  check(await fixture.deliver(otherConfirmation.ref) === 'pending', 'Lost response is safe retryable failure');
+  check(await fixture.deliver(otherConfirmation.ref) === 'failed', 'Lost response is terminal for automatic delivery');
   fixture.advance();
-  check(await fixture.deliver(otherConfirmation.ref) === 'sent', 'Lost-response reconciliation');
-  check(capture.messages.size === priorCaptureCount + 1 && (await otherConfirmation.ref.get()).data().attempts === 2, 'One logical accepted message');
-  console.log('PASS: accepted email with lost response retries without a duplicate');
+  check(await fixture.deliver(otherConfirmation.ref) === 'unchanged', 'Lost-response terminal replay does not send');
+  check(capture.messages.size === priorCaptureCount + 1 && (await otherConfirmation.ref.get()).data().attempts === 1
+    && (await otherConfirmation.ref.get()).data().lastError === 'outcome-unknown', 'One attempt and review-required audit');
+  console.log('PASS: accepted email with lost response is terminal and never resubmitted automatically');
 
   phase = 'cancel transaction and older delivery status isolation';
   await Promise.all([publicCall('cancelEventRegistration', managed(team)), publicCall('cancelEventRegistration', managed(team))]);
@@ -146,12 +151,19 @@ try {
   const cancellation = all.find(doc => doc.data().type === 'registration-cancelled');
   check(cancellation.data().recipient === 'updated@example.test', 'Cancel recipient is current server email');
   const update = all.find(doc => doc.data().type === 'registration-updated');
-  const timestamp = update.data().createdAt.constructor;
-  await update.ref.update({ leaseId: 'synthetic-crashed-worker', leaseUntil: timestamp.fromMillis(fixture.clock() + 60_000), attempts: 1 });
-  check(await fixture.deliver(update.ref) === 'busy', 'Active crash lease blocks another worker');
-  await update.ref.update({ leaseUntil: timestamp.fromMillis(fixture.clock() - 1) });
   await fixture.deliver(update.ref);
-  check((await update.ref.get()).data().status === 'sent' && (await update.ref.get()).data().attempts === 2, 'Expired crash lease is recoverable');
+  check(/Spravovat registraci: (\S+)/u.exec(capture.messages.get(update.ref.path).text)?.[1] === link.href, 'Update delivery reconstructs the original private CTA');
+  // A different pending update reproduces a crashed processing claim, without
+  // overwriting the already-delivered update's terminal audit.
+  const crashedUpdate = all.find(doc => doc.data().type === 'registration-updated' && doc.id !== update.id);
+  const timestamp = update.data().createdAt.constructor;
+  await crashedUpdate.ref.update({ status: 'processing', leaseId: 'synthetic-crashed-worker', leaseUntil: timestamp.fromMillis(fixture.clock() + 60_000), attempts: 1 });
+  check(await fixture.deliver(crashedUpdate.ref) === 'busy', 'Active crash lease blocks another worker');
+  await crashedUpdate.ref.update({ leaseUntil: timestamp.fromMillis(fixture.clock() - 1) });
+  const beforeCrash = capture.messages.size;
+  check(await fixture.deliver(crashedUpdate.ref) === 'failed', 'Expired crash lease is terminal');
+  check((await crashedUpdate.ref.get()).data().lastError === 'outcome-unknown' && (await crashedUpdate.ref.get()).data().attempts === 1
+    && capture.messages.size === beforeCrash, 'Expired lease never attempts another physical send');
   check((await record(team)).emailDelivery.intentId === cancellation.id && (await record(team)).emailDelivery.status === 'pending', 'Older attempt cannot hide newer pending message');
   const parallel = await Promise.all([fixture.deliver(cancellation.ref), fixture.deliver(cancellation.ref)]);
   check(parallel.filter(result => result === 'sent').length === 1 && parallel.filter(result => result === 'busy' || result === 'unchanged').length === 1, 'Concurrent workers share lease');
@@ -177,7 +189,7 @@ try {
   for (const collection of ['registrations', 'registrationOperations', 'emailIntents', 'emailSecrets']) {
     const serialized = JSON.stringify((await eventRef.collection(collection).get()).docs.map(doc => doc.data()));
     check(secrets.every(secret => !serialized.includes(secret)), 'No raw capabilities in persistent documents');
-    check(!serialized.includes('#registration=') && !serialized.includes('Spravovat přihlášku:'), 'No secret URL/provider payload in audit');
+    check(!serialized.includes('#registration=') && !serialized.includes('Spravovat registraci:'), 'No secret URL/provider payload in audit');
   }
   for (const path of ['firebase-debug.log', 'firestore-debug.log', 'functions-debug.log']) if (existsSync(path)) {
     const log = readFileSync(path, 'utf8');

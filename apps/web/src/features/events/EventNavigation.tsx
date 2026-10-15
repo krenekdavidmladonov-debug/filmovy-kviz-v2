@@ -14,7 +14,7 @@ export function EventNavigation() {
     { label: 'Přehled', to: base, active: current === '' && hash !== '#event-quiz', visible: true },
     { label: 'Kvíz', to: `${base}#event-quiz`, active: current === '' && hash === '#event-quiz', visible: true },
     { label: 'Týmy', to: `${base}/registrations`, active: current === 'registrations', visible: can('event.contacts') },
-    { label: 'Materiály', to: `${base}/print`, active: current === 'print', visible: can('event.export') },
+    { label: 'Tisk a materiály', to: `${base}/print`, active: current === 'print', visible: can('event.export') },
     { label: 'Výsledky', to: `${base}/results`, active: current === 'results', visible: true },
   ];
   return <nav className="event-context-navigation" aria-label="Sekce akce">

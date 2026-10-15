@@ -4,6 +4,7 @@ import { emailFixture } from './registration-email-fixture.mjs';
 import { processEmailTask } from '../../functions/lib/email/task.js';
 import { EmailDeliveryError } from '../../functions/lib/email/errors.js';
 import { MAX_EMAIL_ATTEMPTS } from '../../functions/lib/email/delivery.js';
+import { GmailEmailTransport, GMAIL_SEND_SCOPE } from '../../functions/lib/email/gmail.js';
 
 let fixture;
 let phase = 'setup';
@@ -32,7 +33,33 @@ try {
   await task(cancel.ref);
   check(capture.submissions.length === 3 && (await data(ref)).status === 'sent' && (await data(cancel.ref)).status === 'sent', phase);
   check(Buffer.from(capture.submissions[0], 'base64url').toString().includes('Content-Type: multipart/alternative'), 'Actual MIME path');
+  const confirmationLink = /Spravovat registraci: (\S+)/u.exec(capture.messages.get(ref.path).text)?.[1];
+  const updatedLink = /Spravovat registraci: (\S+)/u.exec(capture.messages.get(update.ref.path).text)?.[1];
+  check(Boolean(confirmationLink) && updatedLink === confirmationLink, 'Create and update MIME contain the same protected management capability');
   console.log('PASS: registration/update/cancel through shared task and fake Gmail MIME, terminal task replay');
+
+  phase = 'legacy update without envelope remains deliverable without a replacement capability';
+  const legacy = await create('Gmail starší změna');
+  await publicCall('updateEventRegistration', { eventId, registrationId: legacy.team.registrationId, token: legacy.team.managementToken,
+    requestId: randomUUID(), ...input('Gmail starší změna upravená') });
+  const legacyUpdate = (await fixture.intents(legacy.team.registrationId)).find(doc => doc.data().type === 'registration-updated');
+  await eventRef.collection('emailSecrets').doc(legacyUpdate.id).delete(); // Reproduce the actual old persisted update shape.
+  await task(legacyUpdate.ref);
+  const legacyMessage = capture.messages.get(legacyUpdate.ref.path);
+  check((await data(legacyUpdate.ref)).status === 'sent' && !legacyMessage.text.includes('Spravovat registraci:') && !legacyMessage.html.includes('href='), phase);
+  check((await fixture.intents(legacy.team.registrationId)).length === 2, 'Legacy fallback creates no additional intent');
+  console.log('PASS: old update without envelope sends once without a CTA or new intent');
+
+  phase = 'malformed update envelope fails closed before provider submission';
+  const corrupt = await create('Gmail porušená změna');
+  await publicCall('updateEventRegistration', { eventId, registrationId: corrupt.team.registrationId, token: corrupt.team.managementToken,
+    requestId: randomUUID(), ...input('Gmail porušená změna upravená') });
+  const corruptUpdate = (await fixture.intents(corrupt.team.registrationId)).find(doc => doc.data().type === 'registration-updated');
+  await eventRef.collection('emailSecrets').doc(corruptUpdate.id).set({ envelope: fixture.vault.seal(corrupt.team.managementToken, 'events/foreign/emailIntents/foreign') });
+  const beforeCorrupt = capture.submissions.length;
+  await task(corruptUpdate.ref); await task(corruptUpdate.ref);
+  check((await data(corruptUpdate.ref)).status === 'failed' && capture.submissions.length === beforeCorrupt, phase);
+  console.log('PASS: cross-intent ciphertext on update fails closed and terminal task replay sends nothing');
 
   phase = 'transient retry with backoff';
   const transient = await create('Gmail přechodná');
@@ -52,15 +79,55 @@ try {
   check((await data(permanent.ref)).status === 'failed' && (await data(permanent.ref)).attempts === 1 && (await data(permanent.ref)).lastError === 'credentials-invalid', phase);
   console.log('PASS: invalid_grant is terminal, queue replay cannot resend');
 
-  phase = 'unknown outcome has stable ID but possible duplicate';
+  phase = 'unknown send outcome is terminal and cannot produce an automatic duplicate';
   const unknown = await create('Gmail ztracená odpověď');
   const beforeUnknown = capture.submissions.length;
   capture.nextFailure = 'after-accept';
-  await retry(task(unknown.ref));
+  await task(unknown.ref);
   fixture.advance(); await task(unknown.ref);
-  check(capture.submissions.length === beforeUnknown + 2, 'Fake must not invent Gmail deduplication');
-  check(capture.submissions[beforeUnknown] === capture.submissions[beforeUnknown + 1], 'Stable MIME Message-ID across retry');
-  console.log('PASS: lost Gmail response demonstrates duplicate submissions with stable RFC Message-ID');
+  check(capture.submissions.length === beforeUnknown + 1, 'A lost Gmail response is not automatically submitted twice');
+  check((await data(unknown.ref)).status === 'failed' && (await data(unknown.ref)).lastError === 'outcome-unknown'
+    && (await data(unknown.ref)).attempts === 1, 'Unknown outcome requires manual verification, not false sent status');
+  console.log('PASS: accepted message with response loss remains review-required; terminal replay never resubmits');
+
+  phase = 'legacy pending unknown outcome stops before another send or retry wait';
+  const LegacyTimestamp = (await data(unknown.ref)).createdAt.constructor;
+  await unknown.ref.update({ status: 'pending', lastError: 'outcome-unknown', nextAttemptAt: LegacyTimestamp.fromMillis(fixture.clock() + 60000) });
+  await task(unknown.ref); await task(unknown.ref);
+  check(capture.submissions.length === beforeUnknown + 1 && (await data(unknown.ref)).status === 'failed'
+    && (await data(unknown.ref)).attempts === 1 && (await data(unknown.ref)).lastError === 'outcome-unknown', phase);
+  console.log('PASS: legacy pending/outcome-unknown terminalizes immediately without a new submission');
+
+  phase = 'Gmail send timeout performs one submission and no automatic replay';
+  const timeout = await create('Gmail timeout'); let timeoutSends = 0;
+  const timeoutTransport = new GmailEmailTransport({ projectId: process.env.GCLOUD_PROJECT, clientId: 'synthetic-client', clientSecret: 'synthetic-secret',
+    refreshToken: 'synthetic-refresh', sender: 'sender@example.test' }, async url => {
+    if (url === 'https://oauth2.googleapis.com/token') return Response.json({ access_token: 'synthetic', token_type: 'Bearer', scope: GMAIL_SEND_SCOPE });
+    assert.equal(url, 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send'); timeoutSends++;
+    return new Promise(() => {});
+  }, 5);
+  const timeoutTask = () => processEmailTask({ eventId, intentId: timeout.ref.id }, { db: fixture.db, transport: timeoutTransport,
+    vault: fixture.vault, origin: 'http://127.0.0.1:5196', clock: fixture.clock });
+  await timeoutTask(); fixture.advance(); await timeoutTask();
+  check(timeoutSends === 1 && (await data(timeout.ref)).status === 'failed' && (await data(timeout.ref)).lastError === 'outcome-unknown', phase);
+  console.log('PASS: actual Gmail adapter timeout records review-required and task replay sends nothing');
+
+  phase = 'crash after provider acceptance before sent finalization';
+  const lostFinalization = await create('Gmail crash po přijetí'); let transactionCalls = 0;
+  const crashDb = { collection: name => fixture.db.collection(name), runTransaction: callback => {
+    if (++transactionCalls === 2) throw new Error('Synthetic finalization crash');
+    return fixture.db.runTransaction(callback);
+  } };
+  const beforeFinalization = capture.submissions.length;
+  await assert.rejects(processEmailTask({ eventId, intentId: lostFinalization.ref.id }, { db: crashDb, transport: capture,
+    vault: fixture.vault, origin: 'http://127.0.0.1:5196', clock: fixture.clock }), /Synthetic finalization crash/u);
+  check((await data(lostFinalization.ref)).status === 'processing' && capture.submissions.length === beforeFinalization + 1, 'Provider accepted before the failed finalization');
+  fixture.advance(); await task(lostFinalization.ref); await task(lostFinalization.ref);
+  check((await data(lostFinalization.ref)).status === 'failed' && (await data(lostFinalization.ref)).lastError === 'outcome-unknown'
+    && (await data(lostFinalization.ref)).attempts === 1 && capture.submissions.length === beforeFinalization + 1, 'Expired processing lease never resubmits after acceptance');
+  const summary = (await eventRef.collection('registrations').doc(lostFinalization.team.registrationId).get()).data().emailDelivery;
+  check(summary.status === 'failed', 'Organizer is not shown a false sent or indefinitely processing status');
+  console.log('PASS: crash between acceptance and sent commit ends in review-required with one physical submission');
 
   phase = 'concurrent workers and processing status';
   const concurrent = await create('Gmail souběh');
@@ -79,10 +146,10 @@ try {
   check(capture.messages.get(differentA.ref.path).text.includes('Paralelní A') && capture.messages.get(differentB.ref.path).text.includes('Paralelní B'), 'Independent concurrent intents');
   console.log('PASS: active lease retries, processing status and concurrent distinct intents remain isolated');
 
-  phase = 'maximum provider attempts and crash recovery';
+  phase = 'maximum known-rejection attempts and crash terminalization';
   const exhausted = await create('Gmail maximum');
   for (let attempt = 1; attempt <= MAX_EMAIL_ATTEMPTS; attempt++) {
-    capture.nextFailure = 'before-accept';
+    capture.nextFailure = 'rate-limit';
     if (attempt < MAX_EMAIL_ATTEMPTS) await retry(task(exhausted.ref)); else await task(exhausted.ref);
     fixture.advance();
   }

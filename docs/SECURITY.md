@@ -38,7 +38,7 @@ Invitation and membership changes serialize on accessControl/state, validate per
 
 Manual team add/edit requires an active membership, `event.manage`, `event.contacts` and scope for the target event, rechecked in the mutation transaction. It shares transactional capacity and name reservations with online registrations. Its nullable token verifier never authorizes public access; manual records have no public management capability. Public requests cannot choose manual origin or bypass their email/window requirements. See `EVENT_TEAM_TOOLS.md`.
 
-Registration uses callable Functions rather than direct Firestore writes. It validates fields/types, normalization/limits, contact format, team-size bounds, server-time window, unique names, and both capacities transactionally. Management tokens are random bearer capabilities; registration records store only SHA-256 verifiers and invalid combinations are non-enumerating. Guarded local email and eligible explicit staging mode use a separate authenticated ciphertext envelope denied to every client role. Default-off cloud creates no intents/envelopes, binds no email secrets and does not require the vault. Local vault/fake-provider access requires both a demo project and a localhost emulator, and the real Gmail adapter refuses emulator execution. Email intents/receipts remain server-only. The six email endpoints remain excluded from the frozen [70-target restart inventory](../tools/staging/restart-release-manifest.json); the separately approved five-Function staging activation now binds the create keyring and private worker's OAuth/keyring secrets with dedicated identities. [Actual execution evidence](EMAIL_ACTIVATION_EXECUTION.md) verifies private invocation, selected-recipient/cutoff restrictions and one owner-confirmed message. Staging configuration remains active for that recipient, with queue `PAUSED`; no wider recipient rollout or resume is authorized. Responses reveal no other teams or contacts. Production abuse controls remain a launch prerequisite. See [TRANSACTIONAL_EMAIL.md](TRANSACTIONAL_EMAIL.md).
+Registration uses callable Functions rather than direct Firestore writes. It validates fields/types, normalization/limits, contact format, team-size bounds, server-time window, unique names, and both capacities transactionally. Management tokens are random bearer capabilities; registration records store only SHA-256 verifiers and invalid combinations are non-enumerating. Guarded local email and eligible explicit staging mode use a separate authenticated ciphertext envelope denied to every client role. Default-off cloud creates no intents/envelopes, binds no email secrets and does not require the vault. Local vault/fake-provider access requires both a demo project and a localhost emulator, and the real Gmail adapter refuses emulator execution. Email intents/receipts remain server-only. The six email endpoints remain excluded from the frozen [70-target restart inventory](../tools/staging/restart-release-manifest.json); the separately approved five-Function staging activation now binds the create keyring and private worker's OAuth/keyring secrets with dedicated identities. [Actual execution evidence](EMAIL_ACTIVATION_EXECUTION.md) verifies private invocation, selected-recipient/cutoff restrictions and one owner-confirmed message. That selected-recipient run is historical. The separately approved 972ed71 activation now has a RUNNING queue for canonical online registrations created at or after 2026-10-15T15:26:19.550Z; the owner confirmed all three registration messages. Organizational campaigns, older registrations and production remain excluded. Responses reveal no other teams or contacts. Production abuse controls remain a launch prerequisite. See [TRANSACTIONAL_EMAIL.md](TRANSACTIONAL_EMAIL.md).
 
 ## Firebase configuration and secrets
 
@@ -54,14 +54,21 @@ before enqueue or lease/secrets/provider access. Old tasks, fresh edits of old
 registrations and organizational campaigns therefore cannot become mail solely
 because the queue resumes. No historical outbox rewrite/backfill is introduced.
 
-This source change does not authorize its deployment, broader recipients or queue
-resume. The 2026-10-15 read-only operating-state check still found the queue PAUSED,
-five matching selected-recipient configurations and a non-public worker. A future
-approved activation preserves the existing sender, keyring/OAuth secret versions
-and dedicated identities; IAM, public worker invocation and new credentials are
-not prerequisites. Rollout keeps the queue paused until all five matching versions
-and settings are verified. Existing retry/lease limits and the possibility of a
-duplicate physical message after ambiguous Gmail acceptance remain unchanged.
+A fresh 2026-10-15 check confirms the approved 972ed71 activation: the five email
+functions share future-public-registration policy and cutoff, and the queue is
+RUNNING. The private worker, sender and secret versions remain unchanged. The
+new source adds encrypted capability envelopes for eligible registration updates,
+using the existing event/intent-bound vault; legacy updates without an envelope
+remain deliverable without a management link. Raw capabilities are never logged.
+Deployment must explicitly bind the existing keyring to updateEventRegistration
+and verify its runtime identity has only the necessary access. This is part of
+the new exact-release proposal, not implicit permission to change cloud IAM.
+
+Automatic retries are restricted to known transient rejection or pre-send failure.
+An uncertain Gmail send or expired processing lease becomes terminal failed with
+outcome-unknown, requiring review before any new send. This avoids automatic
+resubmission after ambiguous acceptance; it does not guarantee inbox delivery.
+No new collections, client permissions, OAuth scopes or Rules are introduced.
 
 Firebase web configuration is not a secret, but project selection is safety-critical. Local defaults use a `demo-*` project and emulators. Cloud access additionally requires explicit staging mode and the exact allowlisted V2 staging project/app/domain. Other cloud and production builds are rejected. Service-account keys and secrets are forbidden in Git. The isolated staging bootstrap uses only operator CLI OAuth in memory and synthetic data; its generated passwords/tokens remain under ignored `.local-data/staging`. See `STAGING.md`.
 

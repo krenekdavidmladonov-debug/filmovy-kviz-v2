@@ -26,6 +26,15 @@ describe('Print Center request allowlist', () => {
     expect(parsePrintRequestOptions({ artifactType: 'team-sheets', disposition: 'inline', mode: 'single', teamId: 'team-1' })).toEqual({ artifactType: 'team-sheets', disposition: 'inline', mode: 'single', teamId: 'team-1' });
   });
 
+  test('accepts only the three transient presentation fields without supplying snapshot or roster data', () => {
+    const request = { artifactType: 'team-sheets', disposition: 'inline', mode: 'generic', layout: 'compact', showLogo: false, showInstructions: true };
+    expect(parsePrintRequestOptions(request)).toEqual(request);
+    expect(parsePrintRequestOptions({ artifactType: 'answer-key', disposition: 'inline' })).toEqual({ artifactType: 'answer-key', disposition: 'inline' });
+    for (const patch of [{ layout: 'screen' }, { layout: null }, { showLogo: 'false' }, { showInstructions: 1 }, { printTemplate: { title: 'Injected' } }, { teams: [{ id: 'fake', name: 'Injected' }] }]) {
+      expect(() => parsePrintRequestOptions({ ...request, ...patch })).toThrowError(PrintCenterError);
+    }
+  });
+
   test.each([
     { artifactType: 'answer-key', disposition: 'inline', correctAnswers: ['tajné'] },
     { artifactType: 'answer-key', disposition: 'inline', mediaUrl: 'https://example.test/private' },

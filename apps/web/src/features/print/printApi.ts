@@ -26,10 +26,11 @@ async function errorMessage(response: Response): Promise<string> {
   return 'PDF se nepodařilo vytvořit. Zkuste to znovu.';
 }
 
-export async function generatePrintArtifact(eventId: string, options: PrintOptions): Promise<PrintArtifactBlob> {
+export async function generatePrintArtifact(eventId: string, options: PrintOptions, signal?: AbortSignal): Promise<PrintArtifactBlob> {
   const user = getFirebaseAuth().currentUser;
   if (!user) throw new Error('Přihlášení je vyžadováno.');
   const token = await user.getIdToken();
+  signal?.throwIfAborted();
   const response = await fetch(endpointUrl(), {
     method: 'POST',
     headers: {
@@ -37,6 +38,7 @@ export async function generatePrintArtifact(eventId: string, options: PrintOptio
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ eventId, options }),
+    signal,
   });
   if (!response.ok) throw new Error(await errorMessage(response));
   const contentType = response.headers.get('content-type');

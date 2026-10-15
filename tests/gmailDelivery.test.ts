@@ -53,11 +53,22 @@ describe('Gmail HTTP classification without internet', () => {
     expect(JSON.parse(calls[1]!.init.body as string)).toEqual({ raw: gmailRawMessage(message, config) });
     expect(calls.every(call => call.init.redirect === 'error')).toBe(true);
   });
-  for (const status of [429, 500, 503]) test('retries HTTP ' + status, async () => {
+  test('retries a known HTTP 429 rejection', async () => {
     let calls = 0;
-    const transport = new GmailEmailTransport(config, async () => ++calls === 1 ? token() : Response.json({ sensitive: message.text }, { status }));
-    await expect(transport.send(message)).rejects.toMatchObject({ retryable: true });
+    const transport = new GmailEmailTransport(config, async () => ++calls === 1 ? token() : Response.json({ sensitive: message.text }, { status: 429 }));
+    await expect(transport.send(message)).rejects.toMatchObject({ code: 'rate-limited', retryable: true });
     expect(calls).toBe(2);
+  });
+  for (const status of [408, 500, 503]) test('does not retry an uncertain send HTTP ' + status, async () => {
+    let calls = 0;
+    await expect(new GmailEmailTransport(config, async () => ++calls === 1 ? token() : Response.json({}, { status })).send(message))
+      .rejects.toMatchObject({ code: 'outcome-unknown', retryable: false });
+    expect(calls).toBe(2);
+  });
+  test('OAuth 503 is retryable before any send request', async () => {
+    const http = vi.fn(async () => Response.json({}, { status: 503 }));
+    await expect(new GmailEmailTransport(config, http).send(message)).rejects.toMatchObject({ code: 'provider-unavailable', retryable: true });
+    expect(http).toHaveBeenCalledTimes(1);
   });
   test('invalid_grant is terminal and sends no mail', async () => {
     const http = vi.fn(async () => Response.json({ error: 'invalid_grant', error_description: 'sensitive' }, { status: 400 }));
@@ -72,14 +83,21 @@ describe('Gmail HTTP classification without internet', () => {
   });
   test('send timeout is unknown outcome and bounded even if fetch ignores abort', async () => {
     let calls = 0;
-    await expect(new GmailEmailTransport(config, async () => ++calls === 1 ? token() : new Promise<Response>(() => {}), 5).send(message)).rejects.toMatchObject({ code: 'outcome-unknown', retryable: true });
+    await expect(new GmailEmailTransport(config, async () => ++calls === 1 ? token() : new Promise<Response>(() => {}), 5).send(message)).rejects.toMatchObject({ code: 'outcome-unknown', retryable: false });
   });
   test('network error is sanitized and retryable', async () => {
     await expect(new GmailEmailTransport(config, async () => { throw new Error('secret provider body'); }).send(message)).rejects.toMatchObject({ message: 'network-unavailable', retryable: true });
   });
   test('malformed send success is unknown outcome', async () => {
     let calls = 0;
-    await expect(new GmailEmailTransport(config, async () => ++calls === 1 ? token() : new Response('not json')).send(message)).rejects.toMatchObject({ code: 'outcome-unknown', retryable: true });
+    await expect(new GmailEmailTransport(config, async () => ++calls === 1 ? token() : new Response('not json')).send(message)).rejects.toMatchObject({ code: 'outcome-unknown', retryable: false });
+  });
+  test('send network error is terminal and sanitized even after submission could have happened', async () => {
+    let calls = 0;
+    await expect(new GmailEmailTransport(config, async () => {
+      if (++calls === 1) return token(); throw new Error('secret provider body');
+    }).send(message)).rejects.toMatchObject({ message: 'outcome-unknown', retryable: false });
+    expect(calls).toBe(2);
   });
   test('malformed or overprivileged OAuth response sends no mail', async () => {
     for (const data of [{}, { access_token: 'synthetic', token_type: 'Bearer', scope: 'https://www.googleapis.com/auth/gmail.modify' }]) {

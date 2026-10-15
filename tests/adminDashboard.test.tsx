@@ -91,10 +91,15 @@ describe('overview actions and existing data boundaries', () => {
 });
 
 describe('existing environment configuration', () => {
-  test.each(['staging', 'production', 'development', undefined])('shows the test label and visible restriction only for staging: %s', async environment => {
+  test.each(['staging', 'production', 'development', undefined])('identifies staging without the obsolete synthetic-data banner: %s', async environment => {
     vi.stubEnv('VITE_APP_ENV', environment); await render(<AdminShell />);
     expect(container.querySelectorAll('.admin-environment-label')).toHaveLength(environment === 'staging' ? 2 : 0);
-    expect(container.querySelector('[role="note"]')?.textContent ?? '').toBe(environment === 'staging' ? 'Pro zkoušení používejte pouze smyšlená data.' : '');
+    for (const label of container.querySelectorAll('.admin-environment-label')) {
+      expect(label.textContent).toBe('V2 staging');
+      expect(label.getAttribute('title')).toBe('Samostatné prostředí V2 pro ověření vydání');
+    }
+    expect(container.textContent).not.toContain('Pro zkoušení používejte pouze smyšlená data.');
+    expect(container.textContent).not.toContain('Testovací verze');
     expect(container.textContent).not.toContain('STAGING');
     expect(listQuizzes).not.toHaveBeenCalled();
   });

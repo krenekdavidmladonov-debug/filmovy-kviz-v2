@@ -78,10 +78,11 @@ test('generated Vite config resolves domain exactly to fresh build, bypassing st
 });
 
 test('staging banner guard requires the current rendered JS label, not stale text or CSS', () => {
-  const banner = 'D.jsx("span",{className:"admin-environment-label",children:"Testovací verze"})';
+  const banner = 'D.jsx("span",{className:"admin-environment-label",children:"V2 staging"})';
   const file = text => [{ name: 'assets/index-synthetic.js', text }];
   assert.doesNotThrow(() => assertStagingBanner(file(banner)));
-  for (const text of ['STAGING', banner.replace('Testovací verze', 'Production'), banner.replace('admin-environment-label', 'ordinary-label'), 'const label="Testovací verze"; const css="admin-environment-label";']) {
+  assert.doesNotThrow(() => assertStagingBanner(file(banner.replace('children:', 'title:"Samostatné prostředí V2",children:'))));
+  for (const text of ['STAGING', banner.replace('V2 staging', 'Production'), banner.replace('V2 staging', 'Testovací verze'), banner.replace('admin-environment-label', 'ordinary-label'), 'const label="V2 staging"; const css="admin-environment-label";']) {
     assert.throws(() => assertStagingBanner(file(text)));
   }
   assert.throws(() => assertStagingBanner([{ name: 'assets/main.css', text: banner }]));

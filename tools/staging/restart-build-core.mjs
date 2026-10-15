@@ -97,5 +97,5 @@ export function restartViteConfig(root, domain, hosting) {
 
 export function assertStagingBanner(frontend) {
   // Check the rendered label in JS, rather than a CSS class or an old English marker.
-  assert(frontend.some(file => file.name.endsWith('.js') && /["']span["']\s*,\s*\{\s*className\s*:\s*["']admin-environment-label["']\s*,\s*children\s*:\s*["']Testovací verze["']/u.test(file.text)), 'Current staging banner required');
+  assert(frontend.some(file => file.name.endsWith('.js') && /["']span["']\s*,\s*\{\s*className\s*:\s*["']admin-environment-label["']\s*,\s*(?:title\s*:\s*["'][^"']*["']\s*,\s*)?children\s*:\s*["']V2 staging["']/u.test(file.text)), 'Current staging banner required');
 }

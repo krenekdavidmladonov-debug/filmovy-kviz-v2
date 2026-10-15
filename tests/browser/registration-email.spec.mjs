@@ -29,9 +29,9 @@ test('registration email: public create, captured CTA, self-update, self-cancel 
     await staffPage.getByRole('button', { name: 'Přihlásit se' }).click();
     await expect(staffPage).not.toHaveURL(/\/admin\/login$/u);
     await staffPage.goto(`/admin/events/${eventId}/registrations`);
-    await expect(staffPage.getByRole('columnheader', { name: 'E-mailové potvrzení' })).toBeVisible();
+    await expect(staffPage.getByRole('columnheader', { name: 'Poslední registrační e-mail' })).toBeVisible();
     await expect(staffPage.getByText('Čeká na odeslání', { exact: true })).toBeVisible();
-    capture.nextFailure = 'before-accept';
+    capture.nextFailure = 'rate-limit'; // A known refusal is safe to retry; ambiguous send failures are terminal.
     await expect(fixture.deliverTask(confirmed.ref, baseURL)).rejects.toThrow('provider-unavailable');
     await staffPage.reload();
     await expect(staffPage.getByText('Čeká na odeslání', { exact: true })).toBeVisible();
@@ -40,12 +40,13 @@ test('registration email: public create, captured CTA, self-update, self-cancel 
     fixture.advance();
     await fixture.deliverTask(confirmed.ref, baseURL);
     const message = capture.messages.get(confirmed.ref.path);
-    expect(message.to === 'browser@example.test' && message.subject === 'Potvrzení registrace – Syntetický emailový večer').toBe(true);
+    expect(message.to === 'browser@example.test' && message.subject === 'JustKvíz | Registrace týmu Browser emailový tým potvrzena').toBe(true);
     expect(message.text.includes('Browser emailový tým') && message.text.includes('Syntetický sál') && message.text.includes('19:00') && message.text.includes('Počet hráčů: 4')).toBe(true);
-    expect(message.html.includes('Spravovat přihlášku') && message.html.includes('Browser emailový tým')).toBe(true);
+    expect(message.html.includes('Spravovat registraci') && message.html.includes('Browser emailový tým')).toBe(true);
     await staffPage.reload();
     await expect(staffPage.getByText('Odesláno', { exact: true })).toBeVisible();
-    const cta = /Spravovat přihlášku: (\S+)/u.exec(message.text)[1];
+    await expect(staffPage.getByText('Odesláno znamená, že zprávu přijal poskytovatel.', { exact: false })).toBeVisible();
+    const cta = /Spravovat registraci: (\S+)/u.exec(message.text)[1];
     await page.goto(cta);
     await expect(page.getByRole('heading', { name: 'Správa registrace' })).toBeVisible();
     await expect(page.getByLabel('Název týmu')).toHaveValue('Browser emailový tým');
@@ -59,7 +60,9 @@ test('registration email: public create, captured CTA, self-update, self-cancel 
     expect(Boolean(updated)).toBe(true);
     await fixture.deliverTask(updated.ref, baseURL);
     const update = capture.messages.get(updated.ref.path);
-    expect(update.subject.startsWith('Změna registrace') && update.text.includes('Upravený browser tým') && update.text.includes('Počet hráčů: 3')).toBe(true);
+    expect(update.subject === 'JustKvíz | Změna registrace týmu Upravený browser tým' && update.text.includes('Upravený browser tým') && update.text.includes('Počet hráčů: 3')).toBe(true);
+    expect(/Spravovat registraci: (\S+)/u.exec(update.text)?.[1] === cta).toBe(true);
+    expect(update.html.includes('Spravovat registraci')).toBe(true);
 
     phase = 'self-cancel and captured cancellation message';
     page.once('dialog', dialog => dialog.accept());
@@ -68,7 +71,8 @@ test('registration email: public create, captured CTA, self-update, self-cancel 
     const cancelled = (await fixture.intents(registration.id)).find(doc => doc.data().type === 'registration-cancelled');
     await fixture.deliverTask(cancelled.ref, baseURL);
     const cancellation = capture.messages.get(cancelled.ref.path);
-    expect(cancellation.subject.startsWith('Zrušení registrace') && cancellation.text.includes('Tým již není aktivně přihlášen')).toBe(true);
+    expect(cancellation.subject === 'JustKvíz | Registrace týmu Upravený browser tým zrušena' && cancellation.text.includes('Tým již není aktivně přihlášen')).toBe(true);
+    expect(cancellation.text.includes('Spravovat registraci:') || cancellation.html.includes('href=')).toBe(false);
     expect((await fixture.intents(registration.id)).length).toBe(3);
     expect(capture.messages.size).toBe(3);
     expect(capture.submissions.length).toBe(3);
@@ -80,7 +84,7 @@ test('registration email: public create, captured CTA, self-update, self-cancel 
     capture.nextFailure = 'invalid-grant';
     await fixture.deliverTask(permanentIntent.ref, baseURL);
     await staffPage.reload();
-    await expect(staffPage.getByText('Nepodařilo se', { exact: true })).toBeVisible();
+    await expect(staffPage.getByText('Vyžaduje kontrolu', { exact: true })).toBeVisible();
     expect(capture.submissions.length).toBe(3);
     await staffPage.close();
   } catch {

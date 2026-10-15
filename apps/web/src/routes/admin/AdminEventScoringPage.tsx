@@ -50,7 +50,7 @@ export function AdminEventScoringPage() {
     if (!snapshotId) return;
     let active = true;
     void loadRounds(snapshotId).then(data => { if (active) { setRounds(data); setRoundId(data[0]?.id ?? ''); } })
-      .catch(() => { if (active) setError('Kola snapshotu se nepodařilo načíst.'); });
+      .catch(() => { if (active) setError('Kola připraveného kvízu se nepodařilo načíst. Obnovte stránku.'); });
     return () => { active = false; };
   }, [snapshotId]);
   const snapshotChanged = snapshotId !== liveSnapshotId;

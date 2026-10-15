@@ -68,7 +68,7 @@ test('one authored event: quiz, immutable snapshot, public teams, scores, staged
     await page.getByRole('button', { name: 'Uložit změny', exact: true }).click();
     await expect(page.getByText('Změny akce byly uloženy.')).toBeVisible();
     await page.getByTestId('event-quiz-assignment').getByRole('combobox').selectOption(quizId);
-    const warning = page.getByLabel('Potvrzuji upozornění pro tuto revizi kvízu.');
+    const warning = page.getByLabel('Potvrzuji upozornění pro tuto verzi kvízu.');
     if (await warning.count()) await warning.check();
     await page.getByRole('button', { name: 'Zkontrolovat a připravit', exact: true }).click();
     await expect(page.getByText('Kvíz byl zkontrolován a připraven.', { exact: true })).toBeVisible();

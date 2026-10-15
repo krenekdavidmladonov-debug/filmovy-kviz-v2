@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { Timestamp } from 'firebase/firestore';
 import { allowedRegistrationEmailIntent, futurePublicRegistrationEligible, registrationEmailActivation, registrationEmailEnabled, registrationEmailRecipientEligible, registrationEmailSecrets } from '../functions/src/email/runtime';
+import { createTokenVault } from '../functions/src/email/token-vault';
 
 const sdk = vi.hoisted(() => ({ firestore: vi.fn(), queue: vi.fn(), enqueue: vi.fn(async () => {}), defineSecret: vi.fn(), defineString: vi.fn() }));
 vi.mock('../functions/node_modules/firebase-admin/lib/esm/app/index.js', () => ({ getApps: () => [{}], initializeApp: vi.fn() }));
@@ -200,10 +201,20 @@ describe('future public registration email opt-in', () => {
       const replay = await invoke('createEventRegistration', input);
       expect(replay.registrationId).toBe(team.registrationId); expect(replay.managementToken === team.managementToken).toBe(true); expect(intents()).toHaveLength(1); expect(secrets()).toHaveLength(1);
       const managed = { eventId: 'event', registrationId: team.registrationId, token: team.managementToken, teamName: input.teamName, memberCount: 2, contactEmail: input.contactEmail };
-      await invoke('updateEventRegistration', { ...managed, requestId: 'noop' }); expect(intents()).toHaveLength(1);
+      await invoke('updateEventRegistration', { ...managed, requestId: 'noop' }); expect(intents()).toHaveLength(1); expect(secrets()).toHaveLength(1);
       const changed = { ...managed, teamName: 'New changed', requestId: 'change' };
       await invoke('updateEventRegistration', changed); await invoke('updateEventRegistration', changed); expect(intents()).toHaveLength(2);
+      expect(secrets()).toHaveLength(2);
+      const updateSecretPath = secrets().find(value => value !== secrets()[0])!;
+      const updateSecret = records.get(updateSecretPath)!;
+      const vault = createTokenVault('synthetic', Buffer.alloc(32, 7));
+      expect(vault.open(updateSecret.envelope as Parameters<typeof vault.open>[0], updateSecretPath.replace('/emailSecrets/', '/emailIntents/')) === team.managementToken).toBe(true);
+      expect(() => vault.open(updateSecret.envelope as Parameters<typeof vault.open>[0], 'events/foreign/emailIntents/foreign')).toThrow();
+      expect(JSON.stringify([...records])).not.toContain(team.managementToken);
+      await expect(invoke('updateEventRegistration', { ...changed, token: 'c'.repeat(43), requestId: 'forged', teamName: 'Forged' })).rejects.toThrow();
+      expect(intents()).toHaveLength(2); expect(secrets()).toHaveLength(2);
       await invoke('cancelEventRegistration', managed); await invoke('cancelEventRegistration', managed); expect(intents()).toHaveLength(3);
+      expect(secrets()).toHaveLength(2);
       expect(intents().map(value => value.type)).toEqual(['registration-confirmed', 'registration-updated', 'registration-cancelled']);
       expect(intents().every(value => allowedRegistrationEmailIntent(value, future))).toBe(true);
     } finally { vi.useRealTimers(); }
@@ -237,7 +248,7 @@ describe('SDK discovery and invocation without credentials/network', () => {
     const { createEventRegistration, updateEventRegistration, cancelEventRegistration } = await import('../functions/src/registrations/callables');
     const { deliverEmailTask } = await import('../functions/src/email/worker');
     expect(createEventRegistration.__endpoint.secretEnvironmentVariables ?? []).toEqual(enabled ? [{ key: 'EMAIL_TOKEN_KEYRING' }] : []);
-    expect(updateEventRegistration.__endpoint.secretEnvironmentVariables ?? []).toEqual([]);
+    expect(updateEventRegistration.__endpoint.secretEnvironmentVariables ?? []).toEqual(enabled ? [{ key: 'EMAIL_TOKEN_KEYRING' }] : []);
     expect(cancelEventRegistration.__endpoint.secretEnvironmentVariables ?? []).toEqual([]);
     expect(deliverEmailTask.__endpoint.secretEnvironmentVariables ?? []).toEqual(enabled
       ? ['EMAIL_TOKEN_KEYRING', 'GMAIL_OAUTH_CLIENT_ID', 'GMAIL_OAUTH_CLIENT_SECRET', 'GMAIL_OAUTH_REFRESH_TOKEN'].map(key => ({ key })) : []);

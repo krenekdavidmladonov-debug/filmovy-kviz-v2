@@ -120,7 +120,7 @@ export function ShowAudioPanel({ eventId, quizId, canUpload = false, canAttach =
       <button type="button" className="primary-button" disabled={!dirty || saving || !revision || pendingCues.size > 0} onClick={() => void save()}>Uložit nastavení show</button>
       <button type="button" className="secondary-button" disabled={saving} onClick={() => { dirtyRef.current = false; setDirty(false); preferencesRef.current = preferences; controller.updateVolume(); setDraft(preferences); setError(''); setSaveState('ready'); }}>Zahodit změny / načíst aktuální</button>
       {saveState === 'saved' && <p role="status">Nastavení show uloženo.</p>}
-      <p>Soubor se přiřadí až po uložení. Přehrávání potvrzujeme až po dekódování a spuštění zvukového výstupu. Automatický cue spouští pouze čerstvá moderátorská akce.</p>
+      <p>Výběr zvuku začne platit po uložení. Hudba se spouští při příslušném kroku moderování. Obnovení stránky ji znovu nepřehraje.</p>
     </details>
     {error && <p role="alert">{error}</p>}
   </section>;
