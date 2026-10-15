@@ -10,6 +10,7 @@ const json = path => JSON.parse(read(path));
 const manifest = json('tools/staging/restart-release-manifest.json');
 const access = json('tools/access/deployment-manifest.json');
 const events = json('tools/event-management/deployment-manifest.json');
+const show = json('tools/show-mode/deployment-manifest.json');
 const sorted = values => [...values].sort();
 const union = values => sorted(new Set(values));
 const emailExports = [
@@ -38,7 +39,7 @@ function sourceExports() {
   return sorted(exports);
 }
 
-function assertInventory(candidate) {
+function assertInventory(candidate, laterShowExports = show.newFunctions) {
   const required = union([...editorReleaseFunctions, ...existingDependencies, ...access.functions, ...events.functions]);
   assert.equal(new Set(candidate.functions).size, candidate.functions.length, 'Duplicate release functions');
   assert.deepEqual(candidate.functions, sorted(candidate.functions), 'Keep release functions sorted');
@@ -48,7 +49,13 @@ function assertInventory(candidate) {
   assert.deepEqual(candidate.existingFunctionDependencies.includedInFunctions, existingDependencies);
   const accounted = [...candidate.functions, ...Object.keys(candidate.existingFunctionDependencies.retainedOutsideRelease), ...Object.keys(candidate.excludedFunctions)];
   assert.equal(new Set(accounted).size, accounted.length, 'Export groups overlap');
-  assert.deepEqual(sorted(accounted), sourceExports(), 'Every application export must be included or explicitly accounted for');
+  // The restart inventory is a frozen 77-export release contract. Later SHOW
+  // endpoints belong to their own reviewed inventory, not that historical deploy.
+  assert.deepEqual(sorted(laterShowExports), ['configureEventShow', 'readEventShowPreferences']);
+  assert(laterShowExports.every(name => show.functions.includes(name)), 'SHOW additions must belong to the SHOW inventory');
+  const currentAccounted = [...accounted, ...laterShowExports];
+  assert.equal(new Set(currentAccounted).size, currentAccounted.length, 'Current release export groups overlap');
+  assert.deepEqual(sorted(currentAccounted), sourceExports(), 'Every current application export must be included or explicitly accounted for');
   assert.deepEqual(candidate.counts, {
     sourceExports: accounted.length,
     releaseFunctions: required.length,
@@ -62,10 +69,11 @@ function assertInventory(candidate) {
   });
 }
 
-test('unified inventory covers every source export and all three release contracts without duplicates', () => {
+test('frozen restart inventory and explicit later SHOW additions account for current exports without expanding the old release', () => {
   assertInventory(manifest);
   assert.equal(manifest.counts.releaseFunctions, 70);
   assert.equal(manifest.counts.sourceExports, 77);
+  assert.equal(sourceExports().length, 79);
   assert.deepEqual(manifest.sourceManifests, [
     'tools/staging/editor-release-manifest.mjs',
     'tools/access/deployment-manifest.json',
@@ -84,6 +92,9 @@ test('omitted legacy handlers, duplicates and accidental email activation fail t
   worker.functions.push('deliverEmailTask');
   worker.functions.sort();
   assert.throws(() => assertInventory(worker));
+  assert.throws(() => assertInventory(manifest, []));
+  assert.throws(() => assertInventory(manifest, [...show.newFunctions, show.newFunctions[0]]));
+  assert.throws(() => assertInventory(manifest, [...show.newFunctions, 'unreviewedHandler']));
 });
 
 test('runtime/domain dependencies match package metadata and the vendored artifact lock', () => {

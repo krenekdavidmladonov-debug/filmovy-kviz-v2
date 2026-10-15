@@ -1,6 +1,6 @@
 # JUSTKVÍZ V2 — FINAL ACCEPTANCE
 
-Stav vydání k 15. 10. 2026. Toto je uzavření existující V2, nikoli nové funkční zadání. Produkční V1 není cílem tohoto vydání.
+Podklad kandidáta z 15. 10. 2026 před dokončením [finální integrace a CI v PR #41](https://github.com/krenekdavidmladonov-debug/filmovy-kviz-v2/pull/41). Aktuální výsledek integrace a přesný merge commit uvádí PR a závěrečné předání. Toto je uzavření existující V2, nikoli nové funkční zadání. Produkční V1 není cílem tohoto vydání.
 
 | Oblast | Hotovo | Blokující problém | Důkaz |
 |---|---|---|---|
