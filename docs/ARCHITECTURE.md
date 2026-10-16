@@ -1,5 +1,7 @@
 # Architecture
 
+The live V2 address is `https://justkviz-v2.web.app`. Its Hosting site uses the existing V2 Firebase project and its already deployed backend, without moving accounts or content. The technical project ID retains its historical `-staging` suffix. See [LIVE_RELEASE.md](LIVE_RELEASE.md) for the owner-directed transition and preserved old links.
+
 ## Goals
 
 JustKvíz is a small but real application for preparing and running pub quizzes. The architecture favors clear boundaries and operational reliability over unnecessary layers.

@@ -25,7 +25,7 @@ describe('event team tools contracts', () => {
   });
   it('constructs only the verified environment public URL', () => {
     const staging = { projectId: 'filmovy-kviz-v2-staging', useEmulators: false };
-    expect(publicRegistrationUrl('synthetic-event', staging, 'http://localhost:5173')).toBe('https://filmovy-kviz-v2-staging.web.app/events/synthetic-event');
+    expect(publicRegistrationUrl('synthetic-event', staging, 'http://localhost:5173')).toBe('https://justkviz-v2.web.app/events/synthetic-event');
     expect(publicRegistrationUrl('demo-event', { projectId: 'demo-test', useEmulators: true }, 'http://127.0.0.1:5173')).toBe('http://127.0.0.1:5173/events/demo-event');
     for (const id of ['../admin', 'event#token=secret', 'event?token=secret']) expect(() => publicRegistrationUrl(id, staging, '')).toThrow();
     expect(() => publicRegistrationUrl('event', { projectId: 'unknown', useEmulators: false }, '')).toThrow();

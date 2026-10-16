@@ -98,7 +98,7 @@ for (const [width, height] of [[1280, 720], [1024, 768], [390, 844]]) {
       await page.goto('/admin/events/' + route);
       const field = page.getByLabel('Název akce');
       await expect(field).toBeVisible();
-      await expect(page.getByText('V2 staging', { exact: true }).filter({ visible: true })).toBeVisible();
+      await expect(page.getByText('V2', { exact: true }).filter({ visible: true })).toBeVisible();
       await expect(page.getByText('Pro zkoušení používejte pouze smyšlená data.', { exact: true })).toHaveCount(0);
       const size = await field.boundingBox();
       expect(size!.height).toBe(46);

@@ -4,7 +4,7 @@ import type { EventRecord } from './types';
 export function publicRegistrationUrl(eventId: string, config: { projectId: string; useEmulators: boolean }, localOrigin: string): string {
   if (!/^[A-Za-z0-9_-]{1,1500}$/u.test(eventId)) throw new Error('Neplatné ID akce.');
   let origin: string;
-  if (!config.useEmulators && config.projectId === 'filmovy-kviz-v2-staging') origin = 'https://filmovy-kviz-v2-staging.web.app';
+  if (!config.useEmulators && config.projectId === 'filmovy-kviz-v2-staging') origin = 'https://justkviz-v2.web.app';
   else if (config.useEmulators && config.projectId.startsWith('demo-')) {
     const local = new URL(localOrigin);
     if (!['localhost', '127.0.0.1', '[::1]'].includes(local.hostname) || !['http:', 'https:'].includes(local.protocol) || local.username || local.password) throw new Error('Neplatný lokální origin.');

@@ -190,7 +190,7 @@ export function QuizRepairPage() {
       setSaveError(null);
       return loaded;
     } catch {
-      setLoadError('Opravárenskou frontu se nepodařilo načíst. Zkontrolujte lokální připojení a zkuste to znovu.');
+      setLoadError('Seznam oprav se nepodařilo načíst. Zkontrolujte připojení a zkuste to znovu.');
       return null;
     } finally {
       setLoading(false);

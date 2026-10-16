@@ -1,5 +1,9 @@
 # Security
 
+## Live V2 address, 2026-10-16
+
+The owner requested live publication at `https://justkviz-v2.web.app`, using the existing V2 project and accounts; see [LIVE_RELEASE.md](LIVE_RELEASE.md). Both that exact origin and the former V2 origin are permitted by the registration email origin guard for a reversible rollout. The private worker selects the new origin through its deployment environment. The existing project/app allowlist, activation cutoff, current-membership authorization, private data and public projection boundaries are unchanged. V1 remains out of scope. The owner explicitly requested no further test runs for this release.
+
 ## Core invariants
 
 1. Correct answers never reach public/projector clients before reveal.
